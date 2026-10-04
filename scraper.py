@@ -9,7 +9,7 @@ import requests
 import json
 import re
 import statistics
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 PALERMO_COORDS = {
     "ne_lat": -34.570, "ne_lng": -58.410,
@@ -28,6 +28,7 @@ HEADERS = {
 
 TIPO_VIVIENDA_MAP = {
     "departamento": "apartments",
+    "depto": "apartments",
     "casa": "houses",
     "habitacion": "private_rooms",
 }
@@ -47,12 +48,22 @@ def scrape_precios_zona(
     Fallback: cache en DB → hardcoded de referencia (con aviso).
     Retorna dict con price stats, metadata y 'error_detalle' si algo falló.
     """
+    # ### CAMBIO AQUÍ ### — normalizar fecha_desde: acepta str o datetime
     if fecha_desde is None:
-        fecha_desde = datetime.now() + timedelta(days=7)
+        dt_desde = datetime.now() + timedelta(days=7)
+    elif isinstance(fecha_desde, str):
+        try:
+            dt_desde = datetime.strptime(fecha_desde, "%Y-%m-%d")
+        except ValueError:
+            dt_desde = datetime.now() + timedelta(days=7)
+    elif isinstance(fecha_desde, date) and not isinstance(fecha_desde, datetime):
+        dt_desde = datetime.combine(fecha_desde, datetime.min.time())
+    else:
+        dt_desde = fecha_desde
 
-    fecha_hasta = fecha_desde + timedelta(days=noches)
-    check_in  = fecha_desde.strftime("%Y-%m-%d")
-    check_out = fecha_hasta.strftime("%Y-%m-%d")
+    dt_hasta  = dt_desde + timedelta(days=noches)
+    check_in  = dt_desde.strftime("%Y-%m-%d")
+    check_out = dt_hasta.strftime("%Y-%m-%d")
     tipo_map  = TIPO_VIVIENDA_MAP.get(tipo_vivienda.lower(), "apartments")
 
     params = {
@@ -78,7 +89,8 @@ def scrape_precios_zona(
         if not precios:
             error_detalle = (
                 f"Scraping completado pero sin precios extraíbles. "
-                f"HTTP {resp.status_code}. Posible cambio en la estructura HTML de Airbnb."
+                f"HTTP {resp.status_code}. Posible cambio en la estructura HTML de Airbnb. "
+                f"Código de error: ERR-SCR-004"
             )
         else:
             precios_filtrados = _filtrar_outliers(precios)
@@ -104,22 +116,26 @@ def scrape_precios_zona(
             }
 
     except requests.exceptions.Timeout:
-        error_detalle = "Timeout: Airbnb tardó más de 15 segundos en responder."
+        error_detalle = "Timeout: Airbnb tardó más de 15s (ERR-SCR-001)"
     except requests.exceptions.ConnectionError as e:
-        error_detalle = f"Error de conexión al intentar contactar Airbnb: {e}"
+        error_detalle = f"Error de conexión a Airbnb: {e} (ERR-SCR-002)"
     except requests.exceptions.HTTPError as e:
-        error_detalle = f"Airbnb devolvió HTTP {resp.status_code}: {e}"
+        cod = e.response.status_code if e.response else "?"
+        error_detalle = f"Airbnb devolvió HTTP {cod}: {e} (ERR-SCR-003)"
     except Exception as e:
-        error_detalle = f"Error inesperado durante el scraping: {type(e).__name__}: {e}"
+        error_detalle = f"Error inesperado: {type(e).__name__}: {e} (ERR-SCR-005)"
 
     # ── Intento 2: último cache en DB ────────────────────────────────────────
-    if db and propiedad_id:
+    # ### CAMBIO AQUÍ ### — usa db.query_one() del módulo, no db.cursor()
+    if db is not None and propiedad_id is not None:
         cached = _cargar_cache(db, propiedad_id)
         if cached:
             cached["fuente"] = "Datos cacheados (último scraping exitoso)"
+            ts = cached.get("timestamp", "fecha desconocida")
+            if isinstance(ts, str):
+                ts = ts[:10]
             cached["error_detalle"] = (
-                f"⚠️ No se pudo actualizar los datos del mercado. "
-                f"Mostrando última actualización del {cached.get('timestamp', 'fecha desconocida')[:10]}. "
+                f"⚠️ No se pudo actualizar. Mostrando datos del {ts}. "
                 f"Error original: {error_detalle}"
             )
             cached["ok"] = True
@@ -128,9 +144,8 @@ def scrape_precios_zona(
     # ── Intento 3: hardcoded de referencia (último recurso) ──────────────────
     resultado = _referencia_hardcoded(barrio, tipo_vivienda, ambientes)
     resultado["error_detalle"] = (
-        f"⚠️ FALLA DE SCRAPING — usando precios de referencia fijos (no actualizados). "
-        f"Error: {error_detalle}. "
-        f"Pasale este mensaje a tu desarrollador para diagnosticar el problema."
+        f"⚠️ FALLA DE SCRAPING — precios de referencia fijos (no actualizados). "
+        f"Error: {error_detalle}. Pasale este código a tu desarrollador."
     )
     resultado["fuente"] = "Referencia fija (scraping y cache fallaron)"
     return resultado
@@ -214,16 +229,17 @@ def _filtrar_outliers(precios):
 # ── Cache ─────────────────────────────────────────────────────────────────────
 
 def _cargar_cache(db, propiedad_id):
+    """
+    Carga cache usando db.query_one() del módulo database.
+    db aquí es el MÓDULO database, no una conexión directa.
+    """
     try:
-        cur = db.cursor()
-        cur.execute(
+        row = db.query_one(
             "SELECT valor FROM config WHERE clave = %s",
             (f"precio_cache_{propiedad_id}",)
         )
-        row = cur.fetchone()
-        cur.close()
         if row:
-            return json.loads(row[0])
+            return json.loads(row["valor"])
     except Exception:
         pass
     return None
@@ -234,12 +250,15 @@ def _cargar_cache(db, propiedad_id):
 def _referencia_hardcoded(barrio, tipo_vivienda, ambientes):
     ref = {
         ("Palermo", "departamento", 1): (18000, 25000, 35000, 4.6),
+        ("Palermo", "depto",        1): (18000, 25000, 35000, 4.6),
         ("Palermo", "departamento", 2): (25000, 35000, 50000, 4.7),
+        ("Palermo", "depto",        2): (25000, 35000, 50000, 4.7),
         ("Palermo", "departamento", 3): (35000, 50000, 70000, 4.5),
         ("Palermo", "casa",         2): (40000, 58000, 80000, 4.8),
         ("Palermo", "habitacion",   1): (8000,  12000, 18000, 4.4),
     }
-    key = (barrio, tipo_vivienda.lower(), min(ambientes, 3))
+    amb = min(ambientes or 1, 3)
+    key = (barrio, tipo_vivienda.lower(), amb)
     mn, med, mx, rating = ref.get(key, (20000, 30000, 45000, 4.5))
     return {
         "ok": True,

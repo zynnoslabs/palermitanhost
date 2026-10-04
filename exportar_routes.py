@@ -174,11 +174,12 @@ def exportar_excel(informe_id):
     cur.execute("""
         SELECT p.nombre, p.barrio, p.tipo,
                COUNT(r.id) as reservas,
-               COALESCE(SUM(r.precio_total), 0) as ingresos,
+               COALESCE(SUM(r.ingreso_neto), 0) as ingresos,
                COALESCE(AVG(r.noches), 0) as promedio_noches,
                p.rating
         FROM propiedades p
-        LEFT JOIN reservas r ON r.propiedad_id = p.id AND r.estado != 'cancelada'
+        LEFT JOIN reservas r ON r.propiedad_id = p.id
+            AND COALESCE(r.estado, 'completada') != 'cancelada'
         GROUP BY p.id, p.nombre, p.barrio, p.tipo, p.rating
         ORDER BY ingresos DESC
     """)
@@ -186,8 +187,12 @@ def exportar_excel(informe_id):
 
     # Reservas recientes
     cur.execute("""
-        SELECT p.nombre, r.huesped_nombre, r.fecha_inicio, r.fecha_fin,
-               r.noches, r.precio_total, r.estado, r.canal
+        SELECT p.nombre,
+               COALESCE(r.huesped_nombre, '') as huesped_nombre,
+               r.fecha_inicio, r.fecha_fin,
+               r.noches, r.ingreso_neto as precio_total,
+               COALESCE(r.estado, 'completada') as estado,
+               COALESCE(r.canal, 'airbnb') as canal
         FROM reservas r
         JOIN propiedades p ON r.propiedad_id = p.id
         ORDER BY r.fecha_inicio DESC

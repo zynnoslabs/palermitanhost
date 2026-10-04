@@ -14,8 +14,8 @@ MAX_HISTORIAL = 10  # turnos (user+assistant) a mantener en sesión
 
 def get_db():
     """Import db connection from app context."""
-    from database import get_db_connection
-    return get_db_connection()
+    import database as _db_mod
+    return _db_mod.get_db_connection()
 
 
 def build_context(db):
@@ -28,8 +28,11 @@ def build_context(db):
     # ── Propiedades ──────────────────────────────────────────────────────────
     cur.execute("""
         SELECT id, nombre, tipo, barrio, ambientes, capacidad,
-               precio_base, descripcion, info_huespedes,
-               rating, reviews_count, estado
+               precio_base,
+               COALESCE(descripcion, '') as descripcion,
+               COALESCE(info_huespedes, '') as info_huespedes,
+               rating, COALESCE(reviews_count, 0) as reviews_count,
+               COALESCE(estado, 'activa') as estado
         FROM propiedades ORDER BY nombre
     """)
     propiedades = cur.fetchall()
@@ -37,9 +40,14 @@ def build_context(db):
 
     # ── Últimas 100 reservas ─────────────────────────────────────────────────
     cur.execute("""
-        SELECT r.id, r.codigo_airbnb, r.huesped_nombre,
+        SELECT r.id,
+               r.codigo_confirmacion,
+               COALESCE(r.huesped_nombre, '') as huesped_nombre,
                r.fecha_inicio, r.fecha_fin, r.noches,
-               r.precio_total, r.estado, r.canal, r.notas,
+               r.ingreso_neto as precio_total,
+               COALESCE(r.estado, 'completada') as estado,
+               COALESCE(r.canal, 'airbnb') as canal,
+               COALESCE(r.notas, '') as notas,
                p.nombre as propiedad_nombre
         FROM reservas r
         JOIN propiedades p ON r.propiedad_id = p.id
@@ -52,10 +60,10 @@ def build_context(db):
     # ── Métricas globales ─────────────────────────────────────────────────────
     cur.execute("""
         SELECT COUNT(*) as total_reservas,
-               COALESCE(SUM(precio_total), 0) as ingresos_total,
-               COALESCE(AVG(precio_total), 0) as ticket_promedio,
+               COALESCE(SUM(ingreso_neto), 0) as ingresos_total,
+               COALESCE(AVG(ingreso_neto), 0) as ticket_promedio,
                COALESCE(SUM(noches), 0) as noches_total
-        FROM reservas WHERE estado != 'cancelada'
+        FROM reservas WHERE COALESCE(estado, 'completada') != 'cancelada'
     """)
     metricas = dict(zip([d[0] for d in cur.description], cur.fetchone()))
 

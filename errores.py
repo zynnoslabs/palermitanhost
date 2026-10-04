@@ -141,7 +141,7 @@ CODIGOS = {
         "archivo": "app.py → login()",
         "descripcion": "Variable APP_PASSWORD no configurada.",
         "causa_probable": "APP_PASSWORD falta en las variables de entorno de Render.",
-        "accion": "Agregar APP_PASSWORD en Environment Variables de Render.",
+        "accion": "Agregar ADMIN_PASS y ADMIN_USER en Environment Variables de Render.",
     },
 
     # ══ PRECIOS (PRC) ════════════════════════════════════════════════════════
