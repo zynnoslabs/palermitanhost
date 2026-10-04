@@ -1,38 +1,92 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}PalermitanHost{% endblock %}</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}PalermitanHost{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
 <body>
-<nav class="nav">
-  <a class="nav-brand" href="{{ url_for('dashboard') }}">🏠 PalermitanHost</a>
-  <div class="nav-links">
-    <a href="{{ url_for('dashboard') }}" {% if request.endpoint=='dashboard' %}class="active"{% endif %}>Dashboard</a>
-    <a href="{{ url_for('propiedades') }}" {% if 'propiedad' in request.endpoint %}class="active"{% endif %}>Propiedades</a>
-    <a href="{{ url_for('importar') }}" {% if 'importar' in request.endpoint %}class="active"{% endif %}>Importar</a>
-    <a href="{{ url_for('competencia') }}" {% if request.endpoint=='competencia' %}class="active"{% endif %}>Competencia</a>
-    <a href="{{ url_for('precios') }}" {% if request.endpoint=='precios' %}class="active"{% endif %}>Precios</a>
-    <a href="{{ url_for('asistente') }}" {% if request.endpoint=='asistente' %}class="active"{% endif %}>Asistente</a>
-    <a href="{{ url_for('informes') }}" {% if 'informe' in request.endpoint %}class="active"{% endif %}>Informes</a>
-    <a href="{{ url_for('logout') }}" class="logout">Salir</a>
-  </div>
-</nav>
 
-<main class="main">
-  {% with msgs = get_flashed_messages(with_categories=True) %}
-    {% for cat, msg in msgs %}
-      <div class="alert alert-{{ cat }}">{{ msg }}</div>
-    {% endfor %}
-  {% endwith %}
+<div class="layout">
 
-  {% block content %}{% endblock %}
-</main>
+  <!-- ── SIDEBAR ─────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <img src="{{ url_for('static', filename='logo.png') }}"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='block'"
+           alt="PalermitanHost">
+      <div class="sidebar-logo-text" style="display:none">PalermitanHost</div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a href="{{ url_for('dashboard') }}"
+         class="{% if request.endpoint=='dashboard' %}active{% endif %}">
+        <span class="nav-icon">▦</span> Dashboard
+      </a>
+      <a href="{{ url_for('propiedades') }}"
+         class="{% if 'propiedad' in request.endpoint %}active{% endif %}">
+        <span class="nav-icon">⌂</span> Propiedades
+      </a>
+      <a href="{{ url_for('importar') }}"
+         class="{% if 'importar' in request.endpoint %}active{% endif %}">
+        <span class="nav-icon">↓</span> Importar CSV
+      </a>
+      <a href="{{ url_for('precios') }}"
+         class="{% if request.endpoint=='precios' %}active{% endif %}">
+        <span class="nav-icon">◈</span> Precios
+      </a>
+      <a href="{{ url_for('asistente') }}"
+         class="{% if request.endpoint=='asistente' %}active{% endif %}">
+        <span class="nav-icon">✦</span> Asistente IA
+      </a>
+      <a href="{{ url_for('informes') }}"
+         class="{% if 'informe' in request.endpoint %}active{% endif %}">
+        <span class="nav-icon">≡</span> Informes
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <a href="{{ url_for('logout') }}">
+        <span>⏻</span> Cerrar sesión
+      </a>
+    </div>
+  </aside>
+
+  <!-- ── TOPBAR ──────────────────────────────────────── -->
+  <header class="topbar">
+    <span class="topbar-title">{% block topbar_title %}{% endblock %}</span>
+    <span class="topbar-meta" id="last-update">Sistema activo</span>
+  </header>
+
+  <!-- ── MAIN ────────────────────────────────────────── -->
+  <main class="main">
+    {% with msgs = get_flashed_messages(with_categories=True) %}
+      {% for cat, msg in msgs %}
+        <div class="alert alert-{{ cat }}">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+</div><!-- /layout -->
 
 <script src="{{ url_for('static', filename='app.js') }}"></script>
+<script>
+  // Contador de última actualización
+  (function(){
+    let secs = 0;
+    const el = document.getElementById('last-update');
+    setInterval(()=>{
+      secs++;
+      el.textContent = secs < 60
+        ? `Actualizado hace ${secs}s`
+        : `Actualizado hace ${Math.floor(secs/60)}min`;
+    }, 1000);
+  })();
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

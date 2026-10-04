@@ -1,30 +1,34 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PalermitanHost – Acceso</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Acceso — PalermitanHost</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body class="login-body">
-<div class="login-box">
-  <div class="login-logo">🏠</div>
-  <h1 class="login-title">PalermitanHost</h1>
-  <p class="login-sub">Panel de gestión de alquileres temporarios</p>
+  <div class="login-box">
+    <div class="login-logo">
+      <img src="{{ url_for('static', filename='logo.png') }}"
+           onerror="this.style.display='none'"
+           alt="PalermitanHost">
+    </div>
+    <h1 class="login-title">PalermitanHost</h1>
+    <p class="login-sub">Sistema de gestión de alquileres temporarios</p>
 
-  {% with msgs = get_flashed_messages(with_categories=True) %}
-    {% for cat, msg in msgs %}
-      <div class="alert alert-{{ cat }}">{{ msg }}</div>
-    {% endfor %}
-  {% endwith %}
+    {% with msgs = get_flashed_messages(with_categories=True) %}
+      {% for cat, msg in msgs %}
+        <div class="alert alert-{{ cat }}" style="margin-bottom:.75rem">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
 
-  <form method="post" class="login-form">
-    <label>Usuario</label>
-    <input type="text" name="usuario" required autofocus placeholder="admin">
-    <label>Contraseña</label>
-    <input type="password" name="password" required placeholder="••••••">
-    <button type="submit" class="btn btn-primary btn-block">Ingresar</button>
-  </form>
-</div>
+    <form class="login-form" method="post">
+      <div class="form-group">
+        <label>Contraseña</label>
+        <input type="password" name="password" placeholder="••••••••" autofocus required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Ingresar</button>
+    </form>
+  </div>
 </body>
 </html>
