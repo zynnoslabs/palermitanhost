@@ -1,115 +1,91 @@
-"""
-ruta_precios.py — Rutas de análisis de precios y cálculo estratégico
-"""
-from flask import Blueprint, request, jsonify, render_template
-from datetime import datetime
+# ruta_precios.py
+from flask import Blueprint, request, jsonify, session
+from functools import wraps
 import json
+from datetime import date
 
-precios_bp = Blueprint("precios", __name__)
+import database as db
+from scraper import scrape_precios_zona
+from precio_estrategico import calcular_precio_estrategico
+
+precios_bp = Blueprint("precios_bp", __name__)
 
 
-def get_db():
-    from database import get_db_connection
-    return get_db_connection()
-
-
-@precios_bp.route("/precios")
-def precios_page():
-    return render_template("precios.html")
+def login_required_api(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("logged_in"):
+            return jsonify({"error": "No autenticado"}), 401
+        return f(*args, **kwargs)
+    return decorated
 
 
 @precios_bp.route("/precios/calcular", methods=["POST"])
-def calcular():
-    """Scraping de mercado + cálculo estratégico para una propiedad."""
-    data = request.get_json()
+@login_required_api
+def calcular_precio():
+    """
+    Calcula precio estratégico para una propiedad.
+    Body JSON: { propiedad_id, fecha_desde, noches }
+    """
+    data = request.get_json(silent=True) or {}
     propiedad_id = data.get("propiedad_id")
-    fecha_str = data.get("fecha")
-    noches = int(data.get("noches", 2))
+    fecha_desde  = data.get("fecha_desde", date.today().isoformat())
+    noches       = int(data.get("noches", 2))
 
-    db = get_db()
-    cur = db.cursor()
+    if not propiedad_id:
+        return jsonify({"error": "Falta propiedad_id", "codigo": "ERR-PRC-001"}), 400
 
-    # Obtener propiedad
-    cur.execute("""
-        SELECT id, nombre, tipo, barrio, ambientes, precio_base, rating, reviews_count
-        FROM propiedades WHERE id = %s
-    """, (propiedad_id,))
-    prop_row = cur.fetchone()
-    if not prop_row:
-        cur.close()
-        db.close()
-        return jsonify({"error": "Propiedad no encontrada"}), 404
+    prop = db.query_one("SELECT * FROM propiedades WHERE id=%s", (propiedad_id,))
+    if not prop:
+        return jsonify({"error": "Propiedad no encontrada", "codigo": "ERR-PRC-001"}), 404
 
-    cols = ["id", "nombre", "tipo", "barrio", "ambientes", "precio_base", "rating", "reviews_count"]
-    propiedad = dict(zip(cols, prop_row))
-
-    # Reservas históricas para cálculo de ocupación
-    cur.execute("""
-        SELECT fecha_inicio, fecha_fin FROM reservas
-        WHERE propiedad_id = %s AND estado != 'cancelada'
-          AND fecha_inicio >= CURRENT_DATE - INTERVAL '90 days'
-    """, (propiedad_id,))
-    reservas_hist = [{"fecha_inicio": str(r[0]), "fecha_fin": str(r[1])} for r in cur.fetchall()]
-
-    cur.close()
-    db.close()
-
-    # Scraping de mercado
-    from scraper import scrape_precios_zona
-    fecha = datetime.fromisoformat(fecha_str) if fecha_str else datetime.now()
+    # ── Scraping con fallback a cache DB ────────────────────────────────────
+    # ### CAMBIO AQUÍ ### — se pasan propiedad_id y db para el fallback a cache
     mercado = scrape_precios_zona(
-        barrio=propiedad["barrio"] or "Palermo",
-        tipo_vivienda=propiedad["tipo"] or "departamento",
-        ambientes=propiedad["ambientes"] or 1,
-        fecha_desde=fecha,
-        noches=noches,
+        barrio        = prop.get("barrio", "Palermo"),
+        tipo_vivienda = prop.get("tipo", "departamento"),
+        ambientes     = prop.get("ambientes", 2),
+        fecha_desde   = fecha_desde,
+        noches        = noches,
+        propiedad_id  = propiedad_id,
+        db            = db,
     )
 
-    # Cálculo estratégico
-    from precio_estrategico import calcular_precio_estrategico
-    resultado = calcular_precio_estrategico(propiedad, mercado, reservas_hist, fecha)
+    # ── Precio estratégico ──────────────────────────────────────────────────
+    reservas_hist = db.query(
+        "SELECT * FROM reservas WHERE propiedad_id=%s ORDER BY fecha_inicio DESC LIMIT 100",
+        (propiedad_id,)
+    )
+    resultado = calcular_precio_estrategico(prop, mercado, reservas_hist, fecha_desde)
 
-    # Combinar resultado con datos de mercado
-    resultado["mercado"] = mercado
-
-    # Cachear en config table
-    _cachear(propiedad_id, resultado)
-
-    return jsonify(resultado)
-
-
-@precios_bp.route("/precios/mercado/<int:propiedad_id>")
-def mercado_cacheado(propiedad_id):
-    """Devuelve el último análisis cacheado para una propiedad."""
-    db = get_db()
-    cur = db.cursor()
-    cur.execute("SELECT valor FROM config WHERE clave = %s", (f"precio_cache_{propiedad_id}",))
-    row = cur.fetchone()
-    cur.close()
-    db.close()
-
-    if not row:
-        return jsonify({"error": "Sin datos cacheados"}), 404
-
+    # ── Guardar cache en tabla config ───────────────────────────────────────
+    clave = f"precio_cache_{propiedad_id}"
+    payload = json.dumps({**mercado, **resultado}, default=str)
     try:
-        return jsonify(json.loads(row[0]))
-    except Exception:
-        return jsonify({"error": "Error al leer cache"}), 500
-
-
-def _cachear(propiedad_id, resultado):
-    """Guarda el resultado en la tabla config como cache."""
-    try:
-        db = get_db()
-        cur = db.cursor()
-        clave = f"precio_cache_{propiedad_id}"
-        valor = json.dumps(resultado, default=str)
-        cur.execute("""
+        db.execute("""
             INSERT INTO config (clave, valor) VALUES (%s, %s)
             ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor
-        """, (clave, valor))
-        db.commit()
-        cur.close()
-        db.close()
-    except Exception as e:
-        print(f"[precios] Error cacheando: {e}")
+        """, (clave, payload))
+    except Exception:
+        pass  # Si no existe la tabla config, no bloquea la respuesta
+
+    # ── Incluir info de error de scraping en la respuesta ──────────────────
+    respuesta = {**resultado, **mercado}
+    if mercado.get("error_detalle"):
+        respuesta["advertencia"] = mercado["error_detalle"]
+
+    return jsonify(respuesta)
+
+
+@precios_bp.route("/precios/mercado/<int:pid>")
+@login_required_api
+def mercado_cache(pid):
+    """Devuelve el último resultado cacheado de mercado para una propiedad."""
+    clave = f"precio_cache_{pid}"
+    row = db.query_one("SELECT valor FROM config WHERE clave=%s", (clave,))
+    if not row:
+        return jsonify({"error": "Sin datos en caché", "codigo": "ERR-PRC-002"}), 404
+    try:
+        return jsonify(json.loads(row["valor"]))
+    except Exception:
+        return jsonify({"error": "Cache corrupto", "codigo": "ERR-PRC-002"}), 500

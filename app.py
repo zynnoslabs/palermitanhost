@@ -1,7 +1,4 @@
 # app.py
-# Rutas Flask de RentaIA. Login, propiedades, importación CSV,
-# competencia, dashboard, precios, asistente e informes.
-
 import os
 import json
 from datetime import datetime, date
@@ -24,6 +21,15 @@ app.secret_key = os.getenv("SECRET_KEY", "cambiar-esto-en-produccion")
 
 ADMIN_USER = os.getenv("ADMIN_USER", "admin")
 ADMIN_PASS = os.getenv("ADMIN_PASS", "admin123")
+
+# ── Blueprints ───────────────────────────────────────────────────────────────
+from asistente_route import asistente_bp
+from exportar_routes import exportar_bp
+from ruta_precios    import precios_bp
+
+app.register_blueprint(asistente_bp)
+app.register_blueprint(exportar_bp)
+app.register_blueprint(precios_bp)
 
 # ── Inicializar DB al arrancar ───────────────────────────────────────────────
 with app.app_context():
@@ -70,7 +76,6 @@ def logout():
 def dashboard():
     propiedades = db.query("SELECT * FROM propiedades ORDER BY nombre")
 
-    # Rango de fechas por defecto: últimos 30 días
     hasta  = request.args.get("hasta",  date.today().isoformat())
     desde  = request.args.get("desde",  date(date.today().year, date.today().month, 1).isoformat())
     prop_id = request.args.get("propiedad_id", None, type=int)
@@ -78,7 +83,6 @@ def dashboard():
     reservas = db.query("SELECT * FROM reservas")
     reservas_filtradas = met.filtrar_reservas(reservas, desde, hasta, prop_id)
 
-    # Costos fijos de la propiedad seleccionada
     costos_mes = 0
     if prop_id:
         p = db.query_one("SELECT * FROM propiedades WHERE id=%s", (prop_id,))
@@ -93,7 +97,6 @@ def dashboard():
     stats = met.calcular_metricas(reservas_filtradas, desde, hasta, costos_mes)
     por_mes = met.metricas_por_mes(reservas_filtradas, prop_id)
 
-    # Informes guardados (últimos 5)
     informes = db.query("SELECT id, titulo, creado_en FROM informes ORDER BY creado_en DESC LIMIT 5")
 
     return render_template("dashboard.html",
@@ -147,7 +150,7 @@ def editar_propiedad(pid):
         db.execute("""
             UPDATE propiedades SET nombre=%s,direccion=%s,barrio=%s,tipo=%s,ambientes=%s,
             capacidad=%s,precio_base=%s,costo_expensas=%s,costo_servicios=%s,
-            costo_limpieza=%s,costo_comision=%s,info_huespedes=?
+            costo_limpieza=%s,costo_comision=%s,info_huespedes=%s
             WHERE id=%s
         """, (
             f.get("nombre"), f.get("direccion"), f.get("barrio"), f.get("tipo"),
@@ -192,7 +195,6 @@ def importar():
 
         mapa, no_detectadas = importador.detectar_columnas(encabezados)
 
-        # Guardar en sesión para el paso 2
         session["csv_contenido"] = contenido.decode("utf-8-sig", errors="replace")
         session["csv_encabezados"] = encabezados
         session["csv_mapa"] = mapa
@@ -220,7 +222,6 @@ def importar_asignar():
     mapa            = session.get("csv_mapa",{})
 
     if request.method == "POST":
-        # Actualizar mapa con asignaciones manuales
         for clave in session.get("csv_no_detectadas",[]):
             idx_str = request.form.get(f"col_{clave}")
             if idx_str is not None:
@@ -230,7 +231,6 @@ def importar_asignar():
                     pass
         session["csv_mapa"] = mapa
 
-    # Detectar anuncios únicos del CSV para asignación a propiedades
     import csv, io
     reader = csv.reader(io.StringIO(csv_contenido))
     next(reader, [])
@@ -242,7 +242,6 @@ def importar_asignar():
                 anuncios.add(fila[idx_anuncio].strip())
 
     if request.method == "POST" and "asignar" in request.form:
-        # Mapear anuncios → propiedad_id
         propiedad_map = {}
         for anuncio in anuncios:
             key = f"prop_{anuncio}"
@@ -253,7 +252,6 @@ def importar_asignar():
         contenido_bytes = csv_contenido.encode("utf-8")
         filas_ok, omitidas = importador.procesar_csv(contenido_bytes, mapa, propiedad_map)
 
-        # Insertar evitando duplicados
         importadas = 0
         duplicadas = 0
         for fila in filas_ok:
@@ -298,7 +296,6 @@ def importar_asignar():
 def competencia():
     if request.method == "POST":
         if "csv_comp" in request.files:
-            # Importar desde CSV
             archivo = request.files["csv_comp"]
             import csv, io
             contenido = archivo.read().decode("utf-8-sig", errors="replace")
@@ -346,7 +343,7 @@ def eliminar_competencia(cid):
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# PRECIOS SUGERIDOS
+# PRECIOS SUGERIDOS (ruta legacy — mantiene compatibilidad)
 # ════════════════════════════════════════════════════════════════════════════
 
 @app.route("/precios", methods=["GET","POST"])
@@ -357,21 +354,20 @@ def precios():
     prop_sel    = None
 
     if request.method == "POST":
-        pid        = int(request.form.get("propiedad_id",0))
+        pid         = int(request.form.get("propiedad_id",0))
         fecha_desde = request.form.get("fecha_desde", date.today().isoformat())
         fecha_hasta = request.form.get("fecha_hasta", date.today().isoformat())
 
         prop_sel = db.query_one("SELECT * FROM propiedades WHERE id=%s", (pid,))
         if prop_sel:
-            reservas_hist = db.query("SELECT * FROM reservas WHERE propiedad_id=?", (pid,))
+            reservas_hist = db.query("SELECT * FROM reservas WHERE propiedad_id=%s", (pid,))
             comp_barrio   = db.query(
-                "SELECT * FROM competencia WHERE barrio=? AND tipo=?",
+                "SELECT * FROM competencia WHERE barrio=%s AND tipo=%s",
                 (prop_sel.get("barrio",""), prop_sel.get("tipo",""))
             )
             resultado = prec.calcular_precio_sugerido(
                 prop_sel, reservas_hist, comp_barrio, fecha_desde, fecha_hasta
             )
-            # Generar justificación con IA
             try:
                 resultado["justificacion"] = ia.generar_informe(
                     {**resultado["detalle"],
@@ -391,7 +387,7 @@ def precios():
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# ASISTENTE DE HUÉSPEDES
+# ASISTENTE DE HUÉSPEDES (legacy — mantiene compatibilidad)
 # ════════════════════════════════════════════════════════════════════════════
 
 @app.route("/asistente", methods=["GET","POST"])
