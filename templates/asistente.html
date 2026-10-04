@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Asistente – PalermitanHost{% endblock %}
+{% block content %}
+<div class="page-header"><h2>Asistente para huéspedes</h2></div>
+
+<div class="form-card">
+  <form method="post">
+    <div class="form-group">
+      <label>Propiedad</label>
+      <select name="propiedad_id" required>
+        <option value="">Seleccioná una propiedad</option>
+        {% for p in propiedades %}
+          <option value="{{ p.id }}">{{ p.nombre }}
+            {% if not p.info_huespedes %} ⚠ Sin info cargada{% endif %}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Consulta del huésped</label>
+      <textarea name="mensaje" rows="4" required placeholder="Pegá aquí el mensaje del huésped..."></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary">Generar respuesta</button>
+  </form>
+</div>
+
+{% if respuesta %}
+<div class="form-card {{ 'pendiente-card' if pendiente else 'respuesta-card' }}">
+  <div class="resp-header">
+    {% if pendiente %}
+      <span class="badge badge-warn">⏳ Pendiente – Requiere atención manual</span>
+    {% else %}
+      <span class="badge badge-ok">✅ Respuesta lista para enviar</span>
+    {% endif %}
+  </div>
+  <div class="respuesta-texto">{{ respuesta }}</div>
+  <button class="btn btn-sm" onclick="navigator.clipboard.writeText(document.querySelector('.respuesta-texto').innerText)">
+    📋 Copiar respuesta
+  </button>
+</div>
+{% endif %}
+
+{% if historial %}
+<h3 style="margin-top:2rem">Historial reciente</h3>
+<div class="table-wrap">
+<table class="tabla">
+  <thead><tr><th>Propiedad</th><th>Consulta</th><th>Estado</th><th>Fecha</th></tr></thead>
+  <tbody>
+  {% for c in historial %}
+  <tr>
+    <td>{{ c.prop_nombre }}</td>
+    <td>{{ c.mensaje[:80] }}{% if c.mensaje|length > 80 %}…{% endif %}</td>
+    <td>{% if c.pendiente %}<span class="badge badge-warn">Pendiente</span>
+        {% else %}<span class="badge badge-ok">Respondida</span>{% endif %}</td>
+    <td>{{ c.creada_en[:16] }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

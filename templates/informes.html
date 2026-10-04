@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Informes – PalermitanHost{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>{% if informe %}{{ informe.titulo }}{% else %}Informes guardados{% endif %}</h2>
+  {% if informe %}
+  <div>
+    <button onclick="window.print()" class="btn">🖨 Imprimir / PDF</button>
+    <form method="post" action="{{ url_for('eliminar_informe', iid=informe.id) }}" style="display:inline"
+          onsubmit="return confirm('¿Eliminar este informe?')">
+      <button class="btn btn-danger btn-sm">Eliminar</button>
+    </form>
+    <a href="{{ url_for('informes') }}" class="btn btn-sm">← Ver todos</a>
+  </div>
+  {% endif %}
+</div>
+
+{% if informe %}
+<div class="form-card informe-completo">
+  <div class="informe-meta muted">{{ informe.fecha_desde }} al {{ informe.fecha_hasta }} · Generado: {{ informe.creado_en[:16] }}</div>
+  <div class="informe-texto">{{ informe.contenido | replace('\n', '<br>') | safe }}</div>
+</div>
+
+{% elif informes %}
+<div class="table-wrap">
+<table class="tabla">
+  <thead><tr><th>Informe</th><th>Período</th><th>Fecha</th><th></th></tr></thead>
+  <tbody>
+  {% for inf in informes %}
+  <tr>
+    <td><a href="{{ url_for('ver_informe', iid=inf.id) }}" class="link">{{ inf.titulo }}</a></td>
+    <td>{{ inf.fecha_desde }} → {{ inf.fecha_hasta }}</td>
+    <td>{{ inf.creado_en[:10] }}</td>
+    <td>
+      <a href="{{ url_for('ver_informe', iid=inf.id) }}" class="btn btn-sm">Ver</a>
+      <form method="post" action="{{ url_for('eliminar_informe', iid=inf.id) }}" style="display:inline">
+        <button class="btn btn-sm btn-danger" onclick="return confirm('¿Eliminar?')">✕</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% else %}
+<div class="empty-state">
+  <p>No hay informes generados todavía.</p>
+  <a href="{{ url_for('dashboard') }}" class="btn btn-primary">Ir al dashboard para generar uno</a>
+</div>
+{% endif %}
+{% endblock %}

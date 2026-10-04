@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Competencia – PalermitanHost{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Precios de la competencia</h2>
+</div>
+
+<div class="form-card">
+  <h3>Cargar precio manualmente</h3>
+  <form method="post" class="form-grid">
+    <div class="form-group"><label>Barrio</label><input type="text" name="barrio" required></div>
+    <div class="form-group"><label>Tipo</label>
+      <select name="tipo"><option value="depto">Departamento</option><option value="casa">Casa</option></select>
+    </div>
+    <div class="form-group"><label>Ambientes</label><input type="number" name="ambientes" min="1"></div>
+    <div class="form-group"><label>Capacidad</label><input type="number" name="capacidad" min="1"></div>
+    <div class="form-group"><label>Precio por noche ($)</label><input type="number" name="precio_noche" step="0.01" required></div>
+    <div class="form-group"><label>Fecha observada</label><input type="date" name="fecha"></div>
+    <div class="form-group"><label>Fuente / Link</label><input type="text" name="fuente" placeholder="URL de Airbnb o nombre"></div>
+    <div class="form-group"><label>Notas</label><input type="text" name="notas"></div>
+    <div class="form-group" style="align-self:flex-end">
+      <button type="submit" class="btn btn-primary">Guardar</button>
+    </div>
+  </form>
+</div>
+
+<div class="form-card">
+  <h3>O importar desde CSV</h3>
+  <p class="muted">El CSV debe tener columnas: barrio, tipo, ambientes, capacidad, precio_noche, fecha, fuente, notas</p>
+  <form method="post" enctype="multipart/form-data">
+    <input type="file" name="csv_comp" accept=".csv">
+    <button type="submit" class="btn">Importar CSV</button>
+  </form>
+</div>
+
+{% if registros %}
+<div class="table-wrap">
+<table class="tabla">
+  <thead><tr><th>Barrio</th><th>Tipo</th><th>Amb.</th><th>Cap.</th><th>Precio/noche</th><th>Fecha</th><th>Fuente</th><th></th></tr></thead>
+  <tbody>
+  {% for r in registros %}
+  <tr>
+    <td>{{ r.barrio }}</td>
+    <td>{{ r.tipo }}</td>
+    <td>{{ r.ambientes }}</td>
+    <td>{{ r.capacidad }}</td>
+    <td>${{ "{:,.0f}".format(r.precio_noche or 0) }}</td>
+    <td>{{ r.fecha }}</td>
+    <td><a href="{{ r.fuente }}" target="_blank" class="link">{{ r.fuente[:40] if r.fuente else '—' }}</a></td>
+    <td>
+      <form method="post" action="{{ url_for('eliminar_competencia', cid=r.id) }}" style="display:inline">
+        <button class="btn btn-sm btn-danger" onclick="return confirm('¿Eliminar?')">✕</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

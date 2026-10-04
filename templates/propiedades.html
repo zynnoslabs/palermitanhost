@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Propiedades – PalermitanHost{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Propiedades</h2>
+  <a href="{{ url_for('nueva_propiedad') }}" class="btn btn-primary">+ Nueva propiedad</a>
+</div>
+
+{% if propiedades %}
+<div class="table-wrap">
+<table class="tabla">
+  <thead><tr>
+    <th>Nombre</th><th>Barrio</th><th>Tipo</th><th>Amb.</th><th>Cap.</th>
+    <th>Precio base</th><th>Costos/mes</th><th>Acciones</th>
+  </tr></thead>
+  <tbody>
+  {% for p in propiedades %}
+  <tr>
+    <td><strong>{{ p.nombre }}</strong><br><small class="muted">{{ p.direccion }}</small></td>
+    <td>{{ p.barrio }}</td>
+    <td>{{ p.tipo|capitalize }}</td>
+    <td>{{ p.ambientes }}</td>
+    <td>{{ p.capacidad }} pers.</td>
+    <td>${{ "{:,.0f}".format(p.precio_base or 0) }}</td>
+    <td>${{ "{:,.0f}".format((p.costo_expensas or 0)+(p.costo_servicios or 0)+(p.costo_limpieza or 0)+(p.costo_comision or 0)) }}/mes</td>
+    <td>
+      <a href="{{ url_for('editar_propiedad', pid=p.id) }}" class="btn btn-sm">Editar</a>
+      <form method="post" action="{{ url_for('eliminar_propiedad', pid=p.id) }}" style="display:inline"
+            onsubmit="return confirm('¿Eliminar {{ p.nombre }}?')">
+        <button class="btn btn-sm btn-danger">Eliminar</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="empty-state">
+  <p>No hay propiedades cargadas.</p>
+  <a href="{{ url_for('nueva_propiedad') }}" class="btn btn-primary">Cargar primera propiedad</a>
+</div>
+{% endif %}
+{% endblock %}

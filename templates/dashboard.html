@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Dashboard – PalermitanHost{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>Dashboard</h2>
+  <form method="get" class="filter-form">
+    <select name="propiedad_id">
+      <option value="">Todas las propiedades</option>
+      {% for p in propiedades %}
+        <option value="{{ p.id }}" {% if prop_id == p.id %}selected{% endif %}>{{ p.nombre }}</option>
+      {% endfor %}
+    </select>
+    <input type="date" name="desde" value="{{ desde }}">
+    <input type="date" name="hasta" value="{{ hasta }}">
+    <button type="submit" class="btn btn-sm">Filtrar</button>
+  </form>
+</div>
+
+{% if stats %}
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-num">{{ stats.total_reservas }}</div>
+    <div class="stat-lbl">Reservas</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num">{{ stats.tasa_ocupacion }}%</div>
+    <div class="stat-lbl">Ocupación</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num">${{ "{:,.0f}".format(stats.adr) }}</div>
+    <div class="stat-lbl">ADR (precio prom/noche)</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num">${{ "{:,.0f}".format(stats.revpar) }}</div>
+    <div class="stat-lbl">RevPAR</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num">${{ "{:,.0f}".format(stats.ingreso_bruto) }}</div>
+    <div class="stat-lbl">Ingreso bruto</div>
+  </div>
+  <div class="stat-card highlight">
+    <div class="stat-num">${{ "{:,.0f}".format(stats.ingreso_neto_real) }}</div>
+    <div class="stat-lbl">Ingreso neto real</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num">{{ stats.estadias_prom }} noches</div>
+    <div class="stat-lbl">Estadía promedio</div>
+  </div>
+  {% if stats.anticipacion_prom %}
+  <div class="stat-card">
+    <div class="stat-num">{{ stats.anticipacion_prom }} días</div>
+    <div class="stat-lbl">Anticipación promedio</div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="charts-row">
+  <div class="chart-box">
+    <h3>Ingresos por mes</h3>
+    <canvas id="chartIngresos"></canvas>
+  </div>
+  <div class="chart-box">
+    <h3>Noches ocupadas por mes</h3>
+    <canvas id="chartNoches"></canvas>
+  </div>
+</div>
+
+<div class="section-header">
+  <h3>Generar informe con IA</h3>
+</div>
+<form method="post" action="{{ url_for('generar_informe') }}" class="informe-form">
+  <input type="hidden" name="desde" value="{{ desde }}">
+  <input type="hidden" name="hasta" value="{{ hasta }}">
+  {% if prop_id %}<input type="hidden" name="propiedad_id" value="{{ prop_id }}">{% endif %}
+  <button type="submit" class="btn btn-primary">🤖 Generar informe del período</button>
+</form>
+
+{% if informes %}
+<div class="section-header"><h3>Últimos informes</h3></div>
+<ul class="informe-lista">
+  {% for inf in informes %}
+  <li><a href="{{ url_for('ver_informe', iid=inf.id) }}">{{ inf.titulo }}</a>
+      <span class="muted">{{ inf.creado_en[:10] }}</span></li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+  <p>No hay reservas en el período seleccionado.</p>
+  <a href="{{ url_for('importar') }}" class="btn btn-primary">Importar CSV de Airbnb</a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const porMes = {{ por_mes|safe }};
+const meses  = Object.keys(porMes);
+const ingresos = meses.map(m => porMes[m].ingreso_bruto);
+const noches   = meses.map(m => porMes[m].noches);
+
+if(meses.length){
+  new Chart(document.getElementById('chartIngresos'), {
+    type:'bar',
+    data:{ labels:meses, datasets:[{label:'Ingreso bruto', data:ingresos,
+      backgroundColor:'rgba(99,102,241,0.75)', borderRadius:4}]},
+    options:{responsive:true, plugins:{legend:{display:false}},
+      scales:{y:{ticks:{callback:v=>'$'+v.toLocaleString()}}}}
+  });
+  new Chart(document.getElementById('chartNoches'), {
+    type:'bar',
+    data:{ labels:meses, datasets:[{label:'Noches', data:noches,
+      backgroundColor:'rgba(16,185,129,0.75)', borderRadius:4}]},
+    options:{responsive:true, plugins:{legend:{display:false}}}
+  });
+}
+</script>
+{% endblock %}

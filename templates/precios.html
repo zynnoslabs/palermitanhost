@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Precio sugerido – PalermitanHost{% endblock %}
+{% block content %}
+<div class="page-header"><h2>Sugerencia de precio por noche</h2></div>
+
+<div class="form-card">
+  <form method="post" class="form-grid">
+    <div class="form-group">
+      <label>Propiedad</label>
+      <select name="propiedad_id" required>
+        <option value="">Seleccioná una propiedad</option>
+        {% for p in propiedades %}
+          <option value="{{ p.id }}" {% if prop_sel and prop_sel.id==p.id %}selected{% endif %}>{{ p.nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Fecha desde</label>
+      <input type="date" name="fecha_desde" required>
+    </div>
+    <div class="form-group">
+      <label>Fecha hasta</label>
+      <input type="date" name="fecha_hasta" required>
+    </div>
+    <div class="form-group" style="align-self:flex-end">
+      <button type="submit" class="btn btn-primary">Calcular precio</button>
+    </div>
+  </form>
+</div>
+
+{% if resultado %}
+<div class="precio-resultado">
+  <div class="precio-box precio-min">
+    <div class="precio-lbl">Mínimo (break-even)</div>
+    <div class="precio-num">${{ "{:,.0f}".format(resultado.precio_minimo) }}</div>
+  </div>
+  <div class="precio-box precio-sug">
+    <div class="precio-lbl">⭐ Sugerido</div>
+    <div class="precio-num">${{ "{:,.0f}".format(resultado.precio_sugerido) }}</div>
+  </div>
+  <div class="precio-box precio-max">
+    <div class="precio-lbl">Máximo recomendado</div>
+    <div class="precio-num">${{ "{:,.0f}".format(resultado.precio_maximo) }}</div>
+  </div>
+</div>
+
+<div class="form-card">
+  <h3>Cómo se calculó</h3>
+  <table class="tabla">
+    <tbody>
+      <tr><td>Costo por noche (costos fijos ÷ 30)</td><td>${{ resultado.detalle.costo_por_noche }}</td></tr>
+      <tr><td>Precio base configurado</td><td>${{ resultado.detalle.precio_base }}</td></tr>
+      <tr><td>Mediana de competencia ({{ resultado.detalle.n_competidores }} registros)</td>
+          <td>{{ '$'+"{:,.0f}".format(resultado.detalle.mediana_competencia) if resultado.detalle.mediana_competencia else 'Sin datos' }}</td></tr>
+      <tr><td>Temporada del período</td><td>{{ resultado.detalle.temporada|capitalize }} (×{{ resultado.detalle.factor_temporada }})</td></tr>
+      <tr><td>% días de fin de semana</td><td>{{ resultado.detalle.proporcion_finde }}% (×{{ resultado.detalle.factor_finde }})</td></tr>
+      <tr><td>Ocupación histórica anual</td><td>{{ resultado.detalle.tasa_ocupacion_hist }}% (×{{ resultado.detalle.factor_ocupacion }})</td></tr>
+    </tbody>
+  </table>
+</div>
+
+{% if resultado.justificacion %}
+<div class="form-card">
+  <h3>Análisis de la IA</h3>
+  <div class="informe-texto">{{ resultado.justificacion | safe }}</div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

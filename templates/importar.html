@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Importar CSV – PalermitanHost{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Importar CSV de Airbnb</h2>
+</div>
+
+{% if paso == 1 %}
+<div class="form-card">
+  <p>Exportá el historial de ganancias desde tu panel de Airbnb y subilo acá.</p>
+  <form method="post" enctype="multipart/form-data">
+    <div class="form-group">
+      <label>Archivo CSV de Airbnb</label>
+      <input type="file" name="csv_file" accept=".csv" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Analizar CSV</button>
+  </form>
+</div>
+
+{% elif paso == 2 %}
+<div class="form-card">
+  <h3>Asignación manual de columnas</h3>
+  <p>No se detectaron automáticamente estas columnas. Asignalas desde el desplegable:</p>
+  <form method="post" action="{{ url_for('importar_asignar') }}">
+    {% for col in no_detectadas %}
+    <div class="form-group">
+      <label><strong>{{ col }}</strong></label>
+      <select name="col_{{ col }}">
+        <option value="">— No está en el CSV —</option>
+        {% for h in encabezados %}
+          <option value="{{ loop.index0 }}">{{ h }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endfor %}
+    <button type="submit" class="btn btn-primary">Confirmar y continuar</button>
+  </form>
+</div>
+
+{% elif paso == 3 %}
+<div class="form-card">
+  <h3>Asignar anuncios a propiedades</h3>
+  <p>Cada nombre de anuncio detectado en el CSV necesita vincularse a una propiedad cargada en el sistema.</p>
+  <form method="post" action="{{ url_for('importar_asignar') }}">
+    <input type="hidden" name="asignar" value="1">
+    {% for anuncio in anuncios %}
+    <div class="form-group">
+      <label>{{ anuncio }}</label>
+      <select name="prop_{{ anuncio }}">
+        <option value="">— No importar —</option>
+        {% for p in propiedades %}
+          <option value="{{ p.id }}">{{ p.nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endfor %}
+    <button type="submit" class="btn btn-primary">Importar reservas</button>
+  </form>
+</div>
+
+{% elif paso == 4 %}
+<div class="result-box">
+  <h3>✅ Importación completada</h3>
+  <ul>
+    <li>✔ <strong>{{ importadas }}</strong> reservas importadas</li>
+    <li>⏭ <strong>{{ duplicadas }}</strong> duplicadas omitidas</li>
+    {% if omitidas %}
+    <li>⚠ <strong>{{ omitidas|length }}</strong> filas con errores:</li>
+    </ul>
+    <div class="table-wrap">
+    <table class="tabla">
+      <thead><tr><th>Fila</th><th>Motivo</th></tr></thead>
+      <tbody>
+      {% for o in omitidas %}
+        <tr><td>{{ o.fila }}</td><td>{{ o.motivo }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    </ul>
+    {% endif %}
+  <a href="{{ url_for('dashboard') }}" class="btn btn-primary">Ver dashboard</a>
+  <a href="{{ url_for('importar') }}" class="btn">Importar otro CSV</a>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if prop else 'Nueva' }} propiedad – PalermitanHost{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>{{ 'Editar propiedad' if prop else 'Nueva propiedad' }}</h2>
+  <a href="{{ url_for('propiedades') }}" class="btn btn-sm">← Volver</a>
+</div>
+
+<form method="post" class="form-card">
+  <div class="form-grid">
+    <div class="form-group">
+      <label>Nombre *</label>
+      <input type="text" name="nombre" required value="{{ prop.nombre if prop else '' }}">
+    </div>
+    <div class="form-group">
+      <label>Dirección</label>
+      <input type="text" name="direccion" value="{{ prop.direccion if prop else '' }}">
+    </div>
+    <div class="form-group">
+      <label>Barrio / Localidad</label>
+      <input type="text" name="barrio" value="{{ prop.barrio if prop else '' }}">
+    </div>
+    <div class="form-group">
+      <label>Tipo</label>
+      <select name="tipo">
+        <option value="depto" {% if prop and prop.tipo=='depto' %}selected{% endif %}>Departamento</option>
+        <option value="casa"  {% if prop and prop.tipo=='casa'  %}selected{% endif %}>Casa</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Ambientes</label>
+      <input type="number" name="ambientes" min="1" value="{{ prop.ambientes if prop else '' }}">
+    </div>
+    <div class="form-group">
+      <label>Capacidad (personas)</label>
+      <input type="number" name="capacidad" min="1" value="{{ prop.capacidad if prop else '' }}">
+    </div>
+    <div class="form-group">
+      <label>Precio base por noche ($)</label>
+      <input type="number" name="precio_base" step="0.01" value="{{ prop.precio_base if prop else '' }}">
+    </div>
+  </div>
+
+  <h3 class="section-title">Costos fijos mensuales</h3>
+  <div class="form-grid">
+    <div class="form-group">
+      <label>Expensas ($)</label>
+      <input type="number" name="costo_expensas" step="0.01" value="{{ prop.costo_expensas if prop else 0 }}">
+    </div>
+    <div class="form-group">
+      <label>Servicios ($)</label>
+      <input type="number" name="costo_servicios" step="0.01" value="{{ prop.costo_servicios if prop else 0 }}">
+    </div>
+    <div class="form-group">
+      <label>Limpieza ($)</label>
+      <input type="number" name="costo_limpieza" step="0.01" value="{{ prop.costo_limpieza if prop else 0 }}">
+    </div>
+    <div class="form-group">
+      <label>Comisión / otros ($)</label>
+      <input type="number" name="costo_comision" step="0.01" value="{{ prop.costo_comision if prop else 0 }}">
+    </div>
+  </div>
+
+  <h3 class="section-title">Información para huéspedes</h3>
+  <div class="form-group">
+    <label>WiFi, check-in, reglas, cómo llegar, etc. (usa esto el asistente de IA)</label>
+    <textarea name="info_huespedes" rows="8" placeholder="Ej: WiFi: RedCasa / Clave: 12345678&#10;Check-in: 14:00 hs. Check-out: 11:00 hs.&#10;No se permiten fiestas ni mascotas.">{{ prop.info_huespedes if prop else '' }}</textarea>
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary">{{ 'Guardar cambios' if prop else 'Crear propiedad' }}</button>
+    <a href="{{ url_for('propiedades') }}" class="btn">Cancelar</a>
+  </div>
+</form>
+{% endblock %}
