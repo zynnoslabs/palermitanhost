@@ -13,9 +13,14 @@ MAX_HISTORIAL = 10  # turnos (user+assistant) a mantener en sesión
 
 
 def get_db():
-    """Import db connection from app context."""
+    """Obtiene una conexión del pool de base de datos."""
     import database as _db_mod
     return _db_mod.get_db_connection()
+
+def release_db(conn):
+    """Devuelve la conexión al pool."""
+    import database as _db_mod
+    _db_mod._release(conn)
 
 
 def build_context(db):
@@ -145,12 +150,6 @@ estratégicas y responder con precisión usando los datos reales del negocio.
     return system_prompt
 
 
-@asistente_bp.route("/asistente", methods=["GET"])
-def asistente_page():
-    from flask import render_template
-    return render_template("asistente.html")
-
-
 @asistente_bp.route("/asistente/chat", methods=["POST"])
 def chat():
     """Endpoint del chat del asistente de negocio."""
@@ -170,7 +169,7 @@ def chat():
             "pero puedo ayudarte con preguntas generales."
         )
     finally:
-        db.close()
+        release_db(db)
 
     # ── Historial de sesión ──────────────────────────────────────────────────
     if "historial_asistente" not in session:

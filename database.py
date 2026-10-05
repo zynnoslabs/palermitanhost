@@ -33,6 +33,10 @@ def get_db_connection():
 def _release(conn):
     _get_pool().putconn(conn)
 
+def release_db(conn):
+    """Alias público de _release para blueprints externos."""
+    _release(conn)
+
 
 def init_db():
     conn = get_db()
