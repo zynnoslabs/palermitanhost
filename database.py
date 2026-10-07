@@ -103,6 +103,22 @@ def init_db():
             )
         """)
 
+        # ### CAMBIO AQUÍ ### — columnas nuevas para la búsqueda de competencia con IA
+        for col_sql in (
+            "propiedad_id INTEGER",
+            "plataforma   TEXT",
+            "titulo       TEXT",
+            "zona         TEXT",
+            "link         TEXT",
+            "rating       REAL",
+            "origen       TEXT DEFAULT 'manual'",
+        ):
+            cur.execute(f"ALTER TABLE competencia ADD COLUMN IF NOT EXISTS {col_sql}")
+
+        # ### CAMBIO AQUÍ ### — moneda (ARS o USD) en propiedades, reservas y competencia
+        for tabla in ("propiedades", "reservas", "competencia"):
+            cur.execute(f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS moneda TEXT DEFAULT 'ARS'")
+
         cur.execute("""
             CREATE TABLE IF NOT EXISTS consultas_huespedes (
                 id           SERIAL PRIMARY KEY,
@@ -126,6 +142,38 @@ def init_db():
                 contenido       TEXT NOT NULL,
                 fecha_generado  TIMESTAMPTZ DEFAULT NOW(),
                 creado_en       TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+
+        # ### CAMBIO AQUÍ ### — historial diario de la competencia (para ver la tendencia)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS competencia_historial (
+                id           SERIAL PRIMARY KEY,
+                propiedad_id INTEGER REFERENCES propiedades(id) ON DELETE CASCADE,
+                fecha        TEXT NOT NULL,
+                cantidad     INTEGER,
+                mediana      REAL,
+                minimo       REAL,
+                maximo       REAL,
+                moneda       TEXT,
+                fuente       TEXT,
+                creada_en    TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE (propiedad_id, fecha)
+            )
+        """)
+
+        # ### CAMBIO AQUÍ ### — reseñas de huéspedes (tarjeta "Reseñas pendientes" del dashboard)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS resenas (
+                id           SERIAL PRIMARY KEY,
+                propiedad_id INTEGER REFERENCES propiedades(id),
+                huesped      TEXT DEFAULT '',
+                puntaje      INTEGER,
+                texto        TEXT NOT NULL,
+                respuesta    TEXT DEFAULT '',
+                pendiente    INTEGER DEFAULT 1,
+                fecha        TEXT,
+                creada_en    TIMESTAMPTZ DEFAULT NOW()
             )
         """)
 

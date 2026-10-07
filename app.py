@@ -1,7 +1,7 @@
 # app.py
 import os
 import json
-from datetime import datetime, date
+from datetime import datetime, date, timedelta   # ### CAMBIO AQUÍ ###
 from functools import wraps
 
 from flask import (Flask, render_template, request, redirect, url_for,
@@ -15,6 +15,10 @@ import importador
 import metricas as met
 import precios as prec
 import ia
+import competencia_ia   # ### CAMBIO AQUÍ ###
+import monedas         # ### CAMBIO AQUÍ ###
+import competencia_auto  # ### CAMBIO AQUÍ ###
+import hmac
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "cambiar-esto-en-produccion")
@@ -23,13 +27,80 @@ ADMIN_USER = os.getenv("ADMIN_USER", "admin")
 ADMIN_PASS = os.getenv("ADMIN_PASS", "admin123")
 
 # ── Blueprints ───────────────────────────────────────────────────────────────
-from asistente_route import asistente_bp
+from asistente_route import asistente_bp, _cargar_historial   # ### CAMBIO AQUÍ ###
 from exportar_routes import exportar_bp
 from ruta_precios    import precios_bp
 
 app.register_blueprint(asistente_bp)
 app.register_blueprint(exportar_bp)
 app.register_blueprint(precios_bp)
+
+# ### CAMBIO AQUÍ ### — PostgreSQL devuelve fechas como datetime; antes {{ x[:10] }} rompía la página
+@app.template_filter("fecha")
+def filtro_fecha(valor, largo=10):
+    if not valor:
+        return ""
+    if hasattr(valor, "strftime"):
+        return valor.strftime("%Y-%m-%d %H:%M" if largo > 10 else "%Y-%m-%d")
+    return str(valor)[:largo]
+
+
+def _costos_y_unidades(prop_id, vista="ARS", tc=None):
+    """Costos fijos mensuales (en la moneda 'vista') y cantidad de unidades."""
+    props = (db.query("SELECT * FROM propiedades WHERE id=%s", (prop_id,)) if prop_id
+             else db.query("SELECT * FROM propiedades"))
+    return monedas.costos_mensuales(props, vista, tc), max(len(props), 1)
+
+
+# ### CAMBIO AQUÍ ### — moneda en pantalla (ARS o USD) y tipo de cambio disponibles en todas las páginas
+def moneda_vista():
+    return session.get("moneda_vista", "ARS")
+
+
+@app.context_processor
+def inyectar_monedas():
+    try:
+        tc = monedas.get_tc()
+    except Exception:
+        tc = None
+    return {"vista": moneda_vista(), "tc_info": tc, "tipos_dolar": monedas.TIPOS_DOLAR}
+
+
+@app.template_filter("dinero")
+def filtro_dinero(monto, moneda="ARS", convertir_a=None):
+    """{{ monto|dinero('USD') }} muestra en esa moneda; con convertir_a='vista' pasa a la moneda elegida."""
+    destino = moneda_vista() if convertir_a == "vista" else (convertir_a or moneda or "ARS")
+    v = monedas.convertir(monto or 0, moneda or "ARS", destino, monedas.tc_valor() if destino != moneda else None)
+    if v is None:   # sin tipo de cambio: se muestra en la moneda original
+        return monedas.formatear(monto or 0, moneda or "ARS")
+    return monedas.formatear(v, destino)
+
+
+@app.route("/moneda/<m>")
+def cambiar_moneda(m):
+    if m in monedas.MONEDAS:
+        session["moneda_vista"] = m
+    return redirect(request.referrer or url_for("dashboard"))
+
+
+@app.route("/tipo-cambio", methods=["POST"])
+def tipo_cambio():
+    if not session.get("logged_in"):
+        return redirect(url_for("login"))
+    try:
+        if request.form.get("tipo"):
+            data = monedas.traer_tc(request.form["tipo"])
+            flash(f"Tipo de cambio actualizado: {data['tipo']} = $ {data['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."), "ok")
+        else:
+            valor = importador.parsear_monto(request.form.get("valor"))
+            if valor <= 0:
+                raise ValueError("valor inválido")
+            monedas.guardar_tc(valor, "manual")
+            flash("Tipo de cambio guardado.", "ok")
+    except Exception as e:
+        flash(f"No se pudo actualizar el tipo de cambio: {e}", "error")
+    return redirect(request.referrer or url_for("dashboard"))
+
 
 # ── Inicializar DB al arrancar ───────────────────────────────────────────────
 with app.app_context():
@@ -80,28 +151,44 @@ def dashboard():
     desde  = request.args.get("desde",  date(date.today().year, date.today().month, 1).isoformat())
     prop_id = request.args.get("propiedad_id", None, type=int)
 
+    # ### CAMBIO AQUÍ ### — los montos se pasan a la moneda elegida (ARS o USD)
+    vista, tc = moneda_vista(), monedas.tc_valor()
     reservas = db.query("SELECT * FROM reservas")
     reservas_filtradas = met.filtrar_reservas(reservas, desde, hasta, prop_id)
+    reservas_filtradas, sin_tc = monedas.convertir_reservas(reservas_filtradas, vista, tc)
+    if sin_tc:
+        flash(f"{sin_tc} reservas están en otra moneda y no se sumaron: cargá el tipo de cambio "
+              f"(arriba a la derecha).", "warn")
 
-    costos_mes = 0
-    if prop_id:
-        p = db.query_one("SELECT * FROM propiedades WHERE id=%s", (prop_id,))
-        if p:
-            costos_mes = sum([
-                p.get("costo_expensas",0) or 0,
-                p.get("costo_servicios",0) or 0,
-                p.get("costo_limpieza",0) or 0,
-                p.get("costo_comision",0) or 0,
-            ])
-
-    stats = met.calcular_metricas(reservas_filtradas, desde, hasta, costos_mes)
+    costos_mes, unidades = _costos_y_unidades(prop_id, vista, tc)
+    stats = met.calcular_metricas(reservas_filtradas, desde, hasta, costos_mes, unidades)
     por_mes = met.metricas_por_mes(reservas_filtradas, prop_id)
 
     informes = db.query("SELECT id, titulo, creado_en FROM informes ORDER BY creado_en DESC LIMIT 5")
 
+    # ### CAMBIO AQUÍ ### — próximas reservas, reseñas pendientes y ocupación de los últimos 7 días
+    hoy = date.today()
+    proximas = db.query("""
+        SELECT r.*, p.nombre AS prop_nombre FROM reservas r
+        LEFT JOIN propiedades p ON p.id = r.propiedad_id
+        WHERE r.fecha_inicio >= %s AND COALESCE(r.estado,'') <> 'cancelada'
+          AND (%s::int IS NULL OR r.propiedad_id = %s::int)
+        ORDER BY r.fecha_inicio LIMIT 8
+    """, (hoy.isoformat(), prop_id, prop_id))
+    resenas_pend = db.query_one("""
+        SELECT COUNT(*) AS n FROM resenas
+        WHERE pendiente = 1 AND (%s::int IS NULL OR propiedad_id = %s::int)
+    """, (prop_id, prop_id))["n"]
+    unidades_activas = len([p for p in propiedades
+                            if (not prop_id or p["id"] == prop_id) and p.get("estado") != "inactiva"]) or 1
+    ocup_7 = met.ocupacion_diaria(
+        [r for r in reservas if r.get("estado") != "cancelada" and (not prop_id or r.get("propiedad_id") == prop_id)],
+        hoy - timedelta(days=6), hoy, unidades_activas)
+
     return render_template("dashboard.html",
         propiedades=propiedades, stats=stats, por_mes=json.dumps(por_mes),
-        desde=desde, hasta=hasta, prop_id=prop_id, informes=informes)
+        desde=desde, hasta=hasta, prop_id=prop_id, informes=informes,
+        proximas=proximas, resenas_pend=resenas_pend, ocup_7=json.dumps(ocup_7))
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -112,7 +199,13 @@ def dashboard():
 @login_required
 def propiedades():
     props = db.query("SELECT * FROM propiedades ORDER BY nombre")
-    return render_template("propiedades.html", propiedades=props)
+    # ### CAMBIO AQUÍ ### — lista de huéspedes de la propiedad elegida
+    ver = request.args.get("ver", type=int) or (props[0]["id"] if props else None)
+    huespedes = db.query("""
+        SELECT * FROM reservas WHERE propiedad_id=%s
+        ORDER BY fecha_inicio DESC LIMIT 30
+    """, (ver,)) if ver else []
+    return render_template("propiedades.html", propiedades=props, ver=ver, huespedes=huespedes)
 
 
 @app.route("/propiedades/nueva", methods=["GET","POST"])
@@ -123,15 +216,17 @@ def nueva_propiedad():
         db.execute("""
             INSERT INTO propiedades
             (nombre,direccion,barrio,tipo,ambientes,capacidad,precio_base,
-             costo_expensas,costo_servicios,costo_limpieza,costo_comision,info_huespedes)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+             costo_expensas,costo_servicios,costo_limpieza,costo_comision,info_huespedes,estado,
+             rating,reviews_count,moneda)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """, (
             f.get("nombre"), f.get("direccion"), f.get("barrio"), f.get("tipo"),
             f.get("ambientes") or None, f.get("capacidad") or None,
             f.get("precio_base") or 0,
             f.get("costo_expensas") or 0, f.get("costo_servicios") or 0,
             f.get("costo_limpieza") or 0, f.get("costo_comision") or 0,
-            f.get("info_huespedes","")
+            f.get("info_huespedes",""), f.get("estado","activa"),   # ### CAMBIO AQUÍ ###
+            f.get("rating") or None, f.get("reviews_count") or 0, f.get("moneda","ARS")
         ))
         flash("Propiedad creada correctamente.", "ok")
         return redirect(url_for("propiedades"))
@@ -150,7 +245,8 @@ def editar_propiedad(pid):
         db.execute("""
             UPDATE propiedades SET nombre=%s,direccion=%s,barrio=%s,tipo=%s,ambientes=%s,
             capacidad=%s,precio_base=%s,costo_expensas=%s,costo_servicios=%s,
-            costo_limpieza=%s,costo_comision=%s,info_huespedes=%s
+            costo_limpieza=%s,costo_comision=%s,info_huespedes=%s,estado=%s,
+            rating=%s,reviews_count=%s,moneda=%s
             WHERE id=%s
         """, (
             f.get("nombre"), f.get("direccion"), f.get("barrio"), f.get("tipo"),
@@ -158,7 +254,8 @@ def editar_propiedad(pid):
             f.get("precio_base") or 0,
             f.get("costo_expensas") or 0, f.get("costo_servicios") or 0,
             f.get("costo_limpieza") or 0, f.get("costo_comision") or 0,
-            f.get("info_huespedes",""), pid
+            f.get("info_huespedes",""), f.get("estado","activa"),   # ### CAMBIO AQUÍ ###
+            f.get("rating") or None, f.get("reviews_count") or 0, f.get("moneda","ARS"), pid
         ))
         flash("Propiedad actualizada.", "ok")
         return redirect(url_for("propiedades"))
@@ -168,6 +265,17 @@ def editar_propiedad(pid):
 @app.route("/propiedades/<int:pid>/eliminar", methods=["POST"])
 @login_required
 def eliminar_propiedad(pid):
+    # ### CAMBIO AQUÍ ### — antes daba error 500 si la propiedad tenía reservas o consultas
+    usos = db.query_one("""
+        SELECT (SELECT COUNT(*) FROM reservas WHERE propiedad_id=%s) +
+               (SELECT COUNT(*) FROM consultas_huespedes WHERE propiedad_id=%s) +
+               (SELECT COUNT(*) FROM resenas WHERE propiedad_id=%s) AS n
+    """, (pid, pid, pid))
+    if usos and usos["n"]:
+        flash("No se puede eliminar: la propiedad tiene reservas o consultas cargadas. "
+              "Podés editarla y cambiarle el nombre o los datos.", "error")
+        return redirect(url_for("propiedades"))
+    db.execute("DELETE FROM competencia WHERE propiedad_id=%s", (pid,))
     db.execute("DELETE FROM propiedades WHERE id=%s", (pid,))
     flash("Propiedad eliminada.", "ok")
     return redirect(url_for("propiedades"))
@@ -176,6 +284,18 @@ def eliminar_propiedad(pid):
 # ════════════════════════════════════════════════════════════════════════════
 # IMPORTAR CSV
 # ════════════════════════════════════════════════════════════════════════════
+
+def _guardar_csv_pendiente(texto):
+    db.execute("""
+        INSERT INTO config (clave, valor) VALUES ('csv_pendiente', %s)
+        ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor
+    """, (texto,))
+
+
+def _leer_csv_pendiente():
+    row = db.query_one("SELECT valor FROM config WHERE clave='csv_pendiente'")
+    return row["valor"] if row and row["valor"] else ""
+
 
 @app.route("/importar", methods=["GET","POST"])
 @login_required
@@ -195,7 +315,9 @@ def importar():
 
         mapa, no_detectadas = importador.detectar_columnas(encabezados)
 
-        session["csv_contenido"] = contenido.decode("utf-8-sig", errors="replace")
+        # ### CAMBIO AQUÍ ### — el CSV se guarda en la base, no en la cookie
+        # (la cookie tiene límite de 4 KB: con un CSV real se perdía y cerraba la sesión)
+        _guardar_csv_pendiente(contenido.decode("utf-8-sig", errors="replace"))
         session["csv_encabezados"] = encabezados
         session["csv_mapa"] = mapa
         session["csv_no_detectadas"] = no_detectadas
@@ -217,7 +339,7 @@ def importar():
 @login_required
 def importar_asignar():
     propiedades = db.query("SELECT id, nombre FROM propiedades ORDER BY nombre")
-    csv_contenido   = session.get("csv_contenido","")
+    csv_contenido   = _leer_csv_pendiente()   # ### CAMBIO AQUÍ ###
     csv_encabezados = session.get("csv_encabezados",[])
     mapa            = session.get("csv_mapa",{})
 
@@ -251,33 +373,56 @@ def importar_asignar():
 
         contenido_bytes = csv_contenido.encode("utf-8")
         filas_ok, omitidas = importador.procesar_csv(contenido_bytes, mapa, propiedad_map)
+        # ### CAMBIO AQUÍ ### — si el CSV no trae moneda, se usa la de la propiedad
+        mon_prop = {p["id"]: (p.get("moneda") or "ARS") for p in db.query("SELECT id, moneda FROM propiedades")}
+        for fila in filas_ok:
+            fila["moneda"] = fila.get("moneda") or mon_prop.get(fila["propiedad_id"], "ARS")
 
+        # ### CAMBIO AQUÍ ### — si la reserva ya existe se ACTUALIZA (estado, huésped, montos)
+        # en vez de descartarla. Así se puede importar el export de Reservas (futuras)
+        # y después el de Ganancias sin duplicar.
         importadas = 0
         duplicadas = 0
         for fila in filas_ok:
             try:
-                db.execute("""
+                nueva = db.execute("""
                     INSERT INTO reservas
                     (propiedad_id,codigo_confirmacion,fecha_inicio,fecha_fin,noches,
-                     ingreso_bruto,comision_airbnb,limpieza,ingreso_neto,anticipacion_dias)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                     ingreso_bruto,comision_airbnb,limpieza,ingreso_neto,anticipacion_dias,
+                     huesped_nombre,estado,moneda)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    ON CONFLICT (codigo_confirmacion) DO UPDATE SET
+                      huesped_nombre = COALESCE(NULLIF(EXCLUDED.huesped_nombre,''), reservas.huesped_nombre),
+                      estado = CASE WHEN EXCLUDED.estado = 'completada' AND reservas.estado = 'cancelada'
+                                    THEN reservas.estado ELSE EXCLUDED.estado END,
+                      ingreso_bruto   = CASE WHEN EXCLUDED.ingreso_bruto  > 0 THEN EXCLUDED.ingreso_bruto  ELSE reservas.ingreso_bruto END,
+                      comision_airbnb = CASE WHEN EXCLUDED.comision_airbnb <> 0 THEN EXCLUDED.comision_airbnb ELSE reservas.comision_airbnb END,
+                      limpieza        = CASE WHEN EXCLUDED.limpieza       > 0 THEN EXCLUDED.limpieza       ELSE reservas.limpieza END,
+                      ingreso_neto    = CASE WHEN EXCLUDED.ingreso_neto   > 0 THEN EXCLUDED.ingreso_neto   ELSE reservas.ingreso_neto END,
+                      anticipacion_dias = COALESCE(EXCLUDED.anticipacion_dias, reservas.anticipacion_dias),
+                      moneda = EXCLUDED.moneda
+                    RETURNING (xmax = 0)
                 """, (
                     fila["propiedad_id"], fila["codigo_confirmacion"],
                     fila["fecha_inicio"], fila["fecha_fin"], fila["noches"],
                     fila["ingreso_bruto"], fila["comision_airbnb"],
-                    fila["limpieza"], fila["ingreso_neto"], fila["anticipacion_dias"]
+                    fila["limpieza"], fila["ingreso_neto"], fila["anticipacion_dias"],
+                    fila.get("huesped_nombre", ""), fila.get("estado", "completada"), fila["moneda"]
                 ))
-                importadas += 1
+                if nueva:
+                    importadas += 1
+                else:
+                    duplicadas += 1
             except Exception:
-                duplicadas += 1
+                omitidas.append({"fila": "—", "motivo": f"No se pudo guardar {fila['codigo_confirmacion']}"})
 
-        session.pop("csv_contenido", None)
+        _guardar_csv_pendiente("")   # ### CAMBIO AQUÍ ###
         session.pop("csv_mapa", None)
         session.pop("csv_encabezados", None)
         session.pop("csv_no_detectadas", None)
 
-        flash(f"Importación completa: {importadas} reservas importadas, "
-              f"{duplicadas} duplicadas omitidas, {len(omitidas)} filas con errores.", "ok")
+        flash(f"Importación completa: {importadas} reservas nuevas, "
+              f"{duplicadas} ya existían (actualizadas), {len(omitidas)} filas con errores.", "ok")
         return render_template("importar.html",
             propiedades=propiedades, paso=4,
             importadas=importadas, duplicadas=duplicadas, omitidas=omitidas)
@@ -291,47 +436,96 @@ def importar_asignar():
 # COMPETENCIA
 # ════════════════════════════════════════════════════════════════════════════
 
+# ### CAMBIO AQUÍ ### — Competencia: búsqueda automática con IA (sin CSV).
+# La carga manual queda como opción secundaria por si la IA no encuentra nada.
 @app.route("/competencia", methods=["GET","POST"])
 @login_required
 def competencia():
     if request.method == "POST":
-        if "csv_comp" in request.files:
-            archivo = request.files["csv_comp"]
-            import csv, io
-            contenido = archivo.read().decode("utf-8-sig", errors="replace")
-            reader = csv.DictReader(io.StringIO(contenido))
-            count = 0
-            for row in reader:
-                try:
-                    db.execute("""
-                        INSERT INTO competencia (barrio,tipo,ambientes,capacidad,precio_noche,fecha,fuente,notas)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-                    """, (
-                        row.get("barrio",""), row.get("tipo",""),
-                        row.get("ambientes") or None, row.get("capacidad") or None,
-                        float(row.get("precio_noche",0) or 0),
-                        row.get("fecha",""), row.get("fuente",""), row.get("notas","")
-                    ))
-                    count += 1
-                except Exception:
-                    pass
-            flash(f"{count} registros de competencia importados.", "ok")
-        else:
-            f = request.form
-            db.execute("""
-                INSERT INTO competencia (barrio,tipo,ambientes,capacidad,precio_noche,fecha,fuente,notas)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-            """, (
-                f.get("barrio"), f.get("tipo"),
-                f.get("ambientes") or None, f.get("capacidad") or None,
-                float(f.get("precio_noche",0) or 0),
-                f.get("fecha"), f.get("fuente",""), f.get("notas","")
-            ))
-            flash("Precio de competencia cargado.", "ok")
+        f = request.form
+        db.execute("""
+            INSERT INTO competencia (barrio,tipo,ambientes,capacidad,precio_noche,fecha,fuente,notas,
+                                     link,zona,origen,moneda)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'manual',%s)
+        """, (
+            f.get("barrio"), f.get("tipo"),
+            f.get("ambientes") or None, f.get("capacidad") or None,
+            float(f.get("precio_noche",0) or 0),
+            f.get("fecha") or date.today().isoformat(), f.get("fuente",""), f.get("notas",""),
+            f.get("link",""), f.get("zona",""), f.get("moneda","ARS")   # ### CAMBIO AQUÍ ###
+        ))
+        flash("Precio de competencia cargado.", "ok")
+        return redirect(url_for("competencia", pid=request.args.get("pid")))
+
+    propiedades = db.query("SELECT * FROM propiedades ORDER BY nombre")
+    pid = request.args.get("pid", type=int)
+    if not pid and propiedades:
+        pid = propiedades[0]["id"]
+    prop_sel = next((p for p in propiedades if p["id"] == pid), None)
+
+    registros, resumen, stats = [], None, None
+    if prop_sel:
+        registros = db.query("""
+            SELECT * FROM competencia
+            WHERE propiedad_id=%s OR (propiedad_id IS NULL AND barrio=%s)
+            ORDER BY precio_noche
+        """, (pid, prop_sel.get("barrio")))
+        row = db.query_one("SELECT valor FROM config WHERE clave=%s",
+                           (f"competencia_resumen_{pid}",))
+        if row:
+            try:
+                resumen = json.loads(row["valor"])
+            except Exception:
+                resumen = None
+        stats = competencia_ia.calcular_stats(registros, prop_sel.get("moneda") or "ARS",
+                                              monedas.tc_valor())   # ### CAMBIO AQUÍ ###
+
+    hist = competencia_auto.historial(pid) if prop_sel else []   # ### CAMBIO AQUÍ ###
+    return render_template("competencia.html", propiedades=propiedades,
+                           prop_sel=prop_sel, registros=registros,
+                           resumen=resumen, stats=stats, historial=hist,
+                           historial_json=json.dumps(list(reversed(hist))),
+                           corrida=competencia_auto.ultima_corrida(),
+                           auto_activa=bool(os.getenv("TAREAS_TOKEN")),
+                           tavily_activo=bool(os.getenv("TAVILY_API_KEY")))
+
+
+@app.route("/competencia/buscar", methods=["POST"])
+@login_required
+def buscar_competencia():
+    pid = request.form.get("propiedad_id", type=int)
+    prop = db.query_one("SELECT * FROM propiedades WHERE id=%s", (pid,)) if pid else None
+    if not prop:
+        flash("Elegí una propiedad para buscar su competencia.", "error")
         return redirect(url_for("competencia"))
 
-    registros = db.query("SELECT * FROM competencia ORDER BY fecha DESC")
-    return render_template("competencia.html", registros=registros)
+    res = competencia_ia.buscar_comparables(prop, monedas.tc_valor())   # ### CAMBIO AQUÍ ###
+    if not res["ok"]:
+        flash(res["error"], "error")
+        return redirect(url_for("competencia", pid=pid))
+
+    # ### CAMBIO AQUÍ ### — guarda anuncios + resumen + foto del día (historial)
+    competencia_auto.guardar_resultado(prop, res, monedas.tc_valor())
+    gasto = (f" · {res['creditos_tavily']} crédito(s) de Tavily" if res.get("creditos_tavily") else "")
+    flash(f"Se encontraron {len(res['comparables'])} propiedades similares (fuente: {res.get('fuente')}{gasto}).", "ok")
+    return redirect(url_for("competencia", pid=pid))
+
+
+# ### CAMBIO AQUÍ ### — actualización automática nocturna (la llama cron-job.org con un token secreto)
+@app.route("/tareas/competencia", methods=["GET", "POST"])
+def tarea_competencia():
+    token_ok = os.getenv("TAREAS_TOKEN")
+    token = request.args.get("token") or request.headers.get("X-Token") or ""
+    if not token_ok or not hmac.compare_digest(token, token_ok):
+        return jsonify({"ok": False, "error": "No autorizado"}), 403
+    competencia_auto.correr_en_segundo_plano()
+    return jsonify({"ok": True, "mensaje": "Actualización de competencia iniciada."})
+
+
+@app.route("/salud")
+def salud():
+    """Para 'despertar' el servidor de Render antes de la tarea nocturna."""
+    return "ok"
 
 
 @app.route("/competencia/<int:cid>/eliminar", methods=["POST"])
@@ -339,7 +533,7 @@ def competencia():
 def eliminar_competencia(cid):
     db.execute("DELETE FROM competencia WHERE id=%s", (cid,))
     flash("Registro eliminado.", "ok")
-    return redirect(url_for("competencia"))
+    return redirect(url_for("competencia", pid=request.args.get("pid")))  # ### CAMBIO AQUÍ ###
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -349,41 +543,56 @@ def eliminar_competencia(cid):
 @app.route("/precios", methods=["GET","POST"])
 @login_required
 def precios():
+    # ### CAMBIO AQUÍ ### — precio estratégico (igual que el demo): mediana de la competencia
+    # encontrada por la IA, ajustada por puntaje, reseñas, temporada, ocupación y fin de semana.
+    import statistics
+    from precio_estrategico import calcular_precio_estrategico
+
     propiedades = db.query("SELECT * FROM propiedades ORDER BY nombre")
-    resultado   = None
-    prop_sel    = None
+    pid = request.values.get("propiedad_id", type=int) or (propiedades[0]["id"] if propiedades else None)
+    prop_sel = next((p for p in propiedades if p["id"] == pid), None)
+    fecha = request.values.get("fecha", date.today().isoformat())
+    resultado, mercado = None, None
 
-    if request.method == "POST":
-        pid         = int(request.form.get("propiedad_id",0))
-        fecha_desde = request.form.get("fecha_desde", date.today().isoformat())
-        fecha_hasta = request.form.get("fecha_hasta", date.today().isoformat())
+    if prop_sel:
+        comps = db.query("""
+            SELECT * FROM competencia
+            WHERE (propiedad_id=%s OR (propiedad_id IS NULL AND barrio=%s)) AND precio_noche > 0
+        """, (pid, prop_sel.get("barrio")))
+        # ### CAMBIO AQUÍ ### — todo en la moneda de la propiedad (convierte con el tipo de cambio)
+        st = competencia_ia.calcular_stats(comps, prop_sel.get("moneda") or "ARS", monedas.tc_valor()) if comps else None
+        if st:
+            mercado = {
+                "mediana": st["mediana"], "min": st["minimo"], "max": st["maximo"],
+                "rating_promedio_zona": st["rating"] or 4.5,
+                "cantidad_propiedades": st["cantidad"],
+                "sin_convertir": st["sin_convertir"],
+                "simbolo": "US$" if prop_sel.get("moneda") == "USD" else "$",
+                "fecha": max((c.get("fecha") or "") for c in comps),
+            }
 
-        prop_sel = db.query_one("SELECT * FROM propiedades WHERE id=%s", (pid,))
-        if prop_sel:
-            reservas_hist = db.query("SELECT * FROM reservas WHERE propiedad_id=%s", (pid,))
-            comp_barrio   = db.query(
-                "SELECT * FROM competencia WHERE barrio=%s AND tipo=%s",
-                (prop_sel.get("barrio",""), prop_sel.get("tipo",""))
-            )
-            resultado = prec.calcular_precio_sugerido(
-                prop_sel, reservas_hist, comp_barrio, fecha_desde, fecha_hasta
-            )
-            try:
-                resultado["justificacion"] = ia.generar_informe(
-                    {**resultado["detalle"],
-                     "precio_minimo": resultado["precio_minimo"],
-                     "precio_sugerido": resultado["precio_sugerido"],
-                     "precio_maximo": resultado["precio_maximo"]},
-                    nombre_propiedad=prop_sel.get("nombre"),
-                    periodo=f"{fecha_desde} al {fecha_hasta}"
-                )
-            except Exception as e:
-                resultado["justificacion"] = f"(No se pudo generar justificación con IA: {e})"
+    if request.method == "POST" and prop_sel:
+        if not mercado:
+            flash("Primero buscá la competencia de esta propiedad en la sección Competencia.", "error")
         else:
-            flash("Seleccioná una propiedad válida.", "error")
+            desde_90 = (date.today() - timedelta(days=90)).isoformat()
+            reservas_hist = db.query("""
+                SELECT * FROM reservas WHERE propiedad_id=%s AND fecha_inicio >= %s
+                  AND COALESCE(estado,'') <> 'cancelada'
+            """, (pid, desde_90))
+            resultado = calcular_precio_estrategico(prop_sel, mercado, reservas_hist, fecha)
+            # Piso: nunca por debajo de los costos fijos por noche + 15%
+            costos = sum((prop_sel.get(k) or 0) for k in
+                         ["costo_expensas", "costo_servicios", "costo_limpieza", "costo_comision"])
+            piso = round(costos / 30.44 * 1.15)
+            resultado["costo_noche"] = round(costos / 30.44)
+            if piso > resultado["precio_minimo"]:
+                resultado["precio_minimo"] = piso
+                resultado["explicacion"] += (f" El mínimo se subió a {monedas.formatear(piso, prop_sel.get('moneda') or 'ARS')}"
+                                             f" para cubrir tus costos fijos.")
 
-    return render_template("precios.html",
-        propiedades=propiedades, resultado=resultado, prop_sel=prop_sel)
+    return render_template("precios.html", propiedades=propiedades, prop_sel=prop_sel,
+                           resultado=resultado, mercado=mercado, fecha=fecha)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -431,10 +640,73 @@ def asistente():
         LEFT JOIN propiedades p ON c.propiedad_id = p.id
         ORDER BY c.creada_en DESC LIMIT 50
     """)
+    # ### CAMBIO AQUÍ ### — chat de negocio, filtro de consultas y reseñas
+    resenas = db.query("""
+        SELECT r.*, p.nombre AS prop_nombre FROM resenas r
+        LEFT JOIN propiedades p ON p.id = r.propiedad_id
+        ORDER BY r.pendiente DESC, r.creada_en DESC LIMIT 50
+    """)
+    try:
+        chat_hist = _cargar_historial()
+    except Exception:
+        chat_hist = []
 
     return render_template("asistente.html",
         propiedades=propiedades, respuesta=respuesta,
-        pendiente=pendiente, historial=historial)
+        pendiente=pendiente, historial=historial,
+        resenas=resenas, chat_hist=chat_hist,
+        tab="huespedes" if request.method == "POST" else request.args.get("tab", "negocio"))
+
+
+# ### CAMBIO AQUÍ ### — responder a mano una consulta pendiente
+@app.route("/asistente/consulta/<int:cid>/responder", methods=["POST"])
+@login_required
+def responder_consulta(cid):
+    texto = request.form.get("respuesta", "").strip()
+    if texto:
+        db.execute("UPDATE consultas_huespedes SET respuesta=%s, pendiente=0 WHERE id=%s", (texto, cid))
+        flash("Consulta marcada como respondida.", "ok")
+    return redirect(url_for("asistente", tab="huespedes"))
+
+
+# ### CAMBIO AQUÍ ### — reseñas: cargar, generar respuesta con IA, marcar respondida
+@app.route("/resenas/nueva", methods=["POST"])
+@login_required
+def nueva_resena():
+    f = request.form
+    pid = f.get("propiedad_id", type=int)
+    texto = (f.get("texto") or "").strip()
+    if not pid or not texto:
+        flash("Elegí la propiedad y pegá el texto de la reseña.", "error")
+        return redirect(url_for("asistente", tab="resenas"))
+    prop = db.query_one("SELECT nombre FROM propiedades WHERE id=%s", (pid,))
+    puntaje = f.get("puntaje", type=int)
+    try:
+        borrador = ia.responder_resena(texto, puntaje, prop["nombre"] if prop else "la propiedad")
+    except Exception as e:
+        borrador = ""
+        flash(f"Reseña guardada, pero no se pudo generar la respuesta con IA: {e}", "error")
+    db.execute("""
+        INSERT INTO resenas (propiedad_id, huesped, puntaje, texto, respuesta, pendiente, fecha)
+        VALUES (%s,%s,%s,%s,%s,1,%s)
+    """, (pid, f.get("huesped", ""), puntaje, texto, borrador, date.today().isoformat()))
+    return redirect(url_for("asistente", tab="resenas"))
+
+
+@app.route("/resenas/<int:rid>/responder", methods=["POST"])
+@login_required
+def responder_resena(rid):
+    texto = request.form.get("respuesta", "").strip()
+    db.execute("UPDATE resenas SET respuesta=%s, pendiente=0 WHERE id=%s", (texto, rid))
+    flash("Reseña marcada como respondida.", "ok")
+    return redirect(url_for("asistente", tab="resenas"))
+
+
+@app.route("/resenas/<int:rid>/eliminar", methods=["POST"])
+@login_required
+def eliminar_resena(rid):
+    db.execute("DELETE FROM resenas WHERE id=%s", (rid,))
+    return redirect(url_for("asistente", tab="resenas"))
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -465,24 +737,23 @@ def generar_informe():
     hasta    = request.form.get("hasta", date.today().isoformat())
     prop_id  = request.form.get("propiedad_id", None, type=int)
 
-    reservas = db.query("SELECT * FROM reservas")
+    # ### CAMBIO AQUÍ ### — informe en la moneda elegida
+    vista, tc = moneda_vista(), monedas.tc_valor()
+    reservas, _ = monedas.convertir_reservas(db.query("SELECT * FROM reservas"), vista, tc)
     filtradas = met.filtrar_reservas(reservas, desde, hasta, prop_id)
 
-    prop = None
-    costos_mes = 0
-    if prop_id:
-        prop = db.query_one("SELECT * FROM propiedades WHERE id=%s", (prop_id,))
-        if prop:
-            costos_mes = sum([prop.get(k,0) or 0 for k in
-                ["costo_expensas","costo_servicios","costo_limpieza","costo_comision"]])
-
-    stats = met.calcular_metricas(filtradas, desde, hasta, costos_mes)
+    prop = db.query_one("SELECT * FROM propiedades WHERE id=%s", (prop_id,)) if prop_id else None
+    costos_mes, unidades = _costos_y_unidades(prop_id, vista, tc)
+    stats = met.calcular_metricas(filtradas, desde, hasta, costos_mes, unidades)
 
     try:
         comparativas = met.comparar_periodos(reservas, desde, hasta)
         stats_full = {**stats, **comparativas}
     except Exception:
         stats_full = stats
+    stats_full["moneda"] = "dólares (USD)" if vista == "USD" else "pesos argentinos (ARS)"
+    if tc:
+        stats_full["tipo_cambio"] = tc
 
     try:
         texto = ia.generar_informe(

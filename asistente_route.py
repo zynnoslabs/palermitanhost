@@ -3,13 +3,48 @@ asistente_route.py — Ruta del asistente de negocio IA para Palermitan Host
 Asesor que conoce todas las propiedades, reservas y métricas de Adriano.
 """
 from flask import Blueprint, request, jsonify, session
+from functools import wraps
+import json
+import monedas   # ### CAMBIO AQUÍ ###
+import ia
 from groq import Groq
 import os
 from datetime import datetime, timedelta
 
 asistente_bp = Blueprint("asistente", __name__)
 
-MAX_HISTORIAL = 10  # turnos (user+assistant) a mantener en sesión
+MAX_HISTORIAL = 10  # turnos (user+assistant) a mantener
+
+# ### CAMBIO AQUÍ ### — modelo configurable (llama3-8b-8192 fue dado de baja por Groq)
+CHAT_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+
+
+# ### CAMBIO AQUÍ ### — el chat no tenía login: cualquiera podía consultar los datos del negocio
+def login_required_api(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("logged_in"):
+            return jsonify({"error": "No autenticado"}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+
+# ### CAMBIO AQUÍ ### — historial guardado en la base (en la cookie superaba 4 KB y cerraba la sesión)
+def _cargar_historial():
+    import database as _db
+    row = _db.query_one("SELECT valor FROM config WHERE clave='historial_asistente'")
+    try:
+        return json.loads(row["valor"]) if row else []
+    except Exception:
+        return []
+
+
+def _guardar_historial(historial):
+    import database as _db
+    _db.execute("""
+        INSERT INTO config (clave, valor) VALUES ('historial_asistente', %s)
+        ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor
+    """, (json.dumps(historial, ensure_ascii=False),))
 
 
 def get_db():
@@ -33,7 +68,7 @@ def build_context(db):
     # ── Propiedades ──────────────────────────────────────────────────────────
     cur.execute("""
         SELECT id, nombre, tipo, barrio, ambientes, capacidad,
-               precio_base,
+               precio_base, COALESCE(moneda, 'ARS') as moneda,
                COALESCE(descripcion, '') as descripcion,
                COALESCE(info_huespedes, '') as info_huespedes,
                rating, COALESCE(reviews_count, 0) as reviews_count,
@@ -53,6 +88,7 @@ def build_context(db):
                COALESCE(r.estado, 'completada') as estado,
                COALESCE(r.canal, 'airbnb') as canal,
                COALESCE(r.notas, '') as notas,
+               COALESCE(r.moneda, 'ARS') as moneda,
                p.nombre as propiedad_nombre
         FROM reservas r
         JOIN propiedades p ON r.propiedad_id = p.id
@@ -63,26 +99,44 @@ def build_context(db):
     cols_res = [d[0] for d in cur.description]
 
     # ── Métricas globales ─────────────────────────────────────────────────────
+    # ### CAMBIO AQUÍ ### — métricas separadas por moneda (antes sumaba pesos con dólares)
     cur.execute("""
-        SELECT COUNT(*) as total_reservas,
-               COALESCE(SUM(ingreso_neto), 0) as ingresos_total,
-               COALESCE(AVG(ingreso_neto), 0) as ticket_promedio,
-               COALESCE(SUM(noches), 0) as noches_total
+        SELECT COALESCE(moneda, 'ARS'), COUNT(*), COALESCE(SUM(ingreso_neto), 0), COALESCE(SUM(noches), 0)
         FROM reservas WHERE COALESCE(estado, 'completada') != 'cancelada'
+        GROUP BY COALESCE(moneda, 'ARS')
     """)
-    metricas = dict(zip([d[0] for d in cur.description], cur.fetchone()))
+    por_moneda = cur.fetchall()
+    tc = monedas.tc_valor()
+    total_res = sum(r[1] for r in por_moneda)
+    total_noches = sum(r[3] for r in por_moneda)
+    lineas_ing = [f"  - En {m}: {n} reservas, ingreso neto {monedas.formatear(s, m)}" for m, n, s, _ in por_moneda]
+    if tc and len(por_moneda) > 1:
+        tot_ars = sum(monedas.convertir(s, m, "ARS", tc) for m, _, s, _ in por_moneda)
+        lineas_ing.append(f"  - Total convertido: {monedas.formatear(tot_ars, 'ARS')} "
+                          f"= {monedas.formatear(tot_ars / tc, 'USD')} (TC {tc:,.2f})")
 
     # ── Ocupación últimos 90 días ─────────────────────────────────────────────
     cur.execute("""
-        SELECT COUNT(DISTINCT DATE(fecha_inicio)) as dias_con_reserva
+        SELECT COUNT(DISTINCT fecha_inicio::date) as dias_con_reserva
         FROM reservas
-        WHERE fecha_inicio >= CURRENT_DATE - INTERVAL '90 days'
-          AND estado != 'cancelada'
+        WHERE fecha_inicio::date >= CURRENT_DATE - INTERVAL '90 days'
+          AND COALESCE(estado, 'completada') != 'cancelada'
     """)
     row = cur.fetchone()
     dias_ocupados = row[0] if row else 0
 
     # ── Config: chat_huespedes activo? ───────────────────────────────────────
+    # ### CAMBIO AQUÍ ### — mercado desde la tabla competencia, en la moneda de cada propiedad
+    cur.execute("""
+        SELECT p.nombre, COALESCE(p.moneda,'ARS'), c.precio_noche, COALESCE(c.moneda,'ARS'), c.rating, c.fecha
+        FROM propiedades p JOIN competencia c ON c.propiedad_id = p.id
+        WHERE c.precio_noche > 0
+    """)
+    comp_por_prop = {}
+    for nombre, mon_p, precio, mon_c, rating, fecha in cur.fetchall():
+        comp_por_prop.setdefault((nombre, mon_p), []).append(
+            {"precio_noche": precio, "moneda": mon_c, "rating": rating, "fecha": fecha})
+
     cur.execute("SELECT valor FROM config WHERE clave='chat_huespedes'")
     row = cur.fetchone()
     chat_activo = (row[0] == '1') if row else False
@@ -96,7 +150,7 @@ def build_context(db):
         prop_lines.append(
             f"- [{pd['id']}] {pd['nombre']} | {pd['tipo']} | {pd['barrio']} | "
             f"{pd['ambientes']} amb | cap: {pd['capacidad']} | "
-            f"precio base: ${pd['precio_base']:,} | "
+            f"precio base: {monedas.formatear(pd['precio_base'] or 0, pd['moneda'])} | "
             f"rating: {pd['rating'] or 'N/A'} ({pd['reviews_count'] or 0} reseñas) | "
             f"estado: {pd['estado']}"
         )
@@ -110,8 +164,19 @@ def build_context(db):
         res_lines.append(
             f"- {rd['propiedad_nombre']} | {rd['huesped_nombre']} | "
             f"{rd['fecha_inicio']} → {rd['fecha_fin']} ({rd['noches']} noches) | "
-            f"${rd['precio_total']:,} | {rd['estado']}"
+            f"{monedas.formatear(rd['precio_total'] or 0, rd['moneda'])} | {rd['estado']}"
         )
+
+    import competencia_ia
+    mercado_lineas = []
+    for (nombre, mon_p), comps in comp_por_prop.items():
+        st = competencia_ia.calcular_stats(comps, mon_p, tc)
+        if st:
+            mercado_lineas.append(
+                f"- {nombre}: {st['cantidad']} anuncios similares, mediana {monedas.formatear(st['mediana'], mon_p)}/noche "
+                f"(rango {monedas.formatear(st['minimo'], mon_p)} – {monedas.formatear(st['maximo'], mon_p)}), "
+                f"búsqueda del {max(c['fecha'] or '' for c in comps)}")
+    mercado_txt = "\n".join(mercado_lineas) or "Sin datos de competencia todavía (usar la sección Competencia)."
 
     system_prompt = f"""Eres el asistente de negocio de Adriano, propietario de Palermitan Host, 
 una inmobiliaria de alquileres temporarios en Palermo, Buenos Aires.
@@ -125,18 +190,16 @@ estratégicas y responder con precisión usando los datos reales del negocio.
 ═══ ÚLTIMAS 20 RESERVAS ═══
 {chr(10).join(res_lines) or "Sin reservas cargadas aún."}
 
-═══ MÉTRICAS GLOBALES ═══
-- Total reservas: {metricas['total_reservas']}
-- Ingresos totales: ${metricas['ingresos_total']:,.0f}
-- Ticket promedio: ${metricas['ticket_promedio']:,.0f}
-- Total noches alquiladas: {metricas['noches_total']}
+═══ MÉTRICAS GLOBALES (Adriano cobra en pesos y en dólares) ═══
+- Total reservas: {total_res}
+- Ingresos por moneda:
+{chr(10).join(lineas_ing) or "  - Sin ingresos cargados"}
+- Tipo de cambio cargado: {f"{tc:,.2f} pesos por dólar" if tc else "no cargado"}
+- Total noches alquiladas: {total_noches}
 - Días con reservas (últimos 90): {dias_ocupados} de 90 ({dias_ocupados/90*100:.0f}%)
 
-═══ REFERENCIA DE MERCADO — PALERMO ═══
-- Departamento 1 amb: $18.000 – $35.000/noche (mediana ~$25.000)
-- Departamento 2 amb: $25.000 – $50.000/noche (mediana ~$35.000)  
-- Departamento 3+ amb: $35.000 – $70.000/noche (mediana ~$50.000)
-- Rating promedio zona: 4.6/5.0
+═══ COMPETENCIA (última búsqueda con IA, sección Competencia) ═══
+{mercado_txt}
 - Temporada alta: diciembre-enero, Carnaval; baja: junio-agosto
 
 ═══ INSTRUCCIONES ═══
@@ -151,9 +214,10 @@ estratégicas y responder con precisión usando los datos reales del negocio.
 
 
 @asistente_bp.route("/asistente/chat", methods=["POST"])
+@login_required_api
 def chat():
     """Endpoint del chat del asistente de negocio."""
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     mensaje = (data.get("mensaje") or "").strip()
     if not mensaje:
         return jsonify({"error": "Mensaje vacío"}), 400
@@ -162,6 +226,7 @@ def chat():
     try:
         system_prompt = build_context(db)
     except Exception as e:
+        db.rollback()
         print(f"[asistente] Error construyendo contexto: {e}")
         system_prompt = (
             "Eres el asistente de negocio de Palermitan Host. "
@@ -172,10 +237,7 @@ def chat():
         release_db(db)
 
     # ── Historial de sesión ──────────────────────────────────────────────────
-    if "historial_asistente" not in session:
-        session["historial_asistente"] = []
-
-    historial = session["historial_asistente"]
+    historial = _cargar_historial()
     historial.append({"role": "user", "content": mensaje})
 
     # Mantener solo los últimos MAX_HISTORIAL turnos
@@ -185,21 +247,14 @@ def chat():
     messages = [{"role": "system", "content": system_prompt}] + historial
 
     try:
-        client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
-        resp = client.chat.completions.create(
-            model="llama3-8b-8192",
-            messages=messages,
-            max_tokens=1024,
-            temperature=0.4,
-        )
-        respuesta = resp.choices[0].message.content.strip()
+        resp = ia.completar(messages, CHAT_MODEL, 3000, 0.4)   # ### CAMBIO AQUÍ ### con respaldo de modelo
+        respuesta = ia.texto_respuesta(resp)
     except Exception as e:
         print(f"[asistente] Error Groq: {e}")
-        respuesta = "Error al conectar con el servicio de IA. Verificá la API key en las variables de entorno."
+        respuesta = ia.explicar_error(e)   # ### CAMBIO AQUÍ ### mensaje claro (límite de uso, clave inválida, etc.)
 
     historial.append({"role": "assistant", "content": respuesta})
-    session["historial_asistente"] = historial
-    session.modified = True
+    _guardar_historial(historial[-(MAX_HISTORIAL * 2):])
 
     return jsonify({
         "respuesta": respuesta,
@@ -208,7 +263,8 @@ def chat():
 
 
 @asistente_bp.route("/asistente/limpiar", methods=["POST"])
+@login_required_api
 def limpiar_historial():
     """Limpia el historial de conversación."""
-    session.pop("historial_asistente", None)
+    _guardar_historial([])
     return jsonify({"ok": True})

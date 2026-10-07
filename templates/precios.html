@@ -1,26 +1,29 @@
 {% extends "base.html" %}
 {% block title %}Precio sugerido – PalermitanHost{% endblock %}
 {% block content %}
-<div class="page-header"><h2>Sugerencia de precio por noche</h2></div>
+{# ### CAMBIO AQUÍ ### — página rehecha igual que el demo: mercado + precio estratégico paso a paso #}
+{% set mp = (prop_sel.moneda if prop_sel and prop_sel.moneda else 'ARS') %}
+{% macro fmt(v) %}{{ v|dinero(mp) }}{% endmacro %}
+<div class="page-header"><h2>Precio sugerido</h2></div>
+
+{% if not propiedades %}
+<div class="form-card"><p>Primero cargá una propiedad.</p>
+  <a href="{{ url_for('nueva_propiedad') }}" class="btn btn-primary">Cargar propiedad</a></div>
+{% else %}
 
 <div class="form-card">
   <form method="post" class="form-grid">
     <div class="form-group">
       <label>Propiedad</label>
-      <select name="propiedad_id" required>
-        <option value="">Seleccioná una propiedad</option>
+      <select name="propiedad_id" onchange="window.location='{{ url_for('precios') }}?propiedad_id='+this.value">
         {% for p in propiedades %}
           <option value="{{ p.id }}" {% if prop_sel and prop_sel.id==p.id %}selected{% endif %}>{{ p.nombre }}</option>
         {% endfor %}
       </select>
     </div>
     <div class="form-group">
-      <label>Fecha desde</label>
-      <input type="date" name="fecha_desde" required>
-    </div>
-    <div class="form-group">
-      <label>Fecha hasta</label>
-      <input type="date" name="fecha_hasta" required>
+      <label>Fecha a calcular</label>
+      <input type="date" name="fecha" value="{{ fecha }}" required>
     </div>
     <div class="form-group" style="align-self:flex-end">
       <button type="submit" class="btn btn-primary">Calcular precio</button>
@@ -28,41 +31,63 @@
   </form>
 </div>
 
+{% if mercado %}
+<div class="card" style="margin-bottom:16px">
+  <div class="card-title">Mercado — {{ prop_sel.barrio or '' }} <span class="muted">· en {{ mp }}, la moneda de la propiedad</span></div>
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-num">{{ fmt(mercado.mediana) }}</div><div class="stat-lbl">Mediana zona</div></div>
+    <div class="stat-card"><div class="stat-num">{{ fmt(mercado.min) }}</div><div class="stat-lbl">Precio más bajo</div></div>
+    <div class="stat-card"><div class="stat-num">{{ fmt(mercado.max) }}</div><div class="stat-lbl">Precio más alto</div></div>
+    <div class="stat-card"><div class="stat-num">{{ mercado.rating_promedio_zona }}★</div><div class="stat-lbl">Puntaje promedio comparables</div></div>
+  </div>
+  <p class="muted" style="margin-top:8px">Fuente: {{ mercado.cantidad_propiedades }} comparables · búsqueda del {{ mercado.fecha }} ·
+    <a href="{{ url_for('competencia', pid=prop_sel.id) }}" class="link">Ver comparables ↗</a></p>
+</div>
+{% if mercado and mercado.sin_convertir %}<div class="alert alert-warn">{{ mercado.sin_convertir }} comparables están en otra moneda y no se usaron: cargá el tipo de cambio.</div>{% endif %}
+{% elif prop_sel %}
+<div class="card" style="margin-bottom:16px">
+  <p>Todavía no hay datos de competencia para esta propiedad.</p>
+  <a href="{{ url_for('competencia', pid=prop_sel.id) }}" class="btn btn-primary">Buscar comparables con IA</a>
+</div>
+{% endif %}
+
 {% if resultado %}
 <div class="precio-resultado">
   <div class="precio-box precio-min">
-    <div class="precio-lbl">Mínimo (break-even)</div>
-    <div class="precio-num">${{ "{:,.0f}".format(resultado.precio_minimo) }}</div>
+    <div class="precio-lbl">Mínimo</div>
+    <div class="precio-num">{{ fmt(resultado.precio_minimo) }}</div>
+    <div class="muted">Cubre tus costos</div>
   </div>
   <div class="precio-box precio-sug">
     <div class="precio-lbl">⭐ Sugerido</div>
-    <div class="precio-num">${{ "{:,.0f}".format(resultado.precio_sugerido) }}</div>
+    <div class="precio-num">{{ fmt(resultado.precio_sugerido) }}</div>
+    <div class="muted">Temporada {{ resultado.temporada }} · {{ 'fin de semana' if resultado.es_fin_de_semana else 'entre semana' }}</div>
+    {% if tc_info %}<div class="muted">≈ {{ resultado.precio_sugerido|dinero(mp, 'USD' if mp == 'ARS' else 'ARS') }}</div>{% endif %}
   </div>
   <div class="precio-box precio-max">
-    <div class="precio-lbl">Máximo recomendado</div>
-    <div class="precio-num">${{ "{:,.0f}".format(resultado.precio_maximo) }}</div>
+    <div class="precio-lbl">Máximo</div>
+    <div class="precio-num">{{ fmt(resultado.precio_maximo) }}</div>
+    <div class="muted">Techo recomendado</div>
   </div>
 </div>
 
 <div class="form-card">
-  <h3>Cómo se calculó</h3>
+  <h3>Cómo se calculó este precio</h3>
   <table class="tabla">
+    <thead><tr><th>Paso</th><th>Factor</th><th>Efecto</th><th>Precio parcial</th></tr></thead>
     <tbody>
-      <tr><td>Costo por noche (costos fijos ÷ 30)</td><td>${{ resultado.detalle.costo_por_noche }}</td></tr>
-      <tr><td>Precio base configurado</td><td>${{ resultado.detalle.precio_base }}</td></tr>
-      <tr><td>Mediana de competencia ({{ resultado.detalle.n_competidores }} registros)</td>
-          <td>{{ '$'+"{:,.0f}".format(resultado.detalle.mediana_competencia) if resultado.detalle.mediana_competencia else 'Sin datos' }}</td></tr>
-      <tr><td>Temporada del período</td><td>{{ resultado.detalle.temporada|capitalize }} (×{{ resultado.detalle.factor_temporada }})</td></tr>
-      <tr><td>% días de fin de semana</td><td>{{ resultado.detalle.proporcion_finde }}% (×{{ resultado.detalle.factor_finde }})</td></tr>
-      <tr><td>Ocupación histórica anual</td><td>{{ resultado.detalle.tasa_ocupacion_hist }}% (×{{ resultado.detalle.factor_ocupacion }})</td></tr>
+    {% for p in resultado.pasos %}
+      <tr>
+        <td>{{ p.paso }}</td>
+        <td>{{ p.descripcion }}</td>
+        <td>{{ '—' if p.paso == 1 else '×%.2f'|format(p.multiplicador) }}</td>
+        <td><strong>{{ fmt(p.acumulado) }}</strong></td>
+      </tr>
+    {% endfor %}
+      <tr><td></td><td>Costo fijo por noche (piso del mínimo)</td><td>—</td><td>{{ fmt(resultado.costo_noche) }}</td></tr>
     </tbody>
   </table>
-</div>
-
-{% if resultado.justificacion %}
-<div class="form-card">
-  <h3>Análisis de la IA</h3>
-  <div class="informe-texto">{{ resultado.justificacion | safe }}</div>
+  <div class="respuesta-texto" style="margin-top:12px"><strong>Resumen:</strong> {{ resultado.explicacion }}</div>
 </div>
 {% endif %}
 {% endif %}

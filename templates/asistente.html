@@ -1,18 +1,62 @@
 {% extends "base.html" %}
 {% block title %}Asistente – PalermitanHost{% endblock %}
 {% block content %}
-<div class="page-header"><h2>Asistente para huéspedes</h2></div>
+{# ### CAMBIO AQUÍ ### — página rehecha con 3 pestañas: chat de negocio, huéspedes y reseñas #}
+<style>
+  .tabs { display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap; }
+  .tabs a { padding:.5rem 1rem; border-radius:20px; border:1px solid var(--border); text-decoration:none; color:inherit; font-size:.9rem; }
+  .tabs a.on { background:var(--gold); color:#fff; border-color:var(--gold); }
+  .chat-log { max-height:380px; overflow-y:auto; display:flex; flex-direction:column; gap:10px; margin:12px 0; }
+  .burbuja { max-width:85%; padding:.7rem 1rem; border-radius:10px; white-space:pre-wrap; font-size:.9rem; line-height:1.6; }
+  .burbuja.user { align-self:flex-end; background:var(--arena-light, #efe9d6); }
+  .burbuja.ia { align-self:flex-start; background:var(--surface-2, #f7f5ef); border:1px solid var(--border); }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; }
+  .chips button { border:1px solid var(--border); background:#fff; border-radius:16px; padding:.3rem .8rem; cursor:pointer; font-size:.8rem; }
+  .filtros a { margin-right:6px; }
+</style>
 
+<div class="page-header"><h2>Asistente IA</h2></div>
+
+<div class="tabs">
+  <a href="{{ url_for('asistente', tab='negocio') }}" class="{{ 'on' if tab == 'negocio' }}">Asistente de negocio</a>
+  <a href="{{ url_for('asistente', tab='huespedes') }}" class="{{ 'on' if tab == 'huespedes' }}">Consultas de huéspedes</a>
+  <a href="{{ url_for('asistente', tab='resenas') }}" class="{{ 'on' if tab == 'resenas' }}">Reseñas</a>
+</div>
+
+{% if tab == 'negocio' %}
+<!-- ══════════ CHAT DE NEGOCIO ══════════ -->
 <div class="form-card">
-  <form method="post">
+  <h3>Preguntale lo que quieras sobre tu negocio</h3>
+  <p class="muted">Usa tus propiedades, reservas, métricas y la última búsqueda de competencia.</p>
+  <div class="chips">
+    <button type="button" onclick="preguntar(this.textContent)">¿Cuánto gané este mes?</button>
+    <button type="button" onclick="preguntar(this.textContent)">¿Qué propiedad rinde mejor?</button>
+    <button type="button" onclick="preguntar(this.textContent)">¿Conviene subir el precio en diciembre?</button>
+    <button type="button" onclick="preguntar(this.textContent)">Generame un resumen para el contador</button>
+  </div>
+  <div class="chat-log" id="chat-log">
+    {% for m in chat_hist %}
+    <div class="burbuja {{ 'user' if m.role == 'user' else 'ia' }}">{{ m.content }}</div>
+    {% endfor %}
+  </div>
+  <form onsubmit="preguntar(document.getElementById('chat-inp').value); return false;" style="display:flex;gap:8px">
+    <input id="chat-inp" type="text" placeholder="Escribí tu pregunta..." style="flex:1" autocomplete="off">
+    <button class="btn btn-primary" id="chat-btn">Consultar</button>
+    <button type="button" class="btn btn-sm" onclick="limpiarChat()">Limpiar</button>
+  </form>
+</div>
+
+{% elif tab == 'huespedes' %}
+<!-- ══════════ CONSULTAS DE HUÉSPEDES ══════════ -->
+<div class="form-card">
+  <h3>Generar respuesta para un huésped</h3>
+  <form method="post" action="{{ url_for('asistente') }}">
     <div class="form-group">
       <label>Propiedad</label>
       <select name="propiedad_id" required>
         <option value="">Seleccioná una propiedad</option>
         {% for p in propiedades %}
-          <option value="{{ p.id }}">{{ p.nombre }}
-            {% if not p.info_huespedes %} ⚠ Sin info cargada{% endif %}
-          </option>
+          <option value="{{ p.id }}">{{ p.nombre }}{% if not p.info_huespedes %} ⚠ Sin info cargada{% endif %}</option>
         {% endfor %}
       </select>
     </div>
@@ -34,29 +78,122 @@
     {% endif %}
   </div>
   <div class="respuesta-texto">{{ respuesta }}</div>
-  <button class="btn btn-sm" onclick="navigator.clipboard.writeText(document.querySelector('.respuesta-texto').innerText)">
-    📋 Copiar respuesta
-  </button>
+  <button class="btn btn-sm" onclick="navigator.clipboard.writeText(document.querySelector('.respuesta-texto').innerText)">📋 Copiar respuesta</button>
 </div>
 {% endif %}
 
 {% if historial %}
-<h3 style="margin-top:2rem">Historial reciente</h3>
+<h3 style="margin-top:2rem">Historial de consultas</h3>
+<div class="filtros" style="margin-bottom:10px">
+  <a href="#" class="btn btn-sm" onclick="filtrar('todas');return false;">Todas</a>
+  <a href="#" class="btn btn-sm" onclick="filtrar('pendiente');return false;">Pendientes</a>
+  <a href="#" class="btn btn-sm" onclick="filtrar('respondida');return false;">Respondidas</a>
+</div>
 <div class="table-wrap">
 <table class="tabla">
-  <thead><tr><th>Propiedad</th><th>Consulta</th><th>Estado</th><th>Fecha</th></tr></thead>
+  <thead><tr><th>Propiedad</th><th>Consulta</th><th>Respuesta</th><th>Estado</th><th>Fecha</th></tr></thead>
   <tbody>
   {% for c in historial %}
-  <tr>
+  <tr class="fila-consulta" data-estado="{{ 'pendiente' if c.pendiente else 'respondida' }}">
     <td>{{ c.prop_nombre }}</td>
-    <td>{{ c.mensaje[:80] }}{% if c.mensaje|length > 80 %}…{% endif %}</td>
+    <td>{{ c.mensaje }}</td>
+    <td>
+      {% if c.pendiente %}
+      <form method="post" action="{{ url_for('responder_consulta', cid=c.id) }}">
+        <textarea name="respuesta" rows="3" style="width:100%">{{ c.respuesta or '' }}</textarea>
+        <button class="btn btn-sm btn-primary">Guardar y marcar respondida</button>
+      </form>
+      {% else %}{{ c.respuesta }}{% endif %}
+    </td>
     <td>{% if c.pendiente %}<span class="badge badge-warn">Pendiente</span>
         {% else %}<span class="badge badge-ok">Respondida</span>{% endif %}</td>
-    <td>{{ c.creada_en[:16] }}</td>
+    <td>{{ c.creada_en|fecha(16) }}</td>
   </tr>
   {% endfor %}
   </tbody>
 </table>
 </div>
 {% endif %}
+
+{% else %}
+<!-- ══════════ RESEÑAS ══════════ -->
+<div class="form-card">
+  <h3>Cargar una reseña</h3>
+  <p class="muted">Pegá la reseña que dejó el huésped en Airbnb. La IA te prepara una respuesta para publicar.</p>
+  <form method="post" action="{{ url_for('nueva_resena') }}" class="form-grid">
+    <div class="form-group">
+      <label>Propiedad</label>
+      <select name="propiedad_id" required>
+        {% for p in propiedades %}<option value="{{ p.id }}">{{ p.nombre }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="form-group"><label>Huésped</label><input type="text" name="huesped"></div>
+    <div class="form-group"><label>Puntaje (1 a 5)</label><input type="number" name="puntaje" min="1" max="5"></div>
+    <div class="form-group" style="grid-column:1/-1"><label>Texto de la reseña</label><textarea name="texto" rows="3" required></textarea></div>
+    <div class="form-group"><button class="btn btn-primary">Guardar y generar respuesta</button></div>
+  </form>
+</div>
+
+{% for r in resenas %}
+<div class="card" style="margin-bottom:12px">
+  <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
+    <div><strong>{{ r.huesped or 'Huésped' }}</strong> · {{ r.prop_nombre }}
+      {% if r.puntaje %} · {{ r.puntaje }}★{% endif %} · <span class="muted">{{ r.fecha }}</span></div>
+    {% if r.pendiente %}<span class="badge badge-warn">Pendiente</span>{% else %}<span class="badge badge-ok">Respondida</span>{% endif %}
+  </div>
+  <p style="margin:8px 0">“{{ r.texto }}”</p>
+  <form method="post" action="{{ url_for('responder_resena', rid=r.id) }}">
+    <textarea name="respuesta" rows="3" style="width:100%">{{ r.respuesta }}</textarea>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <button class="btn btn-sm btn-primary">{{ 'Marcar respondida' if r.pendiente else 'Guardar cambios' }}</button>
+      <button type="button" class="btn btn-sm" onclick="navigator.clipboard.writeText(this.form.respuesta.value)">📋 Copiar</button>
+    </div>
+  </form>
+  <form method="post" action="{{ url_for('eliminar_resena', rid=r.id) }}" onsubmit="return confirm('¿Eliminar reseña?')" style="margin-top:6px">
+    <button class="btn btn-sm btn-danger">Eliminar</button>
+  </form>
+</div>
+{% else %}
+<p class="muted">No hay reseñas cargadas.</p>
+{% endfor %}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function agregarBurbuja(texto, quien) {
+  var log = document.getElementById('chat-log');
+  var d = document.createElement('div');
+  d.className = 'burbuja ' + quien;
+  d.textContent = texto;
+  log.appendChild(d);
+  log.scrollTop = log.scrollHeight;
+  return d;
+}
+function preguntar(texto) {
+  texto = (texto || '').trim();
+  if (!texto) return;
+  var inp = document.getElementById('chat-inp'), btn = document.getElementById('chat-btn');
+  inp.value = ''; btn.disabled = true;
+  agregarBurbuja(texto, 'user');
+  var espera = agregarBurbuja('Analizando…', 'ia');
+  fetch('{{ url_for("asistente.chat") }}', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({mensaje: texto})
+  }).then(function(r){ return r.json(); })
+    .then(function(d){ espera.textContent = d.respuesta || d.error || 'Sin respuesta'; })
+    .catch(function(){ espera.textContent = 'Error de conexión. Probá de nuevo.'; })
+    .finally(function(){ btn.disabled = false; });
+}
+function limpiarChat() {
+  fetch('{{ url_for("asistente.limpiar_historial") }}', {method: 'POST'})
+    .then(function(){ document.getElementById('chat-log').innerHTML = ''; });
+}
+function filtrar(estado) {
+  document.querySelectorAll('.fila-consulta').forEach(function(tr){
+    tr.style.display = (estado === 'todas' || tr.dataset.estado === estado) ? '' : 'none';
+  });
+}
+var log = document.getElementById('chat-log'); if (log) log.scrollTop = log.scrollHeight;
+</script>
 {% endblock %}

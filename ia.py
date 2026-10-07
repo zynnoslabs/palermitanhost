@@ -6,7 +6,59 @@
 import os
 from groq import Groq
 
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+# ### CAMBIO AQUÍ ### — Groq dio de baja llama-3.3-70b-versatile (16/08/2026); usa gpt-oss-120b
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+# ### CAMBIO AQUÍ ### — modelo rápido para tareas cortas (huéspedes, reseñas, resúmenes).
+# En Groq cada modelo tiene su propio límite diario: repartir el uso evita quedarse sin cupo.
+GROQ_MODEL_RAPIDO = os.getenv("GROQ_MODEL_RAPIDO", "openai/gpt-oss-20b")
+
+
+def extra_modelo(modelo, esfuerzo="low"):
+    """gpt-oss 'piensa' antes de responder: se baja el esfuerzo para que sea rápido."""
+    return {"reasoning_effort": esfuerzo} if str(modelo).startswith("openai/gpt-oss") else {}
+
+
+def explicar_error(e):
+    """### CAMBIO AQUÍ ### — traduce los errores de Groq a un mensaje claro."""
+    t = str(e)
+    if "429" in t or "rate_limit" in t or "413" in t:
+        import re
+        tipo = ("diario" if "per day" in t else "por minuto" if "per minute" in t
+                else "por pedido" if "413" in t or "too large" in t else "")
+        nums = re.search(r"Limit (\d+), Used (\d+), Requested (\d+)", t)
+        detalle = (f" [límite {tipo}: {int(nums.group(1)):,} tokens · usados {int(nums.group(2)):,} · "
+                   f"pedidos {int(nums.group(3)):,}]".replace(",", ".") if nums else (f" [límite {tipo}]" if tipo else ""))
+        return ("Se alcanzó el límite de uso de Groq (plan gratuito). Probá de nuevo en unos minutos "
+                "o activá el plan Dev en console.groq.com/settings/billing." + detalle)
+    if "401" in t or "invalid_api_key" in t:
+        return "La clave de Groq (GROQ_API_KEY) es inválida o fue revocada."
+    if "model_not_found" in t or "decommissioned" in t:
+        return "El modelo de IA configurado ya no existe en Groq. Revisá GROQ_MODEL."
+    return f"Error al conectar con Groq: {t}"
+
+
+def completar(mensajes, modelo, max_tokens, temperature=0.3, esfuerzo="low", **extra):
+    """### CAMBIO AQUÍ ### — llama a Groq; si el modelo se quedó sin cupo (429) prueba con el otro."""
+    otro = GROQ_MODEL_RAPIDO if modelo == GROQ_MODEL else GROQ_MODEL
+    error = None
+    for m in ([modelo, otro] if otro != modelo else [modelo]):
+        try:
+            return _cliente().chat.completions.create(
+                model=m, messages=mensajes, max_tokens=max_tokens, temperature=temperature,
+                **extra_modelo(m, esfuerzo), **extra)
+        except Exception as e:
+            error = e
+            if "429" not in str(e) and "rate_limit" not in str(e):
+                break
+    raise error
+
+
+def texto_respuesta(respuesta):
+    """Devuelve el texto de la IA o lanza error si vino vacío (sin tokens suficientes)."""
+    texto = (respuesta.choices[0].message.content or "").strip()
+    if not texto:
+        raise RuntimeError("La IA devolvió una respuesta vacía. Probá de nuevo.")
+    return texto
 
 
 def _cliente():
@@ -59,16 +111,10 @@ Escribí en un tono profesional pero accesible. Usá el voseo argentino.
 No inventes datos que no estén en las métricas recibidas."""
 
     try:
-        cliente = _cliente()
-        respuesta = cliente.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.4,
-            max_tokens=2000,
-        )
-        return respuesta.choices[0].message.content
+        respuesta = completar([{"role": "user", "content": prompt}], GROQ_MODEL, 4000, 0.4)
+        return texto_respuesta(respuesta)
     except Exception as e:
-        raise RuntimeError(f"Error al conectar con Groq: {str(e)}")
+        raise RuntimeError(explicar_error(e))
 
 
 def responder_huesped(propiedad_id, mensaje, info_huespedes, nombre_propiedad="la propiedad"):
@@ -100,24 +146,39 @@ Reglas:
 2. Si la respuesta no está en esa información, decí exactamente: "Voy a consultar con el anfitrión y te respondo a la brevedad." No inventes ni supongas nada.
 3. El tono debe ser cordial y profesional.
 4. Respondé en el mismo idioma en que escribió el huésped.
-5. Sé breve y directo.
+5. Sé breve y directo, pero respondé con una oración completa y amable (no solo el dato suelto).
 
 Respuesta:"""
 
     try:
-        cliente = _cliente()
-        respuesta = cliente.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            max_tokens=600,
-        )
-        texto = respuesta.choices[0].message.content.strip()
+        respuesta = completar([{"role": "user", "content": prompt}], GROQ_MODEL_RAPIDO, 1500, 0.3)
+        texto = texto_respuesta(respuesta)
         pendiente = "consultar con el anfitrión" in texto.lower() or \
                     "consult" in texto.lower() and "host" in texto.lower()
         return texto, pendiente
     except Exception as e:
-        return f"Error al generar respuesta: {str(e)}", True
+        return f"Error al generar respuesta: {explicar_error(e)}", True
+
+
+# ### CAMBIO AQUÍ ### — borrador de respuesta pública a una reseña
+def responder_resena(texto_resena, puntaje=None, nombre_propiedad="la propiedad"):
+    """Devuelve un borrador de respuesta del anfitrión a una reseña. No inventa datos."""
+    estrellas = f"Puntaje: {puntaje}/5" if puntaje else "Puntaje: no informado"
+    prompt = f"""Sos el anfitrión de {nombre_propiedad}, un alquiler temporario en Buenos Aires.
+Escribí una respuesta pública, breve (máximo 4 oraciones), cordial y profesional a esta reseña.
+{estrellas}
+Reseña: "{texto_resena}"
+
+Reglas:
+1. Respondé en el mismo idioma de la reseña.
+2. Agradecé. Si hay una queja, reconocela sin discutir y decí que se va a tener en cuenta.
+3. No prometas descuentos ni inventes datos.
+Respuesta:"""
+    try:
+        r = completar([{"role": "user", "content": prompt}], GROQ_MODEL_RAPIDO, 1200, 0.4)
+        return texto_respuesta(r)
+    except Exception as e:
+        raise RuntimeError(explicar_error(e))
 
 
 def _formatear_metricas(m):
@@ -137,6 +198,8 @@ def _formatear_metricas(m):
         "ingreso_neto_real":  "Ingreso neto real (descontando todos los costos)",
         "estadias_prom":      "Estadía promedio (noches)",
         "anticipacion_prom":  "Anticipación promedio de reserva (días)",
+        "moneda":             "Moneda de todos los montos",            # ### CAMBIO AQUÍ ###
+        "tipo_cambio":        "Tipo de cambio usado (pesos por dólar)",
     }
     for key, label in mapeo.items():
         val = m.get(key)

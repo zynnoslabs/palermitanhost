@@ -2,7 +2,8 @@
 exportar_routes.py — Exportación de informes en PDF y Excel para Palermitan Host
 PDF con branding profesional (reportlab) y Excel con formato (openpyxl).
 """
-from flask import Blueprint, send_file, abort
+from flask import Blueprint, send_file, abort, session, redirect, url_for
+from functools import wraps
 import io
 import os
 from datetime import datetime
@@ -21,11 +22,27 @@ def get_db():
     return get_db_connection()
 
 
+def _release(conn):
+    from database import release_db
+    release_db(conn)
+
+
+# ### CAMBIO AQUÍ ### — antes cualquiera sin login podía descargar los informes
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("logged_in"):
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return decorated
+
+
 # ════════════════════════════════════════════════════════════════════════════
 # PDF
 # ════════════════════════════════════════════════════════════════════════════
 
 @exportar_bp.route("/informes/<int:informe_id>/pdf")
+@login_required
 def exportar_pdf(informe_id):
     """Genera y devuelve un PDF profesional del informe."""
     try:
@@ -46,7 +63,7 @@ def exportar_pdf(informe_id):
     cur.execute("SELECT id, titulo, tipo, contenido, fecha_generado FROM informes WHERE id = %s", (informe_id,))
     row = cur.fetchone()
     cur.close()
-    db.close()
+    _release(db)  # ### CAMBIO AQUÍ ### antes db.close() agotaba el pool
 
     if not row:
         abort(404, "Informe no encontrado")
@@ -146,6 +163,7 @@ def exportar_pdf(informe_id):
 # ════════════════════════════════════════════════════════════════════════════
 
 @exportar_bp.route("/informes/<int:informe_id>/excel")
+@login_required
 def exportar_excel(informe_id):
     """Genera y devuelve un Excel profesional del informe."""
     try:
@@ -165,7 +183,7 @@ def exportar_excel(informe_id):
     row = cur.fetchone()
     if not row:
         cur.close()
-        db.close()
+        _release(db)  # ### CAMBIO AQUÍ ### antes db.close() agotaba el pool
         abort(404, "Informe no encontrado")
 
     informe_id, titulo, tipo, contenido, fecha_gen = row
@@ -201,7 +219,7 @@ def exportar_excel(informe_id):
     reservas_data = cur.fetchall()
 
     cur.close()
-    db.close()
+    _release(db)  # ### CAMBIO AQUÍ ### antes db.close() agotaba el pool
 
     wb = Workbook()
 

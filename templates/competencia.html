@@ -1,54 +1,122 @@
 {% extends "base.html" %}
 {% block title %}Competencia – PalermitanHost{% endblock %}
+{% block topbar_title %}Competencia{% endblock %}
 {% block content %}
+{# ### CAMBIO AQUÍ ### — página rehecha: búsqueda automática con IA, sin CSV #}
 <div class="page-header">
-  <h2>Precios de la competencia</h2>
+  <h2>Competencia</h2>
+</div>
+
+{% if not propiedades %}
+<div class="form-card">
+  <p>Primero cargá al menos una propiedad para poder buscar su competencia.</p>
+  <a href="{{ url_for('nueva_propiedad') }}" class="btn btn-primary">Cargar propiedad</a>
+</div>
+{% else %}
+
+<!-- ### CAMBIO AQUÍ ### estado de la actualización automática -->
+<div class="card" style="margin-bottom:16px">
+  {% if auto_activa %}
+    <strong>🌙 Actualización automática activada.</strong>
+    {% if corrida %}
+      Última corrida: {{ corrida.inicio|replace('T', ' ') }} · {{ corrida.ok }}/{{ corrida.grupos }} zonas actualizadas
+      {% if corrida.creditos_tavily %} · {{ corrida.creditos_tavily }} créditos de Tavily{% endif %}
+      {% if not corrida.terminado %} · <em>en curso…</em>{% endif %}
+      {% for e in corrida.errores %}<div class="muted" style="font-size:.8rem">⚠ {{ e }}</div>{% endfor %}
+    {% else %} Todavía no corrió ninguna vez.{% endif %}
+  {% else %}
+    <span class="muted">La actualización automática nocturna no está activada (falta TAREAS_TOKEN en la configuración).</span>
+  {% endif %}
+  <div class="muted" style="font-size:.8rem;margin-top:4px">Motor de búsqueda: {{ 'Tavily (barato) con respaldo de Groq' if tavily_activo else 'búsqueda web de Groq (gasta mucho cupo: conviene cargar TAVILY_API_KEY)' }}</div>
 </div>
 
 <div class="form-card">
-  <h3>Cargar precio manualmente</h3>
-  <form method="post" class="form-grid">
-    <div class="form-group"><label>Barrio</label><input type="text" name="barrio" required></div>
-    <div class="form-group"><label>Tipo</label>
-      <select name="tipo"><option value="depto">Departamento</option><option value="casa">Casa</option></select>
+  <h3>Buscar propiedades similares con IA</h3>
+  <p class="muted">La IA busca en Airbnb, Booking y otras plataformas anuncios parecidos a tu propiedad
+    (mismo barrio, ambientes y capacidad). Puede tardar hasta 1 minuto.</p>
+  <form method="get" action="{{ url_for('competencia') }}" style="margin-bottom:12px">
+    <div class="form-group">
+      <label>Propiedad</label>
+      <select name="pid" onchange="this.form.submit()">
+        {% for p in propiedades %}
+        <option value="{{ p.id }}" {% if prop_sel and p.id == prop_sel.id %}selected{% endif %}>
+          {{ p.nombre }} — {{ p.barrio or 'sin barrio' }}{% if p.ambientes %}, {{ p.ambientes }} amb.{% endif %}
+        </option>
+        {% endfor %}
+      </select>
     </div>
-    <div class="form-group"><label>Ambientes</label><input type="number" name="ambientes" min="1"></div>
-    <div class="form-group"><label>Capacidad</label><input type="number" name="capacidad" min="1"></div>
-    <div class="form-group"><label>Precio por noche ($)</label><input type="number" name="precio_noche" step="0.01" required></div>
-    <div class="form-group"><label>Fecha observada</label><input type="date" name="fecha"></div>
-    <div class="form-group"><label>Fuente / Link</label><input type="text" name="fuente" placeholder="URL de Airbnb o nombre"></div>
-    <div class="form-group"><label>Notas</label><input type="text" name="notas"></div>
-    <div class="form-group" style="align-self:flex-end">
-      <button type="submit" class="btn btn-primary">Guardar</button>
-    </div>
+  </form>
+  <form method="post" action="{{ url_for('buscar_competencia') }}"
+        onsubmit="var b=this.querySelector('button');b.disabled=true;b.textContent='Buscando comparables… (hasta 1 min)';">
+    <input type="hidden" name="propiedad_id" value="{{ prop_sel.id if prop_sel else '' }}">
+    <button type="submit" class="btn btn-primary">✦ Buscar comparables con IA</button>
   </form>
 </div>
 
-<div class="form-card">
-  <h3>O importar desde CSV</h3>
-  <p class="muted">El CSV debe tener columnas: barrio, tipo, ambientes, capacidad, precio_noche, fecha, fuente, notas</p>
-  <form method="post" enctype="multipart/form-data">
-    <input type="file" name="csv_comp" accept=".csv">
-    <button type="submit" class="btn">Importar CSV</button>
-  </form>
+{% if stats %}
+{% if stats.sin_convertir %}<div class="alert alert-warn">{{ stats.sin_convertir }} anuncios están en otra moneda y no se incluyeron. Cargá el tipo de cambio (arriba a la derecha).</div>{% endif %}
+<div class="stats-grid">
+  <div class="stat-card highlight">
+    <div class="stat-num">{{ stats.mediana|dinero(stats.moneda) }}</div>
+    <div class="stat-lbl">Mediana por noche ({{ stats.moneda }})</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num">{{ stats.minimo|dinero(stats.moneda) }}</div>
+    <div class="stat-lbl">Más barato</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num">{{ stats.maximo|dinero(stats.moneda) }}</div>
+    <div class="stat-lbl">Más caro</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num">{{ stats.cantidad }}</div>
+    <div class="stat-lbl">Anuncios comparados</div>
+  </div>
 </div>
+{% endif %}
+
+{% if resumen %}
+<div class="card">
+  <div class="card-title">Qué dice la IA <span class="muted">· búsqueda del {{ resumen.fecha }}{% if resumen.fuente %} · fuente: {{ resumen.fuente }}{% endif %}</span></div>
+  <p style="white-space:pre-line">{{ resumen.texto }}</p>
+</div>
+{% endif %}
+
+{# ### CAMBIO AQUÍ ### tendencia del mercado (una foto por día) #}
+{% if historial|length > 1 %}
+{% set ult = historial[0] %}{% set ant = historial[-1] %}
+<div class="card" style="margin-bottom:16px">
+  <div class="card-title">Tendencia del mercado <span class="muted">· mediana por noche ({{ ult.moneda }}), últimos {{ historial|length }} registros</span></div>
+  {% if ant.mediana %}{% set var = ((ult.mediana - ant.mediana) / ant.mediana * 100) %}
+  <p>Desde el {{ ant.fecha }} la mediana pasó de {{ ant.mediana|dinero(ant.moneda) }} a {{ ult.mediana|dinero(ult.moneda) }}
+    (<strong style="color:{{ '#2d6a46' if var >= 0 else '#9b4a4a' }}">{{ '%+.1f'|format(var) }}%</strong>).</p>
+  {% endif %}
+  <canvas id="chartHist" height="90"></canvas>
+</div>
+{% endif %}
 
 {% if registros %}
 <div class="table-wrap">
 <table class="tabla">
-  <thead><tr><th>Barrio</th><th>Tipo</th><th>Amb.</th><th>Cap.</th><th>Precio/noche</th><th>Fecha</th><th>Fuente</th><th></th></tr></thead>
+  <thead><tr><th>Plataforma</th><th>Zona aproximada</th><th>Amb.</th><th>Cap.</th>
+             <th>Precio/noche</th><th>Puntaje</th><th>Fecha</th><th>Anuncio</th><th></th></tr></thead>
   <tbody>
   {% for r in registros %}
+  {% set url = r.link or (r.fuente if r.fuente and r.fuente.startswith('http') else '') %}
   <tr>
-    <td>{{ r.barrio }}</td>
-    <td>{{ r.tipo }}</td>
-    <td>{{ r.ambientes }}</td>
-    <td>{{ r.capacidad }}</td>
-    <td>${{ "{:,.0f}".format(r.precio_noche or 0) }}</td>
+    <td>{{ r.plataforma or (r.fuente[:20] if r.fuente and not r.fuente.startswith('http') else 'Manual') }}
+        {% if r.origen == 'ia' %}<span class="badge badge-arena">IA</span>{% endif %}</td>
+    <td>{{ r.zona or r.barrio or '—' }}{% if r.titulo %}<br><small class="muted">{{ r.titulo[:60] }}</small>{% endif %}</td>
+    <td>{{ r.ambientes or '—' }}</td>
+    <td>{{ r.capacidad or '—' }}</td>
+    <td>{{ r.precio_noche|dinero(r.moneda) }}{# ### CAMBIO AQUÍ ### precio original + equivalente #}
+        {% set mp = prop_sel.moneda or 'ARS' %}
+        {% if (r.moneda or 'ARS') != mp and tc_info %}<br><small class="muted">≈ {{ r.precio_noche|dinero(r.moneda, mp) }}</small>{% endif %}</td>
+    <td>{{ "%.2f"|format(r.rating) if r.rating else '—' }}</td>
     <td>{{ r.fecha }}</td>
-    <td><a href="{{ r.fuente }}" target="_blank" class="link">{{ r.fuente[:40] if r.fuente else '—' }}</a></td>
+    <td>{% if url %}<a href="{{ url }}" target="_blank" rel="noopener" class="link">Ver anuncio ↗</a>{% else %}—{% endif %}</td>
     <td>
-      <form method="post" action="{{ url_for('eliminar_competencia', cid=r.id) }}" style="display:inline">
+      <form method="post" action="{{ url_for('eliminar_competencia', cid=r.id, pid=prop_sel.id if prop_sel else None) }}" style="display:inline">
         <button class="btn btn-sm btn-danger" onclick="return confirm('¿Eliminar?')">✕</button>
       </form>
     </td>
@@ -57,5 +125,53 @@
   </tbody>
 </table>
 </div>
+<p class="muted" style="font-size:.8rem;margin-top:8px">
+  Las plataformas no muestran la dirección exacta hasta que se reserva; la zona es aproximada.
+  Revisá los links antes de tomar decisiones: los datos los encuentra la IA y pueden tener errores.
+</p>
+{% elif prop_sel %}
+<div class="card"><p class="muted">Todavía no hay datos de competencia para esta propiedad. Tocá “Buscar comparables con IA”.</p></div>
 {% endif %}
+
+<details class="form-card" style="margin-top:20px">
+  <summary style="cursor:pointer;font-weight:600">Agregar un anuncio a mano (opcional)</summary>
+  <form method="post" action="{{ url_for('competencia', pid=prop_sel.id if prop_sel else None) }}" class="form-grid" style="margin-top:12px">
+    <div class="form-group"><label>Barrio</label><input type="text" name="barrio" value="{{ prop_sel.barrio if prop_sel and prop_sel.barrio else '' }}" required></div>
+    <div class="form-group"><label>Zona / referencia</label><input type="text" name="zona" placeholder="Ej: cerca de Plaza Serrano"></div>
+    <div class="form-group"><label>Tipo</label>
+      <select name="tipo">
+        <option value="{{ prop_sel.tipo if prop_sel and prop_sel.tipo else 'depto' }}">Igual a mi propiedad</option>
+        <option value="depto">Departamento</option><option value="casa">Casa</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Ambientes</label><input type="number" name="ambientes" min="1"></div>
+    <div class="form-group"><label>Capacidad</label><input type="number" name="capacidad" min="1"></div>
+    <div class="form-group"><label>Precio por noche</label><input type="number" name="precio_noche" step="0.01" required></div>
+    <div class="form-group"><label>Moneda</label><select name="moneda"><option value="ARS">ARS</option><option value="USD" {% if prop_sel and prop_sel.moneda == 'USD' %}selected{% endif %}>USD</option></select></div>
+    <div class="form-group"><label>Link del anuncio</label><input type="url" name="link" placeholder="https://..."></div>
+    <div class="form-group"><label>Notas</label><input type="text" name="notas"></div>
+    <div class="form-group" style="align-self:flex-end">
+      <button type="submit" class="btn btn-primary">Guardar</button>
+    </div>
+  </form>
+</details>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ### CAMBIO AQUÍ ### gráfico de tendencia
+(function(){
+  var el = document.getElementById('chartHist');
+  if (!el || typeof Chart === 'undefined') return;
+  var h = {{ historial_json|safe }};
+  new Chart(el, {type: 'line',
+    data: {labels: h.map(function(x){ return x.fecha.slice(5).split('-').reverse().join('/'); }),
+      datasets: [{label: 'Mediana', data: h.map(function(x){ return x.mediana; }), borderColor: '#2a2a1e', tension: .3},
+                 {label: 'Mínimo', data: h.map(function(x){ return x.minimo; }), borderColor: '#b89a5a', borderDash: [4,4], tension: .3},
+                 {label: 'Máximo', data: h.map(function(x){ return x.maximo; }), borderColor: '#a89a72', borderDash: [4,4], tension: .3}]},
+    options: {plugins: {legend: {position: 'bottom'}}}});
+})();
+</script>
 {% endblock %}

@@ -65,6 +65,11 @@ def calcular_precio_estrategico(propiedad, mercado, reservas_historicas, fecha=N
     """
     if fecha is None:
         fecha = datetime.now()
+    elif isinstance(fecha, str):   # ### CAMBIO AQUÍ ### antes una fecha en texto rompía el cálculo
+        try:
+            fecha = datetime.strptime(fecha[:10], "%Y-%m-%d")
+        except ValueError:
+            fecha = datetime.now()
 
     mes = fecha.month
     dia_semana = fecha.weekday()  # 0=lunes, 4=viernes, 5=sábado, 6=domingo
@@ -76,7 +81,7 @@ def calcular_precio_estrategico(propiedad, mercado, reservas_historicas, fecha=N
     precio_base = mercado.get("mediana", 30000)
     pasos = [{
         "paso": 1,
-        "descripcion": "Mediana de mercado (Palermo, misma categoría)",
+        "descripcion": f"Mediana de mercado ({mercado.get('cantidad_propiedades', 0)} comparables)",  # ### CAMBIO AQUÍ ###
         "valor": precio_base,
         "multiplicador": 1.0,
         "acumulado": precio_base,
@@ -143,14 +148,15 @@ def calcular_precio_estrategico(propiedad, mercado, reservas_historicas, fecha=N
             "acumulado": precio_final,
         })
 
-    # ── Redondear a múltiplo de $500 ──────────────────────────────────────────
-    precio_sugerido = round(precio_final / 500) * 500
-    precio_minimo = round(precio_final * 0.85 / 500) * 500
-    precio_maximo = round(precio_final * 1.20 / 500) * 500
+    # ### CAMBIO AQUÍ ### — redondeo según la escala (ARS a $500, USD a $5)
+    paso_red = 500 if precio_final >= 5000 else 5
+    precio_sugerido = round(precio_final / paso_red) * paso_red
+    precio_minimo = round(precio_final * 0.85 / paso_red) * paso_red
+    precio_maximo = round(precio_final * 1.20 / paso_red) * paso_red
 
     explicacion = (
-        f"Precio calculado en base a la mediana de mercado de Palermo "
-        f"(${precio_base:,.0f}), ajustado por el rating de la propiedad "
+        f"Precio calculado en base a la mediana de los comparables "
+        f"({mercado.get('simbolo', '$')} {precio_base:,.0f}), ajustado por el rating de la propiedad "
         f"({rating_prop:.1f} vs {rating_zona:.1f} zona), sus {reviews} reseñas, "
         f"la temporada {nombre_temporada} de {'diciembre' if mes==12 else 'mes ' + str(mes)}, "
         f"ocupación histórica del {pct_ocupacion:.0f}%"

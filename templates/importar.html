@@ -7,7 +7,14 @@
 
 {% if paso == 1 %}
 <div class="form-card">
-  <p>Exportá el historial de ganancias desde tu panel de Airbnb y subilo acá.</p>
+  <!-- ### CAMBIO AQUÍ ### — instrucciones paso a paso para bajar el CSV de Airbnb -->
+  <p>Subí el archivo con tus reservas que te da Airbnb. Para descargarlo:</p>
+  <ol class="muted" style="margin:8px 0 14px 20px;line-height:1.7">
+    <li>Entrá a Airbnb desde la computadora, en modo anfitrión.</li>
+    <li>Menú → <strong>Ganancias</strong> → <strong>Historial de transacciones</strong>.</li>
+    <li>Elegí las fechas y tocá <strong>Exportar CSV</strong>.</li>
+  </ol>
+  <p class="muted" style="font-size:.85rem">Este archivo trae solo tus propias reservas y cobros. Los precios de la competencia los busca la IA en la sección Competencia.</p>
   <form method="post" enctype="multipart/form-data">
     <div class="form-group">
       <label>Archivo CSV de Airbnb</label>

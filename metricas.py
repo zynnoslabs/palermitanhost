@@ -40,7 +40,7 @@ def filtrar_reservas(reservas, fecha_desde=None, fecha_hasta=None, propiedad_id=
     return out
 
 
-def calcular_metricas(reservas, fecha_desde, fecha_hasta, costos_fijos_mensuales=0):
+def calcular_metricas(reservas, fecha_desde, fecha_hasta, costos_fijos_mensuales=0, unidades=1):
     """
     Devuelve dict con: noches_ocupadas, tasa_ocupacion, adr, revpar,
     ingreso_bruto, ingreso_neto, ingreso_neto_real, estadias_prom, anticipacion_prom,
@@ -67,9 +67,12 @@ def calcular_metricas(reservas, fecha_desde, fecha_hasta, costos_fijos_mensuales
         if ant is not None:
             anticipaciones.append(ant)
 
-    tasa_ocupacion = round((noches_ocupadas / total_dias) * 100, 1) if total_dias > 0 else 0
+    # ### CAMBIO AQUÍ ### — con "todas las propiedades" las noches disponibles son días × unidades
+    # (antes con 2 deptos la ocupación podía dar más de 100%)
+    noches_disp = total_dias * max(unidades or 1, 1)
+    tasa_ocupacion = round((noches_ocupadas / noches_disp) * 100, 1) if noches_disp > 0 else 0
     adr = round(ingreso_bruto / noches_ocupadas, 2) if noches_ocupadas > 0 else 0
-    revpar = round(ingreso_bruto / total_dias, 2) if total_dias > 0 else 0
+    revpar = round(ingreso_bruto / noches_disp, 2) if noches_disp > 0 else 0
 
     # Costos: prorratear mensuales al período
     meses_periodo = total_dias / 30.44
@@ -162,3 +165,26 @@ def comparar_periodos(reservas, fecha_desde, fecha_hasta):
             "adr":             var(actual, anio_ant, "adr"),
         },
     }
+
+
+# ### CAMBIO AQUÍ ### — ocupación por día (gráfico "últimos 7 días" del dashboard)
+def ocupacion_diaria(reservas, desde, hasta, unidades=1):
+    """Devuelve [{fecha, pct}] con el % de unidades ocupadas cada noche."""
+    from datetime import timedelta
+    out = []
+    d = desde
+    while d <= hasta:
+        ocupadas = 0
+        for r in reservas:
+            fi = _parse(r.get("fecha_inicio"))
+            ff = _parse(r.get("fecha_fin"))
+            if not fi:
+                continue
+            if not ff:
+                ff = fi + timedelta(days=r.get("noches") or 1)
+            if fi <= d < ff:
+                ocupadas += 1
+        pct = round(min(ocupadas / max(unidades, 1), 1) * 100)
+        out.append({"fecha": d.isoformat(), "pct": pct})
+        d += timedelta(days=1)
+    return out

@@ -3,6 +3,7 @@
 # Detecta columnas automáticamente; si falta alguna, devuelve lista para mapeo manual.
 
 import csv
+import re  # ### CAMBIO AQUÍ ###
 import io
 from datetime import datetime, date
 
@@ -17,12 +18,14 @@ ALIASES = {
         "fecha de finalización","end date","check-out date","check-out","departure date",
         "fecha fin","fecha de finalizacion"
     ],
-    "noches": ["noches","nights","número de noches","numero de noches","duration"],
+    "noches": ["noches","nights","número de noches","numero de noches","duration",
+               "n.º de noches","nº de noches","# of nights","n.° de noches"],
     "anuncio": [
         "anuncio","listing","listing title","propiedad","nombre del anuncio","listing name","property"
     ],
     "ingreso_bruto": [
-        "cantidad","amount","ingresos brutos","gross earnings","total","monto","total earnings","pago"
+        "cantidad","amount","ingresos brutos","gross earnings","total","monto","total earnings","pago",
+        "ingresos"
     ],
     "comision_airbnb": [
         "comisión de servicio de airbnb","airbnb service fee","host service fee",
@@ -33,6 +36,12 @@ ALIASES = {
         "ingresos netos","net earnings","net income","neto","you earn","earnings","payout"
     ],
     "tipo": ["tipo","type","transaction type","tipo de transacción","tipo de transaccion"],
+    # ### CAMBIO AQUÍ ### — columnas del export de "Reservas" de Airbnb (trae futuras, huésped y estado)
+    "huesped_nombre": ["nombre del huésped","nombre del huesped","huésped","huesped","guest",
+                       "guest name","nombre"],
+    "estado": ["estado","status"],
+    "fecha_reserva": ["reservada","fecha de reserva","booked","booking date","reservado"],
+    "moneda": ["moneda","currency"],   # ### CAMBIO AQUÍ ###
 }
 
 
@@ -57,10 +66,18 @@ def parsear_monto(texto):
     if not texto:
         return 0.0
     limpio = str(texto).replace("$","").replace("€","").replace(" ","").replace("\xa0","")
+    limpio = limpio.replace("ARS","").replace("USD","")
+    # ### CAMBIO AQUÍ ### — el separador decimal es el ÚLTIMO que aparece.
+    # Antes "45.000" daba 45 y "1,234.56" daba 1.23
     if "," in limpio and "." in limpio:
-        limpio = limpio.replace(".","").replace(",",".")
+        if limpio.rfind(",") > limpio.rfind("."):
+            limpio = limpio.replace(".","").replace(",",".")   # 1.234,56
+        else:
+            limpio = limpio.replace(",","")                    # 1,234.56
+    elif re.fullmatch(r"-?\d{1,3}([.,]\d{3})+", limpio):
+        limpio = limpio.replace(".","").replace(",","")        # 45.000 / 45,000
     elif "," in limpio:
-        limpio = limpio.replace(",",".")
+        limpio = limpio.replace(",",".")                       # 45,5
     try:
         return float(limpio)
     except ValueError:
@@ -79,6 +96,15 @@ def parsear_fecha(texto):
         except ValueError:
             continue
     return None
+
+
+def _moneda(texto):
+    t = (texto or "").strip().upper()
+    if t in ("USD", "US$", "U$S", "DOLARES", "DÓLARES"):
+        return "USD"
+    if t in ("ARS", "$", "PESOS", "AR$"):
+        return "ARS"
+    return ""
 
 
 def procesar_csv(contenido_bytes, mapa_columnas, propiedad_map):
@@ -133,7 +159,23 @@ def procesar_csv(contenido_bytes, mapa_columnas, propiedad_map):
         limpieza        = parsear_monto(col("limpieza"))
         ingreso_neto    = parsear_monto(col("ingreso_neto"))
         if ingreso_neto == 0 and ingreso_bruto > 0:
-            ingreso_neto = ingreso_bruto - comision_airbnb
+            ingreso_neto = ingreso_bruto - abs(comision_airbnb)  # ### CAMBIO AQUÍ ### la comisión viene negativa
+
+        # ### CAMBIO AQUÍ ### — huésped, estado y anticipación (días entre reserva y llegada)
+        estado_txt = _norm(col("estado", ""))
+        if "cancel" in estado_txt:
+            estado = "cancelada"
+        elif any(p in estado_txt for p in ("pendiente", "pending", "solicit", "request")):
+            estado = "pendiente"
+        elif estado_txt:
+            estado = "confirmada"
+        else:
+            estado = "completada"
+        fecha_res = parsear_fecha(col("fecha_reserva"))
+        anticipacion = None
+        if fecha_res and fecha_inicio:
+            anticipacion = (datetime.strptime(fecha_inicio, "%Y-%m-%d") -
+                            datetime.strptime(fecha_res, "%Y-%m-%d")).days
 
         filas_ok.append({
             "propiedad_id":        propiedad_id,
@@ -145,7 +187,10 @@ def procesar_csv(contenido_bytes, mapa_columnas, propiedad_map):
             "comision_airbnb":     comision_airbnb,
             "limpieza":            limpieza,
             "ingreso_neto":        ingreso_neto,
-            "anticipacion_dias":   None,
+            "anticipacion_dias":   anticipacion,
+            "huesped_nombre":      col("huesped_nombre"),
+            "moneda":              _moneda(col("moneda")),   # ### CAMBIO AQUÍ ### vacío = moneda de la propiedad
+            "estado":              estado,
         })
 
     return filas_ok, omitidas

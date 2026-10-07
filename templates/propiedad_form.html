@@ -35,28 +35,53 @@
       <label>Capacidad (personas)</label>
       <input type="number" name="capacidad" min="1" value="{{ prop.capacidad if prop else '' }}">
     </div>
+    <!-- ### CAMBIO AQUÍ ### estado de la propiedad -->
     <div class="form-group">
-      <label>Precio base por noche ($)</label>
+      <label>Estado</label>
+      <select name="estado">
+        {% for v, t in [('activa','Activa'),('mantenimiento','Mantenimiento'),('inactiva','Inactiva')] %}
+        <option value="{{ v }}" {% if prop and prop.estado == v %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Puntaje en Airbnb (ej: 4.85)</label>
+      <input type="number" name="rating" step="0.01" min="1" max="5" value="{{ prop.rating if prop and prop.rating else '' }}">
+    </div>
+    <div class="form-group">
+      <label>Cantidad de reseñas</label>
+      <input type="number" name="reviews_count" min="0" value="{{ prop.reviews_count if prop else 0 }}">
+    </div>
+    <!-- ### CAMBIO AQUÍ ### moneda de la propiedad -->
+    <div class="form-group">
+      <label>Moneda (precio y costos)</label>
+      <select name="moneda">
+        <option value="ARS" {% if not prop or prop.moneda != 'USD' %}selected{% endif %}>Pesos (ARS)</option>
+        <option value="USD" {% if prop and prop.moneda == 'USD' %}selected{% endif %}>Dólares (USD)</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Precio base por noche</label>
       <input type="number" name="precio_base" step="0.01" value="{{ prop.precio_base if prop else '' }}">
     </div>
   </div>
 
-  <h3 class="section-title">Costos fijos mensuales</h3>
+  <h3 class="section-title">Costos fijos mensuales (en la moneda de arriba)</h3>
   <div class="form-grid">
     <div class="form-group">
-      <label>Expensas ($)</label>
+      <label>Expensas</label>
       <input type="number" name="costo_expensas" step="0.01" value="{{ prop.costo_expensas if prop else 0 }}">
     </div>
     <div class="form-group">
-      <label>Servicios ($)</label>
+      <label>Servicios</label>
       <input type="number" name="costo_servicios" step="0.01" value="{{ prop.costo_servicios if prop else 0 }}">
     </div>
     <div class="form-group">
-      <label>Limpieza ($)</label>
+      <label>Limpieza</label>
       <input type="number" name="costo_limpieza" step="0.01" value="{{ prop.costo_limpieza if prop else 0 }}">
     </div>
     <div class="form-group">
-      <label>Comisión / otros ($)</label>
+      <label>Comisión / otros</label>
       <input type="number" name="costo_comision" step="0.01" value="{{ prop.costo_comision if prop else 0 }}">
     </div>
   </div>

@@ -28,25 +28,30 @@
     <div class="stat-lbl">Ocupación</div>
   </div>
   <div class="stat-card">
-    <div class="stat-num">${{ "{:,.0f}".format(stats.adr) }}</div>
+    <div class="stat-num">{{ stats.adr|dinero(vista) }}</div>
     <div class="stat-lbl">ADR (precio prom/noche)</div>
   </div>
   <div class="stat-card">
-    <div class="stat-num">${{ "{:,.0f}".format(stats.revpar) }}</div>
+    <div class="stat-num">{{ stats.revpar|dinero(vista) }}</div>
     <div class="stat-lbl">RevPAR</div>
   </div>
   <div class="stat-card">
-    <div class="stat-num">${{ "{:,.0f}".format(stats.ingreso_bruto) }}</div>
+    <div class="stat-num">{{ stats.ingreso_bruto|dinero(vista) }}</div>
     <div class="stat-lbl">Ingreso bruto</div>
   </div>
   <div class="stat-card highlight">
-    <div class="stat-num">${{ "{:,.0f}".format(stats.ingreso_neto_real) }}</div>
+    <div class="stat-num">{{ stats.ingreso_neto_real|dinero(vista) }}</div>
     <div class="stat-lbl">Ingreso neto real</div>
   </div>
   <div class="stat-card">
     <div class="stat-num">{{ stats.estadias_prom }} noches</div>
     <div class="stat-lbl">Estadía promedio</div>
   </div>
+  <!-- ### CAMBIO AQUÍ ### reseñas pendientes -->
+  <a class="stat-card" href="{{ url_for('asistente', tab='resenas') }}" style="text-decoration:none;color:inherit">
+    <div class="stat-num">{{ resenas_pend }}</div>
+    <div class="stat-lbl">Reseñas pendientes</div>
+  </a>
   {% if stats.anticipacion_prom %}
   <div class="stat-card">
     <div class="stat-num">{{ stats.anticipacion_prom }} días</div>
@@ -55,9 +60,40 @@
   {% endif %}
 </div>
 
+<!-- ### CAMBIO AQUÍ ### ocupación últimos 7 días + próximas reservas -->
 <div class="charts-row">
   <div class="chart-box">
-    <h3>Ingresos por mes</h3>
+    <h3>Ocupación últimos 7 días</h3>
+    <canvas id="chartOcup7"></canvas>
+  </div>
+  <div class="chart-box">
+    <h3>Próximas reservas</h3>
+    {% if proximas %}
+    <div class="table-wrap">
+    <table class="tabla">
+      <thead><tr><th>Huésped</th><th>Propiedad</th><th>Entrada</th><th>Noches</th><th>Estado</th></tr></thead>
+      <tbody>
+      {% for r in proximas %}
+      <tr>
+        <td>{{ r.huesped_nombre or '—' }}</td>
+        <td>{{ r.prop_nombre or '—' }}</td>
+        <td>{{ r.fecha_inicio }}</td>
+        <td>{{ r.noches or '—' }}</td>
+        <td><span class="badge {{ 'badge-warn' if r.estado == 'pendiente' else 'badge-ok' }}">{{ (r.estado or 'confirmada')|capitalize }}</span></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted">No hay reservas futuras cargadas. Para verlas, importá el CSV de <strong>Reservas</strong> de Airbnb (además del de Ganancias).</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="charts-row">
+  <div class="chart-box">
+    <h3>Ingresos por mes ({{ vista }})</h3>
     <canvas id="chartIngresos"></canvas>
   </div>
   <div class="chart-box">
@@ -81,7 +117,7 @@
 <ul class="informe-lista">
   {% for inf in informes %}
   <li><a href="{{ url_for('ver_informe', iid=inf.id) }}">{{ inf.titulo }}</a>
-      <span class="muted">{{ inf.creado_en[:10] }}</span></li>
+      <span class="muted">{{ inf.creado_en|fecha }}{# ### CAMBIO AQUÍ ### #}</span></li>
   {% endfor %}
 </ul>
 {% endif %}
@@ -97,6 +133,17 @@
 {% block scripts %}
 <script>
 const porMes = {{ por_mes|safe }};
+// ### CAMBIO AQUÍ ### gráfico de ocupación diaria
+const ocup7 = {{ ocup_7|safe }};
+const el7 = document.getElementById('chartOcup7');
+if (el7) new Chart(el7, {
+  type:'bar',
+  data:{ labels: ocup7.map(d => d.fecha.slice(5).split('-').reverse().join('/')),
+         datasets:[{label:'Ocupación %', data: ocup7.map(d => d.pct),
+           backgroundColor:'rgba(42,42,30,0.75)', borderRadius:4}]},
+  options:{responsive:true, plugins:{legend:{display:false}},
+    scales:{y:{min:0, max:100, ticks:{callback:v=>v+'%'}}}}
+});
 const meses  = Object.keys(porMes);
 const ingresos = meses.map(m => porMes[m].ingreso_bruto);
 const noches   = meses.map(m => porMes[m].noches);
@@ -107,7 +154,7 @@ if(meses.length){
     data:{ labels:meses, datasets:[{label:'Ingreso bruto', data:ingresos,
       backgroundColor:'rgba(99,102,241,0.75)', borderRadius:4}]},
     options:{responsive:true, plugins:{legend:{display:false}},
-      scales:{y:{ticks:{callback:v=>'$'+v.toLocaleString()}}}}
+      scales:{y:{ticks:{callback:v=>'{{ 'US$' if vista == 'USD' else '$' }} '+v.toLocaleString('es-AR')}}}}
   });
   new Chart(document.getElementById('chartNoches'), {
     type:'bar',

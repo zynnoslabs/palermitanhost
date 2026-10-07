@@ -45,6 +45,11 @@
          class="{% if 'informe' in request.endpoint %}active{% endif %}">
         <span class="nav-icon">≡</span> Informes
       </a>
+      <!-- ### CAMBIO AQUÍ ### — faltaba el link a Competencia en el menú -->
+      <a href="{{ url_for('competencia') }}"
+         class="{% if 'competencia' in request.endpoint %}active{% endif %}">
+        <span class="nav-icon">◇</span> Competencia
+      </a>
     </nav>
 
     <div class="sidebar-footer">
@@ -57,7 +62,38 @@
   <!-- ── TOPBAR ──────────────────────────────────────── -->
   <header class="topbar">
     <span class="topbar-title">{% block topbar_title %}{% endblock %}</span>
-    <span class="topbar-meta" id="last-update">Sistema activo</span>
+    <!-- ### CAMBIO AQUÍ ### selector de moneda y tipo de cambio -->
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span class="topbar-meta" id="last-update">Sistema activo</span>
+      {% if session.get('logged_in') %}
+      <span class="topbar-meta">Ver en:
+        <a href="{{ url_for('cambiar_moneda', m='ARS') }}" class="btn btn-sm {{ 'btn-primary' if vista == 'ARS' }}">ARS</a>
+        <a href="{{ url_for('cambiar_moneda', m='USD') }}" class="btn btn-sm {{ 'btn-primary' if vista == 'USD' }}">USD</a>
+      </span>
+      <details style="position:relative">
+        <summary class="topbar-meta" style="cursor:pointer;list-style:none">
+          {% if tc_info %}TC: $ {{ "{:,.2f}".format(tc_info.valor|float).replace(",", "X").replace(".", ",").replace("X", ".") }} · {{ tc_info.tipo }}{% else %}⚠ Cargar tipo de cambio{% endif %}
+        </summary>
+        <div class="form-card" style="position:absolute;right:0;top:28px;z-index:50;width:280px">
+          <form method="post" action="{{ url_for('tipo_cambio') }}" style="margin-bottom:10px">
+            <label class="muted">Traer cotización (dolarapi.com)</label>
+            <div style="display:flex;gap:6px">
+              <select name="tipo">{% for k, v in tipos_dolar.items() %}<option value="{{ k }}">Dólar {{ v }}</option>{% endfor %}</select>
+              <button class="btn btn-sm btn-primary">Traer</button>
+            </div>
+          </form>
+          <form method="post" action="{{ url_for('tipo_cambio') }}">
+            <label class="muted">O cargarlo a mano (pesos por dólar)</label>
+            <div style="display:flex;gap:6px">
+              <input type="text" name="valor" placeholder="Ej: 1400" style="width:100%">
+              <button class="btn btn-sm">Guardar</button>
+            </div>
+          </form>
+          {% if tc_info and tc_info.fecha %}<p class="muted" style="margin-top:8px">Última actualización: {{ tc_info.fecha }}</p>{% endif %}
+        </div>
+      </details>
+      {% endif %}
+    </div>
   </header>
 
   <!-- ── MAIN ────────────────────────────────────────── -->
@@ -75,16 +111,10 @@
 
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 <script>
-  // Contador de última actualización
+  // ### CAMBIO AQUÍ ### — antes mostraba un contador falso "Actualizado hace Xs"; ahora la fecha de hoy
   (function(){
-    let secs = 0;
     const el = document.getElementById('last-update');
-    setInterval(()=>{
-      secs++;
-      el.textContent = secs < 60
-        ? `Actualizado hace ${secs}s`
-        : `Actualizado hace ${Math.floor(secs/60)}min`;
-    }, 1000);
+    if (el) el.textContent = new Date().toLocaleDateString('es-AR', {weekday:'long', day:'numeric', month:'long'});
   })();
 </script>
 {% block scripts %}{% endblock %}

@@ -11,7 +11,7 @@
 <table class="tabla">
   <thead><tr>
     <th>Nombre</th><th>Barrio</th><th>Tipo</th><th>Amb.</th><th>Cap.</th>
-    <th>Precio base</th><th>Costos/mes</th><th>Acciones</th>
+    <th>Precio base</th><th>Costos/mes</th><th>Estado</th><th>Acciones</th>
   </tr></thead>
   <tbody>
   {% for p in propiedades %}
@@ -21,8 +21,9 @@
     <td>{{ p.tipo|capitalize }}</td>
     <td>{{ p.ambientes }}</td>
     <td>{{ p.capacidad }} pers.</td>
-    <td>${{ "{:,.0f}".format(p.precio_base or 0) }}</td>
-    <td>${{ "{:,.0f}".format((p.costo_expensas or 0)+(p.costo_servicios or 0)+(p.costo_limpieza or 0)+(p.costo_comision or 0)) }}/mes</td>
+    <td>{{ p.precio_base|dinero(p.moneda) }}</td>{# ### CAMBIO AQUÍ ### #}
+    <td>{{ ((p.costo_expensas or 0)+(p.costo_servicios or 0)+(p.costo_limpieza or 0)+(p.costo_comision or 0))|dinero(p.moneda) }}/mes</td>
+    <td><span class="badge {{ 'badge-ok' if (p.estado or 'activa') == 'activa' else 'badge-warn' }}">{{ (p.estado or 'activa')|capitalize }}</span></td>{# ### CAMBIO AQUÍ ### #}
     <td>
       <a href="{{ url_for('editar_propiedad', pid=p.id) }}" class="btn btn-sm">Editar</a>
       <form method="post" action="{{ url_for('eliminar_propiedad', pid=p.id) }}" style="display:inline"
@@ -34,6 +35,39 @@
   {% endfor %}
   </tbody>
 </table>
+</div>
+
+<!-- ### CAMBIO AQUÍ ### huéspedes por propiedad -->
+<div class="card" style="margin-top:20px">
+  <form method="get" style="display:flex;gap:10px;align-items:center;margin-bottom:12px">
+    <label class="muted">Ver huéspedes de:</label>
+    <select name="ver" onchange="this.form.submit()">
+      {% for p in propiedades %}
+      <option value="{{ p.id }}" {% if ver == p.id %}selected{% endif %}>{{ p.nombre }}</option>
+      {% endfor %}
+    </select>
+  </form>
+  {% if huespedes %}
+  <div class="table-wrap">
+  <table class="tabla">
+    <thead><tr><th>Huésped</th><th>Check-in</th><th>Check-out</th><th>Plataforma</th><th>Monto</th><th>Estado</th></tr></thead>
+    <tbody>
+    {% for r in huespedes %}
+    <tr>
+      <td>{{ r.huesped_nombre or '—' }}</td>
+      <td>{{ r.fecha_inicio }}</td>
+      <td>{{ r.fecha_fin or '—' }}</td>
+      <td>{{ (r.canal or 'airbnb')|capitalize }}</td>
+      <td>{{ r.ingreso_bruto|dinero(r.moneda) }}</td>
+      <td><span class="badge {{ 'badge-warn' if r.estado in ('pendiente','cancelada') else 'badge-ok' }}">{{ (r.estado or 'completada')|capitalize }}</span></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">Todavía no hay reservas importadas para esta propiedad.</p>
+  {% endif %}
 </div>
 {% else %}
 <div class="empty-state">
