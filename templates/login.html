@@ -23,9 +23,14 @@
     {% endwith %}
 
     <form class="login-form" method="post">
+      <!-- ### CAMBIO AQUÍ ### faltaba el campo usuario: el sistema lo pide y sin él nadie podía entrar -->
+      <div class="form-group">
+        <label>Usuario</label>
+        <input type="text" name="usuario" autocomplete="username" autocapitalize="none" autofocus required>
+      </div>
       <div class="form-group">
         <label>Contraseña</label>
-        <input type="password" name="password" placeholder="••••••••" autofocus required>
+        <input type="password" name="password" placeholder="••••••••" autocomplete="current-password" required>
       </div>
       <button type="submit" class="btn btn-primary btn-block">Ingresar</button>
     </form>

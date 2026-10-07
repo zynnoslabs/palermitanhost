@@ -2,7 +2,7 @@
 {% block title %}Informes – PalermitanHost{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h2>{% if informe %}{{ informe.titulo }}{% else %}Informes guardados{% endif %}</h2>
+  <h2>{% if informe %}{{ informe.titulo }}{% else %}Informes guardados{{ info('informes') }}{% endif %}</h2>
   {% if informe %}
   <div>
     <!-- ### CAMBIO AQUÍ ### botones de descarga (las rutas existían pero no había botón) -->

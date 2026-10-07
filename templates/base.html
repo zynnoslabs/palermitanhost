@@ -59,20 +59,23 @@
     </div>
   </aside>
 
+  <!-- ### CAMBIO AQUÍ ### fondo oscuro detrás del menú en el celular -->
+  <div class="menu-fondo" onclick="toggleMenu(false)"></div>
+
   <!-- ── TOPBAR ──────────────────────────────────────── -->
   <header class="topbar">
-    <span class="topbar-title">{% block topbar_title %}{% endblock %}</span>
+    <span class="topbar-title"><button type="button" class="menu-btn" aria-label="Abrir menú" onclick="toggleMenu()">☰</button>{% block topbar_title %}{% endblock %}</span>
     <!-- ### CAMBIO AQUÍ ### selector de moneda y tipo de cambio -->
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <span class="topbar-meta" id="last-update">Sistema activo</span>
       {% if session.get('logged_in') %}
-      <span class="topbar-meta">Ver en:
+      <span class="topbar-meta"><span class="solo-compu">Ver en:</span>{{ info('ver_en') }}
         <a href="{{ url_for('cambiar_moneda', m='ARS') }}" class="btn btn-sm {{ 'btn-primary' if vista == 'ARS' }}">ARS</a>
         <a href="{{ url_for('cambiar_moneda', m='USD') }}" class="btn btn-sm {{ 'btn-primary' if vista == 'USD' }}">USD</a>
       </span>
       <details style="position:relative">
         <summary class="topbar-meta" style="cursor:pointer;list-style:none">
-          {% if tc_info %}TC: $ {{ "{:,.2f}".format(tc_info.valor|float).replace(",", "X").replace(".", ",").replace("X", ".") }} · {{ tc_info.tipo }}{% else %}⚠ Cargar tipo de cambio{% endif %}
+          {{ info('tipo_cambio') }} {% if tc_info %}TC: $ {{ "{:,.2f}".format(tc_info.valor|float).replace(",", "X").replace(".", ",").replace("X", ".") }}<span class="solo-compu"> · {{ tc_info.tipo }}</span>{% else %}⚠ <span class="solo-compu">Cargar tipo de cambio</span><span class="solo-cel">Cargar TC</span>{% endif %}
         </summary>
         <div class="form-card" style="position:absolute;right:0;top:28px;z-index:50;width:280px">
           <form method="post" action="{{ url_for('tipo_cambio') }}" style="margin-bottom:10px">

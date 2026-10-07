@@ -26,7 +26,7 @@
 {% if tab == 'negocio' %}
 <!-- ══════════ CHAT DE NEGOCIO ══════════ -->
 <div class="form-card">
-  <h3>Preguntale lo que quieras sobre tu negocio</h3>
+  <h3>Preguntale lo que quieras sobre tu negocio{{ info('asistente_negocio') }}</h3>
   <p class="muted">Usa tus propiedades, reservas, métricas y la última búsqueda de competencia.</p>
   <div class="chips">
     <button type="button" onclick="preguntar(this.textContent)">¿Cuánto gané este mes?</button>
@@ -49,7 +49,7 @@
 {% elif tab == 'huespedes' %}
 <!-- ══════════ CONSULTAS DE HUÉSPEDES ══════════ -->
 <div class="form-card">
-  <h3>Generar respuesta para un huésped</h3>
+  <h3>Generar respuesta para un huésped{{ info('consultas') }}</h3>
   <form method="post" action="{{ url_for('asistente') }}">
     <div class="form-group">
       <label>Propiedad</label>
@@ -118,7 +118,7 @@
 {% else %}
 <!-- ══════════ RESEÑAS ══════════ -->
 <div class="form-card">
-  <h3>Cargar una reseña</h3>
+  <h3>Cargar una reseña{{ info('resenas') }}</h3>
   <p class="muted">Pegá la reseña que dejó el huésped en Airbnb. La IA te prepara una respuesta para publicar.</p>
   <form method="post" action="{{ url_for('nueva_resena') }}" class="form-grid">
     <div class="form-group">

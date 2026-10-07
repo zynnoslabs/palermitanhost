@@ -2,7 +2,7 @@
 {% block title %}Propiedades – PalermitanHost{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h2>Propiedades</h2>
+  <h2>Propiedades{{ info('propiedades') }}</h2>
   <a href="{{ url_for('nueva_propiedad') }}" class="btn btn-primary">+ Nueva propiedad</a>
 </div>
 
@@ -40,7 +40,7 @@
 <!-- ### CAMBIO AQUÍ ### huéspedes por propiedad -->
 <div class="card" style="margin-top:20px">
   <form method="get" style="display:flex;gap:10px;align-items:center;margin-bottom:12px">
-    <label class="muted">Ver huéspedes de:</label>
+    <label class="muted">Ver huéspedes de:{{ info('huespedes_prop') }}</label>
     <select name="ver" onchange="this.form.submit()">
       {% for p in propiedades %}
       <option value="{{ p.id }}" {% if ver == p.id %}selected{% endif %}>{{ p.nombre }}</option>

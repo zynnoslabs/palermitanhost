@@ -2,7 +2,7 @@
 {% block title %}Importar CSV – PalermitanHost{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h2>Importar CSV de Airbnb</h2>
+  <h2>Importar CSV de Airbnb{{ info('importar') }}</h2>
 </div>
 
 {% if paso == 1 %}
@@ -46,7 +46,7 @@
 
 {% elif paso == 3 %}
 <div class="form-card">
-  <h3>Asignar anuncios a propiedades</h3>
+  <h3>Asignar anuncios a propiedades{{ info('asignar_anuncios') }}</h3>
   <p>Cada nombre de anuncio detectado en el CSV necesita vincularse a una propiedad cargada en el sistema.</p>
   <form method="post" action="{{ url_for('importar_asignar') }}">
     <input type="hidden" name="asignar" value="1">

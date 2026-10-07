@@ -4,7 +4,7 @@
 {# ### CAMBIO AQUÍ ### — página rehecha igual que el demo: mercado + precio estratégico paso a paso #}
 {% set mp = (prop_sel.moneda if prop_sel and prop_sel.moneda else 'ARS') %}
 {% macro fmt(v) %}{{ v|dinero(mp) }}{% endmacro %}
-<div class="page-header"><h2>Precio sugerido</h2></div>
+<div class="page-header"><h2>Precio sugerido{{ info('precios') }}</h2></div>
 
 {% if not propiedades %}
 <div class="form-card"><p>Primero cargá una propiedad.</p>
@@ -33,9 +33,9 @@
 
 {% if mercado %}
 <div class="card" style="margin-bottom:16px">
-  <div class="card-title">Mercado — {{ prop_sel.barrio or '' }} <span class="muted">· en {{ mp }}, la moneda de la propiedad</span></div>
+  <div class="card-title">Mercado — {{ prop_sel.barrio or '' }}{{ info('mercado') }} <span class="muted">· en {{ mp }}, la moneda de la propiedad</span></div>
   <div class="stats-grid">
-    <div class="stat-card"><div class="stat-num">{{ fmt(mercado.mediana) }}</div><div class="stat-lbl">Mediana zona</div></div>
+    <div class="stat-card"><div class="stat-num">{{ fmt(mercado.mediana) }}</div><div class="stat-lbl">Mediana zona{{ info('mediana') }}</div></div>
     <div class="stat-card"><div class="stat-num">{{ fmt(mercado.min) }}</div><div class="stat-lbl">Precio más bajo</div></div>
     <div class="stat-card"><div class="stat-num">{{ fmt(mercado.max) }}</div><div class="stat-lbl">Precio más alto</div></div>
     <div class="stat-card"><div class="stat-num">{{ mercado.rating_promedio_zona }}★</div><div class="stat-lbl">Puntaje promedio comparables</div></div>
@@ -54,25 +54,25 @@
 {% if resultado %}
 <div class="precio-resultado">
   <div class="precio-box precio-min">
-    <div class="precio-lbl">Mínimo</div>
+    <div class="precio-lbl">Mínimo{{ info('precio_min') }}</div>
     <div class="precio-num">{{ fmt(resultado.precio_minimo) }}</div>
     <div class="muted">Cubre tus costos</div>
   </div>
   <div class="precio-box precio-sug">
-    <div class="precio-lbl">⭐ Sugerido</div>
+    <div class="precio-lbl">⭐ Sugerido{{ info('precio_sug') }}</div>
     <div class="precio-num">{{ fmt(resultado.precio_sugerido) }}</div>
     <div class="muted">Temporada {{ resultado.temporada }} · {{ 'fin de semana' if resultado.es_fin_de_semana else 'entre semana' }}</div>
     {% if tc_info %}<div class="muted">≈ {{ resultado.precio_sugerido|dinero(mp, 'USD' if mp == 'ARS' else 'ARS') }}</div>{% endif %}
   </div>
   <div class="precio-box precio-max">
-    <div class="precio-lbl">Máximo</div>
+    <div class="precio-lbl">Máximo{{ info('precio_max') }}</div>
     <div class="precio-num">{{ fmt(resultado.precio_maximo) }}</div>
     <div class="muted">Techo recomendado</div>
   </div>
 </div>
 
 <div class="form-card">
-  <h3>Cómo se calculó este precio</h3>
+  <h3>Cómo se calculó este precio{{ info('como_calculo') }}</h3>
   <table class="tabla">
     <thead><tr><th>Paso</th><th>Factor</th><th>Efecto</th><th>Precio parcial</th></tr></thead>
     <tbody>

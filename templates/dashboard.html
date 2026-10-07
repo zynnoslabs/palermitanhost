@@ -3,7 +3,7 @@
 
 {% block content %}
 <div class="page-header">
-  <h2>Dashboard</h2>
+  <h2>Dashboard{{ info('dashboard') }}</h2>
   <form method="get" class="filter-form">
     <select name="propiedad_id">
       <option value="">Todas las propiedades</option>
@@ -13,7 +13,7 @@
     </select>
     <input type="date" name="desde" value="{{ desde }}">
     <input type="date" name="hasta" value="{{ hasta }}">
-    <button type="submit" class="btn btn-sm">Filtrar</button>
+    <button type="submit" class="btn btn-sm">Filtrar</button>{{ info('filtro') }}
   </form>
 </div>
 
@@ -21,41 +21,41 @@
 <div class="stats-grid">
   <div class="stat-card">
     <div class="stat-num">{{ stats.total_reservas }}</div>
-    <div class="stat-lbl">Reservas</div>
+    <div class="stat-lbl">Reservas{{ info('reservas') }}</div>
   </div>
   <div class="stat-card">
     <div class="stat-num">{{ stats.tasa_ocupacion }}%</div>
-    <div class="stat-lbl">Ocupación</div>
+    <div class="stat-lbl">Ocupación{{ info('ocupacion') }}</div>
   </div>
   <div class="stat-card">
     <div class="stat-num">{{ stats.adr|dinero(vista) }}</div>
-    <div class="stat-lbl">ADR (precio prom/noche)</div>
+    <div class="stat-lbl">ADR (precio prom/noche){{ info('adr') }}</div>
   </div>
   <div class="stat-card">
     <div class="stat-num">{{ stats.revpar|dinero(vista) }}</div>
-    <div class="stat-lbl">RevPAR</div>
+    <div class="stat-lbl">RevPAR{{ info('revpar') }}</div>
   </div>
   <div class="stat-card">
     <div class="stat-num">{{ stats.ingreso_bruto|dinero(vista) }}</div>
-    <div class="stat-lbl">Ingreso bruto</div>
+    <div class="stat-lbl">Ingreso bruto{{ info('ingreso_bruto') }}</div>
   </div>
   <div class="stat-card highlight">
     <div class="stat-num">{{ stats.ingreso_neto_real|dinero(vista) }}</div>
-    <div class="stat-lbl">Ingreso neto real</div>
+    <div class="stat-lbl">Ingreso neto real{{ info('ingreso_neto_real') }}</div>
   </div>
   <div class="stat-card">
     <div class="stat-num">{{ stats.estadias_prom }} noches</div>
-    <div class="stat-lbl">Estadía promedio</div>
+    <div class="stat-lbl">Estadía promedio{{ info('estadia') }}</div>
   </div>
   <!-- ### CAMBIO AQUÍ ### reseñas pendientes -->
   <a class="stat-card" href="{{ url_for('asistente', tab='resenas') }}" style="text-decoration:none;color:inherit">
     <div class="stat-num">{{ resenas_pend }}</div>
-    <div class="stat-lbl">Reseñas pendientes</div>
+    <div class="stat-lbl">Reseñas pendientes{{ info('resenas_pend') }}</div>
   </a>
   {% if stats.anticipacion_prom %}
   <div class="stat-card">
     <div class="stat-num">{{ stats.anticipacion_prom }} días</div>
-    <div class="stat-lbl">Anticipación promedio</div>
+    <div class="stat-lbl">Anticipación promedio{{ info('anticipacion') }}</div>
   </div>
   {% endif %}
 </div>
@@ -63,11 +63,11 @@
 <!-- ### CAMBIO AQUÍ ### ocupación últimos 7 días + próximas reservas -->
 <div class="charts-row">
   <div class="chart-box">
-    <h3>Ocupación últimos 7 días</h3>
+    <h3>Ocupación últimos 7 días{{ info('ocup_7') }}</h3>
     <canvas id="chartOcup7"></canvas>
   </div>
   <div class="chart-box">
-    <h3>Próximas reservas</h3>
+    <h3>Próximas reservas{{ info('proximas') }}</h3>
     {% if proximas %}
     <div class="table-wrap">
     <table class="tabla">
@@ -93,17 +93,17 @@
 
 <div class="charts-row">
   <div class="chart-box">
-    <h3>Ingresos por mes ({{ vista }})</h3>
+    <h3>Ingresos por mes ({{ vista }}){{ info('ingresos_mes') }}</h3>
     <canvas id="chartIngresos"></canvas>
   </div>
   <div class="chart-box">
-    <h3>Noches ocupadas por mes</h3>
+    <h3>Noches ocupadas por mes{{ info('noches_mes') }}</h3>
     <canvas id="chartNoches"></canvas>
   </div>
 </div>
 
 <div class="section-header">
-  <h3>Generar informe con IA</h3>
+  <h3>Generar informe con IA{{ info('generar_informe') }}</h3>
 </div>
 <form method="post" action="{{ url_for('generar_informe') }}" class="informe-form">
   <input type="hidden" name="desde" value="{{ desde }}">
@@ -136,7 +136,7 @@ const porMes = {{ por_mes|safe }};
 // ### CAMBIO AQUÍ ### gráfico de ocupación diaria
 const ocup7 = {{ ocup_7|safe }};
 const el7 = document.getElementById('chartOcup7');
-if (el7) new Chart(el7, {
+if (el7 && typeof Chart !== 'undefined') new Chart(el7, {
   type:'bar',
   data:{ labels: ocup7.map(d => d.fecha.slice(5).split('-').reverse().join('/')),
          datasets:[{label:'Ocupación %', data: ocup7.map(d => d.pct),
@@ -148,7 +148,7 @@ const meses  = Object.keys(porMes);
 const ingresos = meses.map(m => porMes[m].ingreso_bruto);
 const noches   = meses.map(m => porMes[m].noches);
 
-if(meses.length){
+if(meses.length && typeof Chart !== 'undefined'){   // ### CAMBIO AQUÍ ### si no carga la librería, la página sigue andando
   new Chart(document.getElementById('chartIngresos'), {
     type:'bar',
     data:{ labels:meses, datasets:[{label:'Ingreso bruto', data:ingresos,

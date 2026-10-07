@@ -4,7 +4,7 @@
 {% block content %}
 {# ### CAMBIO AQUÍ ### — página rehecha: búsqueda automática con IA, sin CSV #}
 <div class="page-header">
-  <h2>Competencia</h2>
+  <h2>Competencia{{ info('competencia') }}</h2>
 </div>
 
 {% if not propiedades %}
@@ -17,7 +17,7 @@
 <!-- ### CAMBIO AQUÍ ### estado de la actualización automática -->
 <div class="card" style="margin-bottom:16px">
   {% if auto_activa %}
-    <strong>🌙 Actualización automática activada.</strong>
+    <strong>🌙 Actualización automática activada.</strong>{{ info('auto_competencia') }}
     {% if corrida %}
       Última corrida: {{ corrida.inicio|replace('T', ' ') }} · {{ corrida.ok }}/{{ corrida.grupos }} zonas actualizadas
       {% if corrida.creditos_tavily %} · {{ corrida.creditos_tavily }} créditos de Tavily{% endif %}
@@ -31,7 +31,7 @@
 </div>
 
 <div class="form-card">
-  <h3>Buscar propiedades similares con IA</h3>
+  <h3>Buscar propiedades similares con IA{{ info('buscar_comparables') }}</h3>
   <p class="muted">La IA busca en Airbnb, Booking y otras plataformas anuncios parecidos a tu propiedad
     (mismo barrio, ambientes y capacidad). Puede tardar hasta 1 minuto.</p>
   <form method="get" action="{{ url_for('competencia') }}" style="margin-bottom:12px">
@@ -58,7 +58,7 @@
 <div class="stats-grid">
   <div class="stat-card highlight">
     <div class="stat-num">{{ stats.mediana|dinero(stats.moneda) }}</div>
-    <div class="stat-lbl">Mediana por noche ({{ stats.moneda }})</div>
+    <div class="stat-lbl">Mediana por noche ({{ stats.moneda }}){{ info('mediana') }}</div>
   </div>
   <div class="stat-card">
     <div class="stat-num">{{ stats.minimo|dinero(stats.moneda) }}</div>
@@ -86,7 +86,7 @@
 {% if historial|length > 1 %}
 {% set ult = historial[0] %}{% set ant = historial[-1] %}
 <div class="card" style="margin-bottom:16px">
-  <div class="card-title">Tendencia del mercado <span class="muted">· mediana por noche ({{ ult.moneda }}), últimos {{ historial|length }} registros</span></div>
+  <div class="card-title">Tendencia del mercado{{ info('tendencia') }} <span class="muted">· mediana por noche ({{ ult.moneda }}), últimos {{ historial|length }} registros</span></div>
   {% if ant.mediana %}{% set var = ((ult.mediana - ant.mediana) / ant.mediana * 100) %}
   <p>Desde el {{ ant.fecha }} la mediana pasó de {{ ant.mediana|dinero(ant.moneda) }} a {{ ult.mediana|dinero(ult.moneda) }}
     (<strong style="color:{{ '#2d6a46' if var >= 0 else '#9b4a4a' }}">{{ '%+.1f'|format(var) }}%</strong>).</p>
@@ -98,7 +98,7 @@
 {% if registros %}
 <div class="table-wrap">
 <table class="tabla">
-  <thead><tr><th>Plataforma</th><th>Zona aproximada</th><th>Amb.</th><th>Cap.</th>
+  <thead><tr><th>Plataforma</th><th>Zona aproximada{{ info('zona_aprox') }}</th><th>Amb.</th><th>Cap.</th>
              <th>Precio/noche</th><th>Puntaje</th><th>Fecha</th><th>Anuncio</th><th></th></tr></thead>
   <tbody>
   {% for r in registros %}

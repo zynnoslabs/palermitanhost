@@ -19,8 +19,10 @@ import competencia_ia   # ### CAMBIO AQUÍ ###
 import monedas         # ### CAMBIO AQUÍ ###
 import competencia_auto  # ### CAMBIO AQUÍ ###
 import hmac
+import ayuda   # ### CAMBIO AQUÍ ### textos del ícono 'i'
 
 app = Flask(__name__)
+app.jinja_env.globals["info"] = ayuda.info   # ### CAMBIO AQUÍ ### {{ info('clave') }} en las plantillas
 app.secret_key = os.getenv("SECRET_KEY", "cambiar-esto-en-produccion")
 
 ADMIN_USER = os.getenv("ADMIN_USER", "admin")
