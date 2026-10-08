@@ -379,7 +379,23 @@ def serpapi_busquedas_restantes(api_key):
         return None
 
 
-def _serpapi(prop, api_key):
+def _precio_serpapi(p, noches):
+    """### CAMBIO AQUÍ ### Precio por noche: el principal; si no viene, el más bajo de las ofertas
+    (Vrbo, Expedia...); si tampoco, el total de la estadía dividido por las noches."""
+    v = (p.get("rate_per_night") or {}).get("extracted_lowest")
+    if v:
+        return v
+    ofertas = [(o.get("rate_per_night") or {}).get("extracted_lowest") for o in p.get("prices") or []]
+    ofertas = [x for x in ofertas if isinstance(x, (int, float)) and x > 0]
+    if ofertas:
+        return min(ofertas)
+    total = (p.get("total_rate") or {}).get("extracted_lowest")
+    if isinstance(total, (int, float)) and total > 0 and noches:
+        return round(total / noches, 2)
+    return None
+
+
+def _serpapi(prop, api_key, page_token=None):
     barrio = prop.get("barrio") or "Palermo"
     entrada, salida = _fechas_serpapi()
     amb = prop.get("ambientes") or 0
@@ -393,6 +409,8 @@ def _serpapi(prop, api_key):
     }
     if amb and int(amb) > 1:
         params["bedrooms"] = int(amb) - 1   # 2 ambientes = 1 dormitorio
+    if page_token:
+        params["next_page_token"] = page_token   # ### CAMBIO AQUÍ ### segunda página
     r = requests.get(SERPAPI_URL, params=params, timeout=60)
     try:
         data = r.json()
@@ -408,6 +426,7 @@ def _serpapi(prop, api_key):
             return [], params
         raise RuntimeError(f"SerpApi: {err}")
     r.raise_for_status()
+    params["_siguiente"] = (data.get("serpapi_pagination") or {}).get("next_page_token")
     return data.get("properties") or [], params
 
 
@@ -426,11 +445,15 @@ def convertir_serpapi(props, prop, params):
     """Pasa los resultados de Google al formato de comparables (sin IA)."""
     mon = params.get("currency", "USD")
     barrio = prop.get("barrio") or ""
+    try:
+        noches = (date.fromisoformat(params["check_out_date"]) - date.fromisoformat(params["check_in_date"])).days
+    except Exception:
+        noches = None
     crudos = []
     for p in props or []:
         if (p.get("type") or "").lower() not in ("vacation rental", "alquiler vacacional", ""):
             continue
-        precio = (p.get("rate_per_night") or {}).get("extracted_lowest")
+        precio = _precio_serpapi(p, noches)   # ### CAMBIO AQUÍ ###
         if not precio:
             continue
         info = " · ".join(p.get("essential_info") or [])
@@ -455,9 +478,26 @@ def convertir_serpapi(props, prop, params):
 
 
 def _buscar_serpapi(prop, api_key):
-    props, params = _serpapi(prop, api_key)
-    return convertir_serpapi(props, prop, params), {"resultados": len(props),
-                                                     "fechas": f"{params['check_in_date']} a {params['check_out_date']}"}
+    """### CAMBIO AQUÍ ### Hasta SERPAPI_PAGINAS páginas (1 búsqueda cada una). Pide la 2ª solo
+    si la 1ª trajo menos de SERPAPI_MIN_PRECIOS precios válidos."""
+    paginas = int(os.getenv("SERPAPI_PAGINAS", "2") or 2)
+    minimo = int(os.getenv("SERPAPI_MIN_PRECIOS", "10") or 10)
+    todos, usadas, token, params = [], 0, None, {}
+    while usadas < paginas:
+        try:
+            props, params = _serpapi(prop, api_key, token)
+        except Exception:
+            if usadas == 0:
+                raise          # la 1ª falló: que la cadena pase a la siguiente fuente
+            break              # la 2ª falló: nos quedamos con lo de la 1ª
+        usadas += 1
+        todos += props
+        token = params.get("_siguiente")
+        if not token or len(convertir_serpapi(todos, prop, params)) >= minimo:
+            break
+    return convertir_serpapi(todos, prop, params), {"resultados": len(todos), "busquedas": usadas,
+                                                    "fechas": f"{params.get('check_in_date')} a {params.get('check_out_date')}",
+                                                    "crudos": todos, "params": params}
 
 
 def _buscar_groq(prop, resultado):
@@ -509,7 +549,7 @@ def buscar_comparables(prop, tc=None, con_resumen=True):
     if serp_key:
         try:
             comparables, info = _buscar_serpapi(prop, serp_key)
-            resultado["busquedas_serpapi"] = 1
+            resultado["busquedas_serpapi"] = info["busquedas"]
             if comparables:
                 fuentes.append("Google (SerpApi)")
             else:

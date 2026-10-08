@@ -55,7 +55,7 @@ AYUDA = {
     # ── Competencia ────────────────────────────────────────────
     "competencia": "Precios por noche de alojamientos parecidos a los tuyos (mismo barrio, ambientes y capacidad), buscados en internet.",
     "auto_competencia": "Todas las noches el sistema actualiza solo la competencia de cada zona (barrio). Las propiedades del mismo barrio comparten la búsqueda y los precios se acumulan 30 días.",
-    "buscar_comparables": "Busca ahora en Google los alquileres vacacionales del barrio (Airbnb, VRBO, Booking…) con precio por noche. Gasta 1 de las 250 búsquedas gratis del mes.",
+    "buscar_comparables": "Busca ahora en Google los alquileres vacacionales del barrio (Airbnb, VRBO, Booking…) con precio por noche. Gasta 1 o 2 de las 250 búsquedas gratis del mes.",
     "mediana": "El precio del medio: la mitad de la competencia cobra menos y la otra mitad más. Es más confiable que el promedio.",
     "tendencia": "Cómo cambió la mediana del mercado en las últimas búsquedas. Sirve para ver si la zona sube o baja.",
     "zona_aprox": "Las plataformas no muestran la dirección exacta hasta que se reserva; por eso la zona es aproximada.",

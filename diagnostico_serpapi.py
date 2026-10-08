@@ -23,25 +23,31 @@ print("=" * 70)
 antes = ci.serpapi_busquedas_restantes(KEY)
 print(f"Búsquedas disponibles antes: {antes if antes is not None else 'no se pudo consultar'}")
 
+# ### CAMBIO AQUÍ ### ahora usa la búsqueda completa (hasta 2 páginas, precio de las ofertas si falta)
 try:
-    props, params = ci._serpapi(PROP, KEY)
+    comps, info = ci._buscar_serpapi(PROP, KEY)   # 1 búsqueda (2 si hace falta la 2ª página)
+    props, params = info["crudos"], info["params"]
 except Exception as e:
     sys.exit(f"ERROR: {e}")
 
 print(f"Consulta: {params['q']} · {params['check_in_date']} a {params['check_out_date']} · "
       f"{params['adults']} adultos · dormitorios mín.: {params.get('bedrooms', 0)} · moneda {params['currency']}")
-print(f"→ {len(props)} resultados de Google")
+print(f"→ {len(props)} resultados de Google en {info['busquedas']} búsqueda(s)")
 for i, p in enumerate(props[:8]):
-    precio = (p.get("rate_per_night") or {}).get("lowest")
+    precio = ci._precio_serpapi(p, 2)
     fuentes = ", ".join(o.get("source", "?") for o in (p.get("prices") or [])[:3])
     print(f"  [{i}] {p.get('type')} · {p.get('name', '')[:55]} · {precio} · {fuentes}")
     print(f"       {' · '.join(p.get('essential_info') or [])[:110]}")
 
-comps = ci.convertir_serpapi(props, PROP, params)
+sin_precio = [p for p in props if not ci._precio_serpapi(p, 2)]
+if sin_precio:
+    p = sin_precio[0]
+    print(f"  Ejemplo sin precio: claves={sorted(p.keys())}")
+    print(f"     ofertas={[ {k: o.get(k) for k in ('source', 'rate_per_night')} for o in (p.get('prices') or [])[:2] ]}")
 stats = ci.calcular_stats(comps, "USD", None)
 print("=" * 70)
 print("RESUMEN")
-print(f"  Resultados: {len(props)} · con precio por noche válido: {len(comps)}")
+print(f"  Resultados: {len(props)} en {info['busquedas']} búsqueda(s) · con precio por noche válido: {len(comps)}")
 plataformas = {}
 for c in comps:
     plataformas[c["plataforma"]] = plataformas.get(c["plataforma"], 0) + 1
