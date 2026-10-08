@@ -35,8 +35,8 @@ SEARCH_MODEL = os.getenv("GROQ_SEARCH_MODEL", "openai/gpt-oss-120b")
 RESUMEN_MODEL = os.getenv("GROQ_MODEL_RAPIDO", "openai/gpt-oss-20b")   # ### CAMBIO AQUÍ ### modelo rápido
 MIN_COMPARABLES = 3
 # ### CAMBIO AQUÍ ### — sin Zonaprop/Argenprop: ahí "temporario" es alquiler POR MES, no por noche
-DOMINIOS = ["airbnb.com.ar", "airbnb.com", "booking.com", "vrbo.com", "despegar.com.ar",
-            "mercadolibre.com.ar", "listado.mercadolibre.com.ar", "inmuebles.mercadolibre.com.ar"]
+# ### CAMBIO AQUÍ ### — sin MercadoLibre: en el diagnóstico solo trajo alquileres mensuales y ventas
+DOMINIOS = ["airbnb.com.ar", "airbnb.com", "booking.com", "vrbo.com", "despegar.com.ar"]
 RE_NOCHE = re.compile(r"\b(noche|noches|night|nights|nightly|por d[ií]a|diario)\b")
 RE_OTRA_MONEDA = re.compile(r"(r\$|\bmxn\b|\bbrl\b|€|\beur\b|\bclp\b|\buyu\b|\bcop\b|£|\bmx\$)")
 RE_MES = re.compile(r"\b(mes|meses|mensual|mensuales|month|monthly|expensas|contrato)\b")
@@ -215,14 +215,12 @@ Usá solo estos números, no inventes otros."""
 
 # ════════════ ### CAMBIO AQUÍ ### TAVILY ════════════
 def _consultas_tavily(prop):
+    # ### CAMBIO AQUÍ ### — las 2 variantes que mejor funcionaron en el diagnóstico (A y C).
+    # Agregar ambientes o capacidad a la consulta dio 0 precios por noche.
     barrio = prop.get("barrio") or "Palermo"
-    amb = prop.get("ambientes")
-    cap = prop.get("capacidad")
-    amb_txt = f"{amb} ambientes " if amb else ""
-    cap_txt = f"{cap} personas " if cap else ""
     return [
-        f"alojamiento por noche departamento {amb_txt}{barrio} Buenos Aires {cap_txt}precio",
-        f"{barrio} Buenos Aires apartment {cap_txt}price per night",
+        f"departamento por noche {barrio} Buenos Aires",
+        f"{barrio} Buenos Aires apartment price per night",
     ]
 
 
@@ -397,14 +395,15 @@ def buscar_comparables(prop, tc=None, con_resumen=True):
             resultado["tokens"] = info["tokens"]
             if comparables:
                 fuentes.append("Tavily")
-            if len(comparables) < MIN_COMPARABLES:   # ### CAMBIO AQUÍ ### detalle para diagnosticar
+            if not comparables:   # ### CAMBIO AQUÍ ### pocos resultados es normal: se acumulan día a día
                 errores.append(f"Tavily: {info['resultados']} resultados, solo {len(comparables)} con precio por noche "
                                f"verificado ({info['mensuales']} eran precios mensuales, {info['dudosos']} dudosos)")
         except Exception as e:
             errores.append(f"Tavily: {ia.explicar_error(e) if 'Groq' in str(e) or '429' in str(e) else e}")
 
     # 2) Respaldo Groq (caro) solo si Tavily no trajo suficientes
-    if len(comparables) < MIN_COMPARABLES and os.getenv("COMPETENCIA_RESPALDO_GROQ", "1") == "1":
+    # ### CAMBIO AQUÍ ### — apagado por defecto: gasta ~190.000 tokens y agota el cupo gratis de Groq
+    if not comparables and os.getenv("COMPETENCIA_RESPALDO_GROQ", "0") == "1":
         try:
             extra = _buscar_groq(prop, resultado)
             if extra:

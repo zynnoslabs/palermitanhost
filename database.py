@@ -162,6 +162,16 @@ def init_db():
             )
         """)
 
+        # ### CAMBIO AQUÍ ### — intentos fallidos de login (para bloquear a quien prueba contraseñas)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS login_intentos (
+                ip               TEXT PRIMARY KEY,
+                fallos           INTEGER DEFAULT 0,
+                ultimo_fallo     TIMESTAMPTZ,
+                bloqueado_hasta  TIMESTAMPTZ
+            )
+        """)
+
         # ### CAMBIO AQUÍ ### — reseñas de huéspedes (tarjeta "Reseñas pendientes" del dashboard)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS resenas (

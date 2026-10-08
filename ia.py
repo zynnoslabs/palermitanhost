@@ -147,6 +147,7 @@ Reglas:
 3. El tono debe ser cordial y profesional.
 4. Respondé en el mismo idioma en que escribió el huésped.
 5. Sé breve y directo, pero respondé con una oración completa y amable (no solo el dato suelto).
+6. Los nombres de personas aparecen como "Huésped #número" por privacidad: si nombrás a alguien, escribilo exactamente así.
 
 Respuesta:"""
 
@@ -161,18 +162,21 @@ Respuesta:"""
 
 
 # ### CAMBIO AQUÍ ### — borrador de respuesta pública a una reseña
-def responder_resena(texto_resena, puntaje=None, nombre_propiedad="la propiedad"):
+def responder_resena(texto_resena, puntaje=None, nombre_propiedad="la propiedad", huesped_alias=None):
     """Devuelve un borrador de respuesta del anfitrión a una reseña. No inventa datos."""
     estrellas = f"Puntaje: {puntaje}/5" if puntaje else "Puntaje: no informado"
     prompt = f"""Sos el anfitrión de {nombre_propiedad}, un alquiler temporario en Buenos Aires.
 Escribí una respuesta pública, breve (máximo 4 oraciones), cordial y profesional a esta reseña.
 {estrellas}
+{f"Quien escribió la reseña: {huesped_alias}" if huesped_alias else ""}
 Reseña: "{texto_resena}"
 
 Reglas:
 1. Respondé en el mismo idioma de la reseña.
 2. Agradecé. Si hay una queja, reconocela sin discutir y decí que se va a tener en cuenta.
 3. No prometas descuentos ni inventes datos.
+4. Los nombres de personas aparecen como "Huésped #número" por privacidad: si nombrás a alguien,
+   escribilo exactamente así (el sistema lo cambia por el nombre real).
 Respuesta:"""
     try:
         r = completar([{"role": "user", "content": prompt}], GROQ_MODEL_RAPIDO, 1200, 0.4)

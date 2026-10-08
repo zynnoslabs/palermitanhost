@@ -54,11 +54,15 @@ AYUDA = {
     "informes": "Informes generados por la IA. Podés verlos, imprimirlos o descargarlos en PDF y Excel.",
     # ── Competencia ────────────────────────────────────────────
     "competencia": "Precios por noche de alojamientos parecidos a los tuyos (mismo barrio, ambientes y capacidad), buscados en internet.",
-    "auto_competencia": "Todas las noches el sistema actualiza solo la competencia de cada zona (barrio + ambientes). Las propiedades de la misma zona comparten la búsqueda.",
+    "auto_competencia": "Todas las noches el sistema actualiza solo la competencia de cada zona (barrio). Las propiedades del mismo barrio comparten la búsqueda y los precios se acumulan 30 días.",
     "buscar_comparables": "Busca ahora en Airbnb, Booking, Despegar y otros. Solo se aceptan precios que digan 'por noche': los mensuales se descartan.",
     "mediana": "El precio del medio: la mitad de la competencia cobra menos y la otra mitad más. Es más confiable que el promedio.",
     "tendencia": "Cómo cambió la mediana del mercado en las últimas búsquedas. Sirve para ver si la zona sube o baja.",
     "zona_aprox": "Las plataformas no muestran la dirección exacta hasta que se reserva; por eso la zona es aproximada.",
+    # ### CAMBIO AQUÍ ### modo mixto de competencia
+    "referencia_zona": "Mediana de los precios por noche de la zona: los que encontró la IA en los últimos 30 días más los competidores que cargaste vos. Cuantos más datos, más confiable.",
+    "respaldo": "Descarga todas las tablas (propiedades, reservas, reseñas, competencia...) en archivos CSV. Además el sistema hace una copia automática cifrada todas las semanas. Hacelo una vez por mes como copia extra.",
+    "competidor_directo": "Un anuncio parecido al tuyo que conocés. Cargá su precio por noche con fechas puestas en Airbnb. Nunca se borra solo.",
 }
 
 

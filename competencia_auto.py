@@ -21,7 +21,8 @@ AR = timezone(timedelta(hours=-3))   # ### CAMBIO AQUÍ ### hora de Buenos Aires
 
 
 def clave_grupo(p):
-    return ((p.get("barrio") or "").strip().lower(), p.get("ambientes") or 0, (p.get("tipo") or "").lower())
+    # ### CAMBIO AQUÍ ### solo por barrio: la búsqueda ya no usa ambientes (gasta menos créditos)
+    return (p.get("barrio") or "").strip().lower()
 
 
 def agrupar(propiedades):
@@ -33,10 +34,35 @@ def agrupar(propiedades):
     return list(grupos.values())
 
 
+DIAS_VIGENCIA = int(os.getenv("COMPETENCIA_DIAS", "30") or 30)   # ### CAMBIO AQUÍ ###
+
+
+def comparables_vigentes(pid, barrio):
+    """### CAMBIO AQUÍ ### Precios que cuentan para la referencia de la zona:
+    los que encontró la IA en los últimos DIAS_VIGENCIA días + los cargados a mano."""
+    desde = (datetime.now(AR).date() - timedelta(days=DIAS_VIGENCIA)).isoformat()
+    return db.query("""
+        SELECT * FROM competencia
+        WHERE (propiedad_id=%s OR (propiedad_id IS NULL AND barrio=%s))
+          AND precio_noche > 0
+          AND (COALESCE(origen,'manual') <> 'ia' OR COALESCE(fecha,'') >= %s)
+        ORDER BY precio_noche
+    """, (pid, barrio, desde))
+
+
 def guardar_resultado(prop, res, tc):
-    """Guarda los comparables, el resumen y la foto del día para UNA propiedad."""
+    """Guarda los comparables, el resumen y la foto del día para UNA propiedad.
+    ### CAMBIO AQUÍ ### Ya no borra lo anterior: los precios se ACUMULAN día a día
+    (se borran solo los de más de DIAS_VIGENCIA días, y si un anuncio vuelve a aparecer
+    se reemplaza por el precio nuevo, así no se cuenta dos veces)."""
     pid = prop["id"]
-    db.execute("DELETE FROM competencia WHERE propiedad_id=%s AND origen='ia'", (pid,))
+    desde = (datetime.now(AR).date() - timedelta(days=DIAS_VIGENCIA)).isoformat()
+    db.execute("DELETE FROM competencia WHERE propiedad_id=%s AND origen='ia' AND COALESCE(fecha,'') < %s",
+               (pid, desde))
+    links = [c["link"] for c in res["comparables"] if c.get("link")]
+    if links:
+        db.execute("DELETE FROM competencia WHERE propiedad_id=%s AND origen='ia' AND link = ANY(%s)",
+                   (pid, links))
     db.execute_many("""
         INSERT INTO competencia (propiedad_id,barrio,tipo,ambientes,capacidad,precio_noche,fecha,
                                  fuente,notas,plataforma,titulo,zona,link,rating,origen,moneda)
@@ -49,7 +75,8 @@ def guardar_resultado(prop, res, tc):
     ) for c in res["comparables"]])
 
     mon = prop.get("moneda") or "ARS"
-    stats = competencia_ia.calcular_stats(res["comparables"], mon, tc)
+    # ### CAMBIO AQUÍ ### la referencia se calcula con TODO lo acumulado (IA 30 días + manual)
+    stats = competencia_ia.calcular_stats(comparables_vigentes(pid, prop.get("barrio")), mon, tc)
     resumen = res.get("resumen") or ""
     if not resumen and stats:
         resumen = competencia_ia._resumen_ia(prop, stats)

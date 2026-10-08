@@ -20,13 +20,40 @@ import monedas         # ### CAMBIO AQUÍ ###
 import competencia_auto  # ### CAMBIO AQUÍ ###
 import hmac
 import ayuda   # ### CAMBIO AQUÍ ### textos del ícono 'i'
+import privacidad   # ### CAMBIO AQUÍ ### nombres de huéspedes ocultos para la IA
+
+from werkzeug.middleware.proxy_fix import ProxyFix   # ### CAMBIO AQUÍ ###
 
 app = Flask(__name__)
 app.jinja_env.globals["info"] = ayuda.info   # ### CAMBIO AQUÍ ### {{ info('clave') }} en las plantillas
-app.secret_key = os.getenv("SECRET_KEY", "cambiar-esto-en-produccion")
 
-ADMIN_USER = os.getenv("ADMIN_USER", "admin")
-ADMIN_PASS = os.getenv("ADMIN_PASS", "admin123")
+# ### CAMBIO AQUÍ ### — SEGURIDAD: sin contraseña ni clave secreta propias, el sistema NO arranca.
+# Antes, si faltaban, entraba cualquiera con admin / admin123.
+def _variable_obligatoria(nombre, largo_minimo):
+    valor = os.getenv(nombre) or ""
+    if len(valor) < largo_minimo or valor in ("admin123", "cambiar-esto-en-produccion", "cambiar-esto"):
+        raise RuntimeError(
+            f"Falta configurar {nombre} (mínimo {largo_minimo} caracteres) en las variables de entorno "
+            f"de Render o en el archivo .env. Por seguridad el sistema no arranca sin esto.")
+    return valor
+
+app.secret_key = _variable_obligatoria("SECRET_KEY", 16)
+ADMIN_USER = _variable_obligatoria("ADMIN_USER", 3)
+ADMIN_PASS = _variable_obligatoria("ADMIN_PASS", 10)
+
+# ### CAMBIO AQUÍ ### — cookie de sesión segura: solo por https (en Render), no la lee JavaScript,
+# no viaja en pedidos desde otras páginas y vence a las 12 horas.
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=bool(os.getenv("RENDER")),   # Render define RENDER=true; en tu compu (http) no
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
+)
+# Render está detrás de un proxy: así se ve la IP real del visitante (para el bloqueo de login)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+
+MAX_FALLOS_LOGIN = 5
+MINUTOS_BLOQUEO = 15
 
 # ── Blueprints ───────────────────────────────────────────────────────────────
 from asistente_route import asistente_bp, _cargar_historial   # ### CAMBIO AQUÍ ###
@@ -104,6 +131,18 @@ def tipo_cambio():
     return redirect(request.referrer or url_for("dashboard"))
 
 
+# ### CAMBIO AQUÍ ### alias de huéspedes ("Huésped #12") para no mandar nombres reales a la IA
+def _alias_huespedes(extra=None):
+    filas = db.query("""
+        SELECT TRIM(huesped_nombre) AS n, MIN(id) AS i FROM reservas
+        WHERE COALESCE(TRIM(huesped_nombre),'') <> '' GROUP BY TRIM(huesped_nombre)
+    """)
+    alias = privacidad.armar_alias([(f["n"], f["i"]) for f in filas])
+    if extra and extra.strip() and extra.strip() not in alias:
+        alias[extra.strip()] = "Huésped #0"
+    return alias
+
+
 # ── Inicializar DB al arrancar ───────────────────────────────────────────────
 with app.app_context():
     db.init_db()
@@ -123,13 +162,47 @@ def login_required(f):
 # LOGIN
 # ════════════════════════════════════════════════════════════════════════════
 
+# ### CAMBIO AQUÍ ### — bloqueo después de 5 intentos fallidos (15 minutos)
+def _minutos_bloqueado(ip):
+    row = db.query_one("""
+        SELECT CEIL(EXTRACT(EPOCH FROM (bloqueado_hasta - NOW())) / 60) AS m
+        FROM login_intentos WHERE ip=%s AND bloqueado_hasta > NOW()
+    """, (ip,))
+    return int(row["m"]) if row and row["m"] else 0
+
+
+def _registrar_fallo(ip):
+    # Los fallos de hace más de 15 minutos no cuentan (se reinicia el contador)
+    db.execute("""
+        INSERT INTO login_intentos (ip, fallos, ultimo_fallo) VALUES (%s, 1, NOW())
+        ON CONFLICT (ip) DO UPDATE SET
+          fallos = CASE WHEN login_intentos.ultimo_fallo < NOW() - INTERVAL '15 minutes'
+                        THEN 1 ELSE login_intentos.fallos + 1 END,
+          ultimo_fallo = NOW()
+    """, (ip,))
+    db.execute("""
+        UPDATE login_intentos SET bloqueado_hasta = NOW() + (%s * INTERVAL '1 minute'), fallos = 0
+        WHERE ip=%s AND fallos >= %s
+    """, (MINUTOS_BLOQUEO, ip, MAX_FALLOS_LOGIN))
+
+
 @app.route("/login", methods=["GET","POST"])
 def login():
     if request.method == "POST":
-        if (request.form.get("usuario") == ADMIN_USER and
-                request.form.get("password") == ADMIN_PASS):
+        ip = request.remote_addr or "desconocida"
+        espera = _minutos_bloqueado(ip)
+        if espera:
+            flash(f"Demasiados intentos fallidos. Probá de nuevo en {espera} minuto(s).", "error")
+            return render_template("login.html"), 429
+        usuario_ok = hmac.compare_digest((request.form.get("usuario") or "").encode(), ADMIN_USER.encode())
+        clave_ok = hmac.compare_digest((request.form.get("password") or "").encode(), ADMIN_PASS.encode())
+        if usuario_ok and clave_ok:
+            db.execute("DELETE FROM login_intentos WHERE ip=%s", (ip,))
+            session.clear()
             session["logged_in"] = True
+            session.permanent = True   # vence a las 12 horas
             return redirect(url_for("dashboard"))
+        _registrar_fallo(ip)
         flash("Usuario o contraseña incorrectos.", "error")
     return render_template("login.html")
 
@@ -188,9 +261,10 @@ def dashboard():
         hoy - timedelta(days=6), hoy, unidades_activas)
 
     return render_template("dashboard.html",
-        propiedades=propiedades, stats=stats, por_mes=json.dumps(por_mes),
+        propiedades=propiedades, stats=stats, por_mes=por_mes,   # ### CAMBIO AQUÍ ### se escapa con |tojson
+       
         desde=desde, hasta=hasta, prop_id=prop_id, informes=informes,
-        proximas=proximas, resenas_pend=resenas_pend, ocup_7=json.dumps(ocup_7))
+        proximas=proximas, resenas_pend=resenas_pend, ocup_7=ocup_7)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -447,16 +521,18 @@ def competencia():
         f = request.form
         db.execute("""
             INSERT INTO competencia (barrio,tipo,ambientes,capacidad,precio_noche,fecha,fuente,notas,
-                                     link,zona,origen,moneda)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'manual',%s)
+                                     link,zona,origen,moneda,propiedad_id,plataforma,titulo)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'manual',%s,%s,%s,%s)
         """, (
             f.get("barrio"), f.get("tipo"),
             f.get("ambientes") or None, f.get("capacidad") or None,
             float(f.get("precio_noche",0) or 0),
             f.get("fecha") or date.today().isoformat(), f.get("fuente",""), f.get("notas",""),
-            f.get("link",""), f.get("zona",""), f.get("moneda","ARS")   # ### CAMBIO AQUÍ ###
+            f.get("link",""), f.get("zona",""), f.get("moneda","ARS"),   # ### CAMBIO AQUÍ ###
+            request.args.get("pid", type=int),   # ### CAMBIO AQUÍ ### queda asociado a la propiedad
+            f.get("plataforma") or "Manual", f.get("titulo","")
         ))
-        flash("Precio de competencia cargado.", "ok")
+        flash("Competidor cargado. Ya cuenta para el precio de referencia de la zona.", "ok")
         return redirect(url_for("competencia", pid=request.args.get("pid")))
 
     propiedades = db.query("SELECT * FROM propiedades ORDER BY nombre")
@@ -467,11 +543,8 @@ def competencia():
 
     registros, resumen, stats = [], None, None
     if prop_sel:
-        registros = db.query("""
-            SELECT * FROM competencia
-            WHERE propiedad_id=%s OR (propiedad_id IS NULL AND barrio=%s)
-            ORDER BY precio_noche
-        """, (pid, prop_sel.get("barrio")))
+        # ### CAMBIO AQUÍ ### solo los vigentes: IA de los últimos 30 días + cargados a mano
+        registros = competencia_auto.comparables_vigentes(pid, prop_sel.get("barrio"))
         row = db.query_one("SELECT valor FROM config WHERE clave=%s",
                            (f"competencia_resumen_{pid}",))
         if row:
@@ -486,7 +559,10 @@ def competencia():
     return render_template("competencia.html", propiedades=propiedades,
                            prop_sel=prop_sel, registros=registros,
                            resumen=resumen, stats=stats, historial=hist,
-                           historial_json=json.dumps(list(reversed(hist))),
+                           n_ia=sum(1 for r in registros if r.get("origen") == "ia"),   # ### CAMBIO AQUÍ ###
+                           n_manual=sum(1 for r in registros if r.get("origen") != "ia"),
+                           dias_vigencia=competencia_auto.DIAS_VIGENCIA,
+                           historial_json=list(reversed(hist)),   # ### CAMBIO AQUÍ ### |tojson
                            corrida=competencia_auto.ultima_corrida(),
                            auto_activa=bool(os.getenv("TAREAS_TOKEN")),
                            tavily_activo=bool(os.getenv("TAVILY_API_KEY")))
@@ -517,7 +593,9 @@ def buscar_competencia():
 @app.route("/tareas/competencia", methods=["GET", "POST"])
 def tarea_competencia():
     token_ok = os.getenv("TAREAS_TOKEN")
-    token = request.args.get("token") or request.headers.get("X-Token") or ""
+    # ### CAMBIO AQUÍ ### — preferí mandarlo como encabezado X-Token (no queda en los registros);
+    # ?token= se sigue aceptando para no romper una tarea ya configurada.
+    token = request.headers.get("X-Token") or request.args.get("token") or ""
     if not token_ok or not hmac.compare_digest(token, token_ok):
         return jsonify({"ok": False, "error": "No autorizado"}), 403
     competencia_auto.correr_en_segundo_plano()
@@ -557,10 +635,7 @@ def precios():
     resultado, mercado = None, None
 
     if prop_sel:
-        comps = db.query("""
-            SELECT * FROM competencia
-            WHERE (propiedad_id=%s OR (propiedad_id IS NULL AND barrio=%s)) AND precio_noche > 0
-        """, (pid, prop_sel.get("barrio")))
+        comps = competencia_auto.comparables_vigentes(pid, prop_sel.get("barrio"))   # ### CAMBIO AQUÍ ###
         # ### CAMBIO AQUÍ ### — todo en la moneda de la propiedad (convierte con el tipo de cambio)
         st = competencia_ia.calcular_stats(comps, prop_sel.get("moneda") or "ARS", monedas.tc_valor()) if comps else None
         if st:
@@ -619,11 +694,13 @@ def asistente():
             prop = db.query_one("SELECT * FROM propiedades WHERE id=%s", (pid,))
             if prop:
                 try:
+                    alias = _alias_huespedes()   # ### CAMBIO AQUÍ ### sin nombres a Groq
                     respuesta, pendiente = ia.responder_huesped(
-                        pid, mensaje,
+                        pid, privacidad.ocultar(mensaje, alias)[0],
                         prop.get("info_huespedes",""),
                         prop.get("nombre","la propiedad")
                     )
+                    respuesta = privacidad.mostrar(respuesta, alias)
                     cid = db.execute("""
                         INSERT INTO consultas_huespedes
                         (propiedad_id, mensaje, respuesta, pendiente)
@@ -684,7 +761,11 @@ def nueva_resena():
     prop = db.query_one("SELECT nombre FROM propiedades WHERE id=%s", (pid,))
     puntaje = f.get("puntaje", type=int)
     try:
-        borrador = ia.responder_resena(texto, puntaje, prop["nombre"] if prop else "la propiedad")
+        alias = _alias_huespedes(f.get("huesped"))   # ### CAMBIO AQUÍ ### sin nombres a Groq
+        borrador = ia.responder_resena(privacidad.ocultar(texto, alias)[0], puntaje,
+                                       prop["nombre"] if prop else "la propiedad",
+                                       alias.get((f.get("huesped") or "").strip()))
+        borrador = privacidad.mostrar(borrador, alias)
     except Exception as e:
         borrador = ""
         flash(f"Reseña guardada, pero no se pudo generar la respuesta con IA: {e}", "error")
@@ -714,6 +795,35 @@ def eliminar_resena(rid):
 # ════════════════════════════════════════════════════════════════════════════
 # INFORMES
 # ════════════════════════════════════════════════════════════════════════════
+
+# ### CAMBIO AQUÍ ### — COPIA DE SEGURIDAD: descarga un .zip con todas las tablas en CSV
+# (se abren con Excel). Complementa la copia automática semanal de GitHub.
+TABLAS_RESPALDO_EXCLUIDAS = {"login_intentos"}
+
+
+@app.route("/respaldo/descargar")
+@login_required
+def descargar_respaldo():
+    import csv, io, zipfile
+    from flask import send_file
+    tablas = [r["table_name"] for r in db.query("""
+        SELECT table_name FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name
+    """) if r["table_name"] not in TABLAS_RESPALDO_EXCLUIDAS]
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for t in tablas:
+            filas = db.query(f'SELECT * FROM "{t}" ORDER BY 1')   # nombre sacado de la propia base
+            txt = io.StringIO()
+            if filas:
+                w = csv.DictWriter(txt, fieldnames=list(filas[0].keys()))
+                w.writeheader()
+                w.writerows(filas)
+            z.writestr(f"{t}.csv", "\ufeff" + txt.getvalue())   # \ufeff: Excel lee bien los acentos
+    buf.seek(0)
+    nombre = f"palermitanhost-respaldo-{datetime.now().strftime('%Y-%m-%d')}.zip"
+    return send_file(buf, mimetype="application/zip", as_attachment=True, download_name=nombre)
+
 
 @app.route("/informes")
 @login_required
@@ -788,4 +898,5 @@ def eliminar_informe(iid):
 
 # ════════════════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    # ### CAMBIO AQUÍ ### solo en tu compu y sin modo debug (la consola de debug permite ejecutar código)
+    app.run(debug=os.getenv("FLASK_DEBUG") == "1", host="127.0.0.1", port=5000)

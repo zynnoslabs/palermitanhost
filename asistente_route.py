@@ -6,6 +6,7 @@ from flask import Blueprint, request, jsonify, session
 from functools import wraps
 import json
 import monedas   # ### CAMBIO AQUÍ ###
+import privacidad   # ### CAMBIO AQUÍ ### los nombres de huéspedes no viajan a Groq
 import ia
 from groq import Groq
 import os
@@ -58,7 +59,7 @@ def release_db(conn):
     _db_mod._release(conn)
 
 
-def build_context(db):
+def build_context(db, alias=None, mencionados=()):
     """
     Construye el contexto completo del negocio para el sistema prompt.
     Incluye propiedades, reservas recientes, métricas y referencia de mercado.
@@ -162,10 +163,27 @@ def build_context(db):
     for r in reservas[:20]:
         rd = dict(zip(cols_res, r))
         res_lines.append(
-            f"- {rd['propiedad_nombre']} | {rd['huesped_nombre']} | "
+            # ### CAMBIO AQUÍ ### alias en vez del nombre real
+            f"- {rd['propiedad_nombre']} | {(alias or {}).get((rd['huesped_nombre'] or '').strip(), 'Huésped sin nombre')} | "
             f"{rd['fecha_inicio']} → {rd['fecha_fin']} ({rd['noches']} noches) | "
             f"{monedas.formatear(rd['precio_total'] or 0, rd['moneda'])} | {rd['estado']}"
         )
+
+    # ### CAMBIO AQUÍ ### si Adriano nombró a un huésped, se agregan TODAS sus reservas (con alias)
+    lineas_mencion = []
+    nombres_mencion = [n for n, a in (alias or {}).items() if a in mencionados]
+    if nombres_mencion:
+        cur = db.cursor()   # ### CAMBIO AQUÍ ### el cursor anterior ya se cerró
+        cur.execute("""
+            SELECT r.huesped_nombre, p.nombre, r.fecha_inicio, r.fecha_fin, r.noches,
+                   r.ingreso_neto, COALESCE(r.moneda,'ARS'), COALESCE(r.estado,'completada')
+            FROM reservas r JOIN propiedades p ON r.propiedad_id = p.id
+            WHERE TRIM(r.huesped_nombre) = ANY(%s) ORDER BY r.fecha_inicio
+        """, (nombres_mencion,))
+        for h, pn, fi, ff, n, monto, mon, est in cur.fetchall():
+            lineas_mencion.append(f"- {alias.get((h or '').strip())} | {pn} | {fi} → {ff} ({n} noches) | "
+                                  f"{monedas.formatear(monto or 0, mon)} | {est}")
+        cur.close()
 
     import competencia_ia
     mercado_lineas = []
@@ -190,6 +208,9 @@ estratégicas y responder con precisión usando los datos reales del negocio.
 ═══ ÚLTIMAS 20 RESERVAS ═══
 {chr(10).join(res_lines) or "Sin reservas cargadas aún."}
 
+═══ RESERVAS DE LOS HUÉSPEDES QUE SE MENCIONAN ═══
+{chr(10).join(lineas_mencion) or "Ninguno mencionado."}
+
 ═══ MÉTRICAS GLOBALES (Adriano cobra en pesos y en dólares) ═══
 - Total reservas: {total_res}
 - Ingresos por moneda:
@@ -209,6 +230,8 @@ estratégicas y responder con precisión usando los datos reales del negocio.
 - Si detectas algo preocupante (ocupación baja, precio fuera de mercado), señálalo.
 - Chat con huéspedes: {"ACTIVO" if chat_activo else "DESACTIVADO (próxima versión)"}.
 - No inventes datos. Si algo no está en el sistema, dilo claramente.
+- Los huéspedes aparecen como "Huésped #número" por privacidad. Nombralos SIEMPRE así,
+  exactamente con ese formato (el sistema le muestra a Adriano el nombre real).
 """
     return system_prompt
 
@@ -223,8 +246,27 @@ def chat():
         return jsonify({"error": "Mensaje vacío"}), 400
 
     db = get_db()
+    # ### CAMBIO AQUÍ ### alias de huéspedes: el nombre real nunca sale del sistema
+    alias = {}
     try:
-        system_prompt = build_context(db)
+        cur = db.cursor()
+        cur.execute("SELECT TRIM(huesped_nombre), MIN(id) FROM reservas "
+                    "WHERE COALESCE(TRIM(huesped_nombre),'') <> '' GROUP BY TRIM(huesped_nombre)")
+        alias = privacidad.armar_alias(cur.fetchall())
+    except Exception as e:
+        db.rollback()
+        print(f"[asistente] Error armando alias: {e}")
+    historial = _cargar_historial()
+    historial.append({"role": "user", "content": mensaje})
+    if len(historial) > MAX_HISTORIAL * 2:
+        historial = historial[-(MAX_HISTORIAL * 2):]
+    enviados, mencionados = [], set()
+    for m in historial:
+        txt, usados = privacidad.ocultar(m["content"], alias)
+        enviados.append({"role": m["role"], "content": txt})
+        mencionados |= usados
+    try:
+        system_prompt = build_context(db, alias, mencionados)
     except Exception as e:
         db.rollback()
         print(f"[asistente] Error construyendo contexto: {e}")
@@ -236,19 +278,11 @@ def chat():
     finally:
         release_db(db)
 
-    # ── Historial de sesión ──────────────────────────────────────────────────
-    historial = _cargar_historial()
-    historial.append({"role": "user", "content": mensaje})
-
-    # Mantener solo los últimos MAX_HISTORIAL turnos
-    if len(historial) > MAX_HISTORIAL * 2:
-        historial = historial[-(MAX_HISTORIAL * 2):]
-
-    messages = [{"role": "system", "content": system_prompt}] + historial
+    messages = [{"role": "system", "content": system_prompt}] + enviados   # ### CAMBIO AQUÍ ### sin nombres
 
     try:
         resp = ia.completar(messages, CHAT_MODEL, 3000, 0.4)   # ### CAMBIO AQUÍ ### con respaldo de modelo
-        respuesta = ia.texto_respuesta(resp)
+        respuesta = privacidad.mostrar(ia.texto_respuesta(resp), alias)   # ### CAMBIO AQUÍ ### alias → nombre real
     except Exception as e:
         print(f"[asistente] Error Groq: {e}")
         respuesta = ia.explicar_error(e)   # ### CAMBIO AQUÍ ### mensaje claro (límite de uso, clave inválida, etc.)

@@ -32,8 +32,11 @@
 
 <div class="form-card">
   <h3>Buscar propiedades similares con IA{{ info('buscar_comparables') }}</h3>
-  <p class="muted">La IA busca en Airbnb, Booking y otras plataformas anuncios parecidos a tu propiedad
-    (mismo barrio, ambientes y capacidad). Puede tardar hasta 1 minuto.</p>
+  {# ### CAMBIO AQUÍ ### explica el modo mixto #}
+  <p class="muted">La IA busca en Airbnb, Booking y otras plataformas precios por noche del mismo barrio.
+    Encuentra pocos por búsqueda (las plataformas no muestran precios sin fechas), así que se van
+    <strong>acumulando día a día</strong> durante {{ dias_vigencia }} días. Sumá abajo tus competidores directos
+    para que la referencia sea más precisa. Puede tardar hasta 1 minuto.</p>
   <form method="get" action="{{ url_for('competencia') }}" style="margin-bottom:12px">
     <div class="form-group">
       <label>Propiedad</label>
@@ -54,6 +57,10 @@
 </div>
 
 {% if stats %}
+{# ### CAMBIO AQUÍ ### precio de referencia de la zona (IA acumulada + carga manual) #}
+<div class="card-title" style="margin:6px 0 8px">Precio de referencia de la zona{{ info('referencia_zona') }}
+  <span class="muted">· {{ stats.cantidad }} precios: {{ n_ia }} de la IA (últimos {{ dias_vigencia }} días) y {{ n_manual }} cargados por vos</span></div>
+{% if stats.cantidad < 5 %}<div class="alert alert-warn">Todavía hay pocos datos ({{ stats.cantidad }}). Tomalo como orientación: la referencia mejora a medida que se acumulan búsquedas o si cargás tus competidores directos.</div>{% endif %}
 {% if stats.sin_convertir %}<div class="alert alert-warn">{{ stats.sin_convertir }} anuncios están en otra moneda y no se incluyeron. Cargá el tipo de cambio (arriba a la derecha).</div>{% endif %}
 <div class="stats-grid">
   <div class="stat-card highlight">
@@ -105,7 +112,7 @@
   {% set url = r.link or (r.fuente if r.fuente and r.fuente.startswith('http') else '') %}
   <tr>
     <td>{{ r.plataforma or (r.fuente[:20] if r.fuente and not r.fuente.startswith('http') else 'Manual') }}
-        {% if r.origen == 'ia' %}<span class="badge badge-arena">IA</span>{% endif %}</td>
+        {% if r.origen == 'ia' %}<span class="badge badge-arena">IA</span>{% else %}<span class="badge badge-ok">Tuyo</span>{% endif %}</td>
     <td>{{ r.zona or r.barrio or '—' }}{% if r.titulo %}<br><small class="muted">{{ r.titulo[:60] }}</small>{% endif %}</td>
     <td>{{ r.ambientes or '—' }}</td>
     <td>{{ r.capacidad or '—' }}</td>
@@ -133,10 +140,14 @@
 <div class="card"><p class="muted">Todavía no hay datos de competencia para esta propiedad. Tocá “Buscar comparables con IA”.</p></div>
 {% endif %}
 
-<details class="form-card" style="margin-top:20px">
-  <summary style="cursor:pointer;font-weight:600">Agregar un anuncio a mano (opcional)</summary>
+{# ### CAMBIO AQUÍ ### carga manual de competidores directos (abierta si todavía no hay ninguno) #}
+<details class="form-card" style="margin-top:20px" {% if prop_sel and not n_manual %}open{% endif %}>
+  <summary style="cursor:pointer;font-weight:600">Agregar un competidor directo{{ info('competidor_directo') }}</summary>
+  <p class="muted" style="margin-top:8px">Abrí en Airbnb 3 a 5 anuncios parecidos al tuyo, poné fechas y copiá acá el precio por noche. Con 2 minutos por semana alcanza.</p>
   <form method="post" action="{{ url_for('competencia', pid=prop_sel.id if prop_sel else None) }}" class="form-grid" style="margin-top:12px">
     <div class="form-group"><label>Barrio</label><input type="text" name="barrio" value="{{ prop_sel.barrio if prop_sel and prop_sel.barrio else '' }}" required></div>
+    <div class="form-group"><label>Plataforma</label><select name="plataforma"><option>Airbnb</option><option>Booking</option><option>Otra</option></select></div>
+    <div class="form-group"><label>Nombre del anuncio</label><input type="text" name="titulo" placeholder="Ej: Loft luminoso en Soho"></div>
     <div class="form-group"><label>Zona / referencia</label><input type="text" name="zona" placeholder="Ej: cerca de Plaza Serrano"></div>
     <div class="form-group"><label>Tipo</label>
       <select name="tipo">
@@ -165,7 +176,7 @@
 (function(){
   var el = document.getElementById('chartHist');
   if (!el || typeof Chart === 'undefined') return;
-  var h = {{ historial_json|safe }};
+  var h = {{ historial_json|tojson }};   // ### CAMBIO AQUÍ ###
   new Chart(el, {type: 'line',
     data: {labels: h.map(function(x){ return x.fecha.slice(5).split('-').reverse().join('/'); }),
       datasets: [{label: 'Mediana', data: h.map(function(x){ return x.mediana; }), borderColor: '#2a2a1e', tension: .3},

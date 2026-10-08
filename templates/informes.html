@@ -18,10 +18,20 @@
   {% endif %}
 </div>
 
+{% if not informe %}
+{# ### CAMBIO AQUÍ ### copia de seguridad descargable #}
+<div class="card" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+  <div><strong>Copia de seguridad</strong>{{ info('respaldo') }}<br>
+    <span class="muted" style="font-size:.85rem">Todos los datos del sistema en un .zip (se abre con Excel). Guardalo en tu compu o en tu Drive.</span></div>
+  <a href="{{ url_for('descargar_respaldo') }}" class="btn btn-primary">⬇ Descargar copia</a>
+</div>
+{% endif %}
+
 {% if informe %}
 <div class="form-card informe-completo">
   <div class="informe-meta muted">{{ informe.fecha_desde }} al {{ informe.fecha_hasta }} · Generado: {{ informe.creado_en|fecha(16) }}</div>
-  <div class="informe-texto">{{ informe.contenido | replace('\n', '<br>') | safe }}</div>
+  {# ### CAMBIO AQUÍ ### antes se mostraba el texto de la IA sin escapar (podía meter código en la página) #}
+  <div class="informe-texto" style="white-space:pre-line">{{ informe.contenido }}</div>
 </div>
 
 {% elif informes %}

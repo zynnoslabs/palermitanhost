@@ -132,9 +132,9 @@
 
 {% block scripts %}
 <script>
-const porMes = {{ por_mes|safe }};
+const porMes = {{ por_mes|tojson }};  // ### CAMBIO AQUÍ ### tojson escapa caracteres peligrosos
 // ### CAMBIO AQUÍ ### gráfico de ocupación diaria
-const ocup7 = {{ ocup_7|safe }};
+const ocup7 = {{ ocup_7|tojson }};
 const el7 = document.getElementById('chartOcup7');
 if (el7 && typeof Chart !== 'undefined') new Chart(el7, {
   type:'bar',
