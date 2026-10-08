@@ -128,7 +128,8 @@ def correr_noche():
         return {"ok": False, "mensaje": "Ya hay una actualización en curso."}
     inicio = datetime.now(AR)
     estado = {"inicio": inicio.strftime("%Y-%m-%d %H:%M"), "grupos": 0, "ok": 0,
-              "errores": [], "creditos_tavily": 0, "tokens": 0, "terminado": False}
+              "errores": [], "creditos_tavily": 0, "tokens": 0, "terminado": False,
+              "busquedas_serpapi": 0, "serpapi_restantes": None}   # ### CAMBIO AQUÍ ###
     try:
         tc = monedas.tc_valor()
         props = db.query("SELECT * FROM propiedades ORDER BY id")
@@ -142,12 +143,17 @@ def correr_noche():
                 res = actualizar_grupo(g, tc)
                 estado["creditos_tavily"] += res.get("creditos_tavily") or 0
                 estado["tokens"] += res.get("tokens") or 0
+                estado["busquedas_serpapi"] += res.get("busquedas_serpapi") or 0   # ### CAMBIO AQUÍ ###
                 if res["ok"]:
                     estado["ok"] += 1
+                    for a in res.get("avisos") or []:   # una fuente falló pero otra la reemplazó
+                        estado["errores"].append(f"{g[0].get('barrio')} (se usó otra fuente): {a}")
                 else:
                     estado["errores"].append(f"{g[0].get('barrio')}: {res['error']}")
             except Exception as e:
                 estado["errores"].append(f"{g[0].get('barrio')}: {e}")
+        if os.getenv("SERPAPI_API_KEY"):   # ### CAMBIO AQUÍ ### consulta gratis, no gasta búsquedas
+            estado["serpapi_restantes"] = competencia_ia.serpapi_busquedas_restantes(os.getenv("SERPAPI_API_KEY"))
     finally:
         estado["terminado"] = True
         estado["fin"] = datetime.now(AR).strftime("%Y-%m-%d %H:%M")
@@ -173,6 +179,33 @@ def ultima_corrida():
         return json.loads(row["valor"]) if row else None
     except Exception:
         return None
+
+
+# ### CAMBIO AQUÍ ### aviso en el dashboard si la búsqueda automática no trae datos hace varios días
+DIAS_ALERTA = 3
+
+
+def alerta_sin_datos():
+    if not os.getenv("TAREAS_TOKEN"):
+        return None
+    corrida = ultima_corrida()
+    if not corrida:
+        return None
+    n = db.query_one("""SELECT COUNT(*) AS n FROM propiedades
+                        WHERE COALESCE(estado,'activa') <> 'inactiva' AND COALESCE(TRIM(barrio),'') <> ''""")["n"]
+    if not n:
+        return None
+    row = db.query_one("SELECT MAX(fecha) AS f FROM competencia_historial")
+    ultima = row["f"] if row else None
+    dias = None
+    if ultima:
+        try:
+            dias = (datetime.now(AR).date() - date.fromisoformat(str(ultima)[:10])).days
+        except ValueError:
+            dias = None
+        if dias is not None and dias < DIAS_ALERTA:
+            return None
+    return {"dias": dias, "ultima": ultima, "errores": (corrida.get("errores") or [])[:3]}
 
 
 def historial(pid, dias=30):

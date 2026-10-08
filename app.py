@@ -262,7 +262,7 @@ def dashboard():
 
     return render_template("dashboard.html",
         propiedades=propiedades, stats=stats, por_mes=por_mes,   # ### CAMBIO AQUÍ ### se escapa con |tojson
-       
+        alerta_comp=competencia_auto.alerta_sin_datos(),   # ### CAMBIO AQUÍ ### aviso si la competencia no se actualiza
         desde=desde, hasta=hasta, prop_id=prop_id, informes=informes,
         proximas=proximas, resenas_pend=resenas_pend, ocup_7=ocup_7)
 
@@ -565,7 +565,9 @@ def competencia():
                            historial_json=list(reversed(hist)),   # ### CAMBIO AQUÍ ### |tojson
                            corrida=competencia_auto.ultima_corrida(),
                            auto_activa=bool(os.getenv("TAREAS_TOKEN")),
-                           tavily_activo=bool(os.getenv("TAVILY_API_KEY")))
+                           tavily_activo=bool(os.getenv("TAVILY_API_KEY")),
+                           motores=[m for m, k in (("Google (SerpApi)", "SERPAPI_API_KEY"), ("Tavily", "TAVILY_API_KEY"))
+                                    if os.getenv(k)] + (["Groq"] if os.getenv("COMPETENCIA_RESPALDO_GROQ") == "1" else []))   # ### CAMBIO AQUÍ ###
 
 
 @app.route("/competencia/buscar", methods=["POST"])

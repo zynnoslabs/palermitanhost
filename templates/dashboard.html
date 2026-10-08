@@ -2,6 +2,15 @@
 {% block title %}Dashboard – PalermitanHost{% endblock %}
 
 {% block content %}
+{# ### CAMBIO AQUÍ ### aviso si la búsqueda automática de competencia no trae datos hace días #}
+{% if alerta_comp %}
+<div class="alert alert-error">
+  <strong>⚠ La competencia no se actualiza{% if alerta_comp.dias %} hace {{ alerta_comp.dias }} días{% endif %}.</strong>{{ info('alerta_competencia') }}
+  Ninguna fuente de búsqueda trajo precios. Avisale a Pedro.
+  {% for e in alerta_comp.errores %}<div style="font-size:.8rem;margin-top:2px">· {{ e }}</div>{% endfor %}
+  <div style="margin-top:4px"><a href="{{ url_for('competencia') }}" class="link">Ver Competencia ↗</a></div>
+</div>
+{% endif %}
 <div class="page-header">
   <h2>Dashboard{{ info('dashboard') }}</h2>
   <form method="get" class="filter-form">

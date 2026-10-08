@@ -4,14 +4,21 @@
 # búsqueda web incorporada (herramienta "browser_search", modelos openai/gpt-oss).
 # NO hace scraping: la IA usa un buscador web y devuelve lo que encontró.
 #
-# ### CAMBIO AQUÍ ### — Estrategia de búsqueda (de más barata a más cara):
-#   1. Tavily (api.tavily.com): 1 crédito por búsqueda, devuelve fragmentos cortos con precio.
+# ### CAMBIO AQUÍ ### — Estrategia de búsqueda: varias fuentes EN CADENA (si una falla, sigue la otra)
+#   1. Google Hotels → "alquileres vacacionales" vía SerpApi (serpapi.com): precio REAL por noche
+#      para fechas concretas, de Airbnb, VRBO, Booking... No usa IA ni tokens de Groq.
+#      Plan gratis: 250 búsquedas por mes (1 por barrio por noche alcanza de sobra).
+#   2. Tavily (api.tavily.com): 1 crédito por búsqueda, fragmentos cortos con precio.
 #      La IA (modelo rápido de Groq) solo ordena esos fragmentos: pocos tokens.
-#   2. Respaldo: búsqueda web de Groq (browser_search). Lee páginas enteras: gasta MUCHOS tokens.
+#   3. Respaldo: búsqueda web de Groq (browser_search). Lee páginas enteras: gasta MUCHOS tokens.
+#   Nuestro servidor nunca entra a Airbnb: no hay IP nuestra que bloquear.
 #
 # Variables de entorno:
+#   SERPAPI_API_KEY           (recomendada: fuente principal)
+#   SERPAPI_DIAS_ADELANTE     (opcional, default 14: para qué fecha se piden los precios)
+#   SERPAPI_NOCHES            (opcional, default 2: noches de la estadía de referencia)
 #   GROQ_API_KEY              (obligatoria, la misma que ya usa ia.py)
-#   TAVILY_API_KEY            (recomendada; sin ella se usa solo el respaldo de Groq)
+#   TAVILY_API_KEY            (recomendada; segunda fuente)
 #   TAVILY_MAX_BUSQUEDAS      (opcional, default 2: 1 crédito cada una)
 #   COMPETENCIA_RESPALDO_GROQ (opcional, "1" por defecto; "0" para no usar nunca el respaldo caro)
 #   GROQ_SEARCH_MODEL         (opcional, default "openai/gpt-oss-120b")
@@ -343,6 +350,116 @@ def _buscar_tavily(prop, api_key):
                          "mensuales": mensuales, "dudosos": dudosos}
 
 
+# ════════════ ### CAMBIO AQUÍ ### FUENTE 1: GOOGLE (alquileres vacacionales) vía SerpApi ════════════
+SERPAPI_URL = "https://serpapi.com/search.json"
+FUENTES_SERPAPI = {"airbnb": "Airbnb", "vrbo": "VRBO", "booking": "Booking", "expedia": "Expedia",
+                   "despegar": "Despegar", "hotels.com": "Hotels.com"}
+RE_DORM = re.compile(r"(\d+)\s*(bedroom|dormitorio|habitaci[oó]n|cuarto)", re.I)
+RE_CAPAC = re.compile(r"(?:sleeps|capacidad para|hasta|para)\s*(\d+)|(\d+)\s*(?:guests|huéspedes|huespedes|personas)", re.I)
+RE_ESTUDIO = re.compile(r"\b(studio|estudio|monoambiente)\b", re.I)
+
+
+def _fechas_serpapi():
+    dias = int(os.getenv("SERPAPI_DIAS_ADELANTE", "14") or 14)
+    noches = int(os.getenv("SERPAPI_NOCHES", "2") or 2)
+    entrada = datetime.now(timezone(timedelta(hours=-3))).date() + timedelta(days=dias)
+    return entrada.isoformat(), (entrada + timedelta(days=noches)).isoformat()
+
+
+def serpapi_busquedas_restantes(api_key):
+    """Consulta gratis (no gasta búsquedas). Devuelve el número o None si no se pudo saber."""
+    try:
+        r = requests.get("https://serpapi.com/account.json", params={"api_key": api_key}, timeout=15)
+        if r.status_code != 200:
+            return None
+        d = r.json()
+        v = d.get("total_searches_left", d.get("plan_searches_left"))
+        return int(v) if v is not None else None
+    except Exception:
+        return None
+
+
+def _serpapi(prop, api_key):
+    barrio = prop.get("barrio") or "Palermo"
+    entrada, salida = _fechas_serpapi()
+    amb = prop.get("ambientes") or 0
+    params = {
+        "engine": "google_hotels", "vacation_rentals": "true",
+        "q": f"{barrio}, Buenos Aires, Argentina",
+        "check_in_date": entrada, "check_out_date": salida,
+        "adults": max(int(prop.get("capacidad") or 2), 1),
+        "currency": prop.get("moneda") or "USD", "gl": "ar", "hl": "es",
+        "api_key": api_key,
+    }
+    if amb and int(amb) > 1:
+        params["bedrooms"] = int(amb) - 1   # 2 ambientes = 1 dormitorio
+    r = requests.get(SERPAPI_URL, params=params, timeout=60)
+    try:
+        data = r.json()
+    except Exception:
+        data = {}
+    err = (data.get("error") or "") if isinstance(data, dict) else ""
+    if r.status_code == 401 or "invalid api key" in err.lower():
+        raise RuntimeError("La clave de SerpApi (SERPAPI_API_KEY) es inválida.")
+    if r.status_code == 429 or "run out of searches" in err.lower():
+        raise RuntimeError("Se terminaron las búsquedas de SerpApi de este mes.")
+    if err:
+        if "hasn't returned any results" in err.lower():
+            return [], params
+        raise RuntimeError(f"SerpApi: {err}")
+    r.raise_for_status()
+    return data.get("properties") or [], params
+
+
+def _plataforma_serpapi(p):
+    for oferta in p.get("prices") or []:
+        src = (oferta.get("source") or "").lower()
+        for clave, nombre in FUENTES_SERPAPI.items():
+            if clave in src:
+                return nombre
+    if p.get("link"):
+        return _plataforma(p["link"])
+    return "Google"
+
+
+def convertir_serpapi(props, prop, params):
+    """Pasa los resultados de Google al formato de comparables (sin IA)."""
+    mon = params.get("currency", "USD")
+    barrio = prop.get("barrio") or ""
+    crudos = []
+    for p in props or []:
+        if (p.get("type") or "").lower() not in ("vacation rental", "alquiler vacacional", ""):
+            continue
+        precio = (p.get("rate_per_night") or {}).get("extracted_lowest")
+        if not precio:
+            continue
+        info = " · ".join(p.get("essential_info") or [])
+        m = RE_DORM.search(info)
+        dorm = int(m.group(1)) if m else (0 if RE_ESTUDIO.search(info) else None)
+        m = RE_CAPAC.search(info)
+        cap = int(m.group(1) or m.group(2)) if m else None
+        link = p.get("link") or ("https://www.google.com/travel/search?q=" +
+                                 requests.utils.quote(f"{p.get('name', '')} {barrio} Buenos Aires"))
+        crudos.append({
+            "plataforma": _plataforma_serpapi(p),
+            "titulo": p.get("name") or "",
+            "zona": barrio,
+            "ambientes": (dorm + 1) if dorm is not None else None,
+            "capacidad": cap,
+            "precio_noche": precio,
+            "moneda": mon,
+            "rating": p.get("overall_rating"),
+            "link": link,
+        })
+    return limpiar_comparables(crudos)
+
+
+def _buscar_serpapi(prop, api_key):
+    props, params = _serpapi(prop, api_key)
+    return convertir_serpapi(props, prop, params), {"resultados": len(props),
+                                                     "fechas": f"{params['check_in_date']} a {params['check_out_date']}"}
+
+
 def _buscar_groq(prop, resultado):
     """Respaldo: búsqueda web de Groq (gasta muchos tokens)."""
     # si el modelo grande no tiene cupo (error 429), prueba con el rápido
@@ -385,23 +502,38 @@ def buscar_comparables(prop, tc=None, con_resumen=True):
     resultado = {"ok": False, "comparables": [], "stats": None, "resumen": "", "error": None,
                  "fecha": datetime.now(timezone(timedelta(hours=-3))).date().isoformat(), "fuente": None, "creditos_tavily": 0, "tokens": 0}
     comparables, errores, fuentes = [], [], []
+    resultado["busquedas_serpapi"] = 0
 
-    # 1) Tavily (barato)
-    tavily_key = os.getenv("TAVILY_API_KEY")
-    if tavily_key:
+    # ### CAMBIO AQUÍ ### 1) Google alquileres vacacionales vía SerpApi (precios reales, sin IA)
+    serp_key = os.getenv("SERPAPI_API_KEY")
+    if serp_key:
         try:
-            comparables, info = _buscar_tavily(prop, tavily_key)
+            comparables, info = _buscar_serpapi(prop, serp_key)
+            resultado["busquedas_serpapi"] = 1
+            if comparables:
+                fuentes.append("Google (SerpApi)")
+            else:
+                errores.append(f"Google: {info['resultados']} resultados, ninguno con precio por noche válido")
+        except Exception as e:
+            errores.append(str(e))
+
+    # 2) Tavily (barato) solo si Google no trajo suficientes
+    tavily_key = os.getenv("TAVILY_API_KEY")
+    if tavily_key and len(comparables) < MIN_COMPARABLES:
+        try:
+            extra, info = _buscar_tavily(prop, tavily_key)
             resultado["creditos_tavily"] = info["creditos"]
             resultado["tokens"] = info["tokens"]
-            if comparables:
+            if extra:
+                comparables = limpiar_comparables(comparables + extra)
                 fuentes.append("Tavily")
-            if not comparables:   # ### CAMBIO AQUÍ ### pocos resultados es normal: se acumulan día a día
-                errores.append(f"Tavily: {info['resultados']} resultados, solo {len(comparables)} con precio por noche "
+            if not extra:   # ### CAMBIO AQUÍ ### pocos resultados es normal: se acumulan día a día
+                errores.append(f"Tavily: {info['resultados']} resultados, solo {len(extra)} con precio por noche "
                                f"verificado ({info['mensuales']} eran precios mensuales, {info['dudosos']} dudosos)")
         except Exception as e:
             errores.append(f"Tavily: {ia.explicar_error(e) if 'Groq' in str(e) or '429' in str(e) else e}")
 
-    # 2) Respaldo Groq (caro) solo si Tavily no trajo suficientes
+    # 3) Respaldo Groq (caro) solo si nada trajo resultados
     # ### CAMBIO AQUÍ ### — apagado por defecto: gasta ~190.000 tokens y agota el cupo gratis de Groq
     if not comparables and os.getenv("COMPETENCIA_RESPALDO_GROQ", "0") == "1":
         try:
@@ -413,6 +545,7 @@ def buscar_comparables(prop, tc=None, con_resumen=True):
             errores.append(str(e))
 
     resultado["fuente"] = " + ".join(fuentes) or None
+    resultado["avisos"] = errores   # ### CAMBIO AQUÍ ### fuentes que fallaron aunque otra haya andado
     if not comparables:
         detalle = (" Detalle: " + " | ".join(errores)) if errores else ""
         resultado["error"] = "No se encontraron anuncios válidos (con link y precio). (ERR-COMP-003)" + detalle

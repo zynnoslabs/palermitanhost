@@ -20,23 +20,26 @@
     <strong>🌙 Actualización automática activada.</strong>{{ info('auto_competencia') }}
     {% if corrida %}
       Última corrida: {{ corrida.inicio|replace('T', ' ') }} · {{ corrida.ok }}/{{ corrida.grupos }} zonas actualizadas
-      {% if corrida.creditos_tavily %} · {{ corrida.creditos_tavily }} créditos de Tavily{% endif %}
+      {% if corrida.busquedas_serpapi %} · {{ corrida.busquedas_serpapi }} búsqueda(s) de Google{% endif %}{% if corrida.creditos_tavily %} · {{ corrida.creditos_tavily }} créditos de Tavily{% endif %}
       {% if not corrida.terminado %} · <em>en curso…</em>{% endif %}
       {% for e in corrida.errores %}<div class="muted" style="font-size:.8rem">⚠ {{ e }}</div>{% endfor %}
     {% else %} Todavía no corrió ninguna vez.{% endif %}
   {% else %}
     <span class="muted">La actualización automática nocturna no está activada (falta TAREAS_TOKEN en la configuración).</span>
   {% endif %}
-  <div class="muted" style="font-size:.8rem;margin-top:4px">Motor de búsqueda: {{ 'Tavily (barato) con respaldo de Groq' if tavily_activo else 'búsqueda web de Groq (gasta mucho cupo: conviene cargar TAVILY_API_KEY)' }}</div>
+  {# ### CAMBIO AQUÍ ### fuentes en cadena #}
+  <div class="muted" style="font-size:.8rem;margin-top:4px">Fuentes de búsqueda (si una falla, se usa la siguiente){{ info('fuentes_busqueda') }}:
+    {{ motores|join(' → ') if motores else 'ninguna configurada (cargá SERPAPI_API_KEY y/o TAVILY_API_KEY)' }}
+    {% if corrida and corrida.serpapi_restantes is not none %} · quedan {{ corrida.serpapi_restantes }} búsquedas de Google este mes{% endif %}</div>
 </div>
 
 <div class="form-card">
   <h3>Buscar propiedades similares con IA{{ info('buscar_comparables') }}</h3>
   {# ### CAMBIO AQUÍ ### explica el modo mixto #}
-  <p class="muted">La IA busca en Airbnb, Booking y otras plataformas precios por noche del mismo barrio.
-    Encuentra pocos por búsqueda (las plataformas no muestran precios sin fechas), así que se van
-    <strong>acumulando día a día</strong> durante {{ dias_vigencia }} días. Sumá abajo tus competidores directos
-    para que la referencia sea más precisa. Puede tardar hasta 1 minuto.</p>
+  <p class="muted">El sistema busca en Google los alquileres vacacionales del mismo barrio (Airbnb, VRBO, Booking…)
+    con su precio por noche para una fecha de dentro de 2 semanas. Los precios se <strong>acumulan día a día</strong>
+    durante {{ dias_vigencia }} días. No hace falta cargar nada: si querés, podés sumar abajo competidores que conozcas.
+    Puede tardar hasta 1 minuto.</p>
   <form method="get" action="{{ url_for('competencia') }}" style="margin-bottom:12px">
     <div class="form-group">
       <label>Propiedad</label>
@@ -60,7 +63,7 @@
 {# ### CAMBIO AQUÍ ### precio de referencia de la zona (IA acumulada + carga manual) #}
 <div class="card-title" style="margin:6px 0 8px">Precio de referencia de la zona{{ info('referencia_zona') }}
   <span class="muted">· {{ stats.cantidad }} precios: {{ n_ia }} de la IA (últimos {{ dias_vigencia }} días) y {{ n_manual }} cargados por vos</span></div>
-{% if stats.cantidad < 5 %}<div class="alert alert-warn">Todavía hay pocos datos ({{ stats.cantidad }}). Tomalo como orientación: la referencia mejora a medida que se acumulan búsquedas o si cargás tus competidores directos.</div>{% endif %}
+{% if stats.cantidad < 5 %}<div class="alert alert-warn">Todavía hay pocos datos ({{ stats.cantidad }}). Tomalo como orientación: la referencia mejora sola a medida que se acumulan las búsquedas de cada noche.</div>{% endif %}
 {% if stats.sin_convertir %}<div class="alert alert-warn">{{ stats.sin_convertir }} anuncios están en otra moneda y no se incluyeron. Cargá el tipo de cambio (arriba a la derecha).</div>{% endif %}
 <div class="stats-grid">
   <div class="stat-card highlight">
@@ -141,9 +144,9 @@
 {% endif %}
 
 {# ### CAMBIO AQUÍ ### carga manual de competidores directos (abierta si todavía no hay ninguno) #}
-<details class="form-card" style="margin-top:20px" {% if prop_sel and not n_manual %}open{% endif %}>
-  <summary style="cursor:pointer;font-weight:600">Agregar un competidor directo{{ info('competidor_directo') }}</summary>
-  <p class="muted" style="margin-top:8px">Abrí en Airbnb 3 a 5 anuncios parecidos al tuyo, poné fechas y copiá acá el precio por noche. Con 2 minutos por semana alcanza.</p>
+<details class="form-card" style="margin-top:20px">
+  <summary style="cursor:pointer;font-weight:600">Agregar un competidor directo (opcional){{ info('competidor_directo') }}</summary>
+  <p class="muted" style="margin-top:8px">No hace falta: la búsqueda es automática. Usalo solo si conocés un anuncio puntual que quieras comparar siempre.</p>
   <form method="post" action="{{ url_for('competencia', pid=prop_sel.id if prop_sel else None) }}" class="form-grid" style="margin-top:12px">
     <div class="form-group"><label>Barrio</label><input type="text" name="barrio" value="{{ prop_sel.barrio if prop_sel and prop_sel.barrio else '' }}" required></div>
     <div class="form-group"><label>Plataforma</label><select name="plataforma"><option>Airbnb</option><option>Booking</option><option>Otra</option></select></div>
