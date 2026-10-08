@@ -5,3 +5,8 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
+
+# Claves reales (nunca a GitHub)
+CLAVES_*.env
+*.env
+!.env.example
