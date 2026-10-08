@@ -1,0 +1,66 @@
+# ### CAMBIO AQUÍ ### — Archivo nuevo: COPIA DE SEGURIDAD AUTOMÁTICA SEMANAL
+#
+# Todos los lunes a las 4:00 (hora de Buenos Aires) GitHub copia la base de datos de Render,
+# la cifra con una clave y la guarda 90 días en la pestaña "Actions" del repositorio.
+# Así, aunque se borre algo en Render, hay copia afuera.
+#
+# CONFIGURAR UNA SOLA VEZ (GitHub → repo → Settings → Secrets and variables → Actions → New repository secret):
+#   DATABASE_URL_EXTERNA  → en Render: base de datos → Connect → "External Database URL"
+#   CLAVE_RESPALDO        → una frase larga inventada. GUARDARLA: sin ella la copia no se puede abrir.
+#
+# PROBARLA: pestaña Actions → "Copia de seguridad semanal" → "Run workflow".
+#
+# RESTAURAR (solo si se perdió algo):
+#   1. Actions → la corrida que quieras → descargar el archivo "respaldo-...".
+#   2. gpg --batch --passphrase "TU_CLAVE" -o respaldo.dump -d respaldo-AAAA-MM-DD.dump.gpg
+#   3. pg_restore --clean --if-exists --no-owner -d "URL_DE_LA_BASE" respaldo.dump
+
+name: Copia de seguridad semanal
+
+on:
+  schedule:
+    - cron: "0 7 * * 1"     # lunes 07:00 UTC = 04:00 en Buenos Aires
+  workflow_dispatch:         # botón "Run workflow" para hacerla a mano
+
+jobs:
+  respaldo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Verificar configuración
+        env:
+          DB: ${{ secrets.DATABASE_URL_EXTERNA }}
+          CLAVE: ${{ secrets.CLAVE_RESPALDO }}
+        run: |
+          if [ -z "$DB" ] || [ -z "$CLAVE" ]; then
+            echo "::error::Faltan los secretos DATABASE_URL_EXTERNA y/o CLAVE_RESPALDO (ver arriba de este archivo)."
+            exit 1
+          fi
+
+      - name: Copiar la base de datos
+        env:
+          DB: ${{ secrets.DATABASE_URL_EXTERNA }}
+        run: |
+          # pg_dump de la versión más nueva sirve para cualquier versión de Render
+          docker run --rm -e DB="$DB" postgres:18 sh -c 'pg_dump "$DB" --format=custom --no-owner' > respaldo.dump
+          TAM=$(stat -c%s respaldo.dump)
+          echo "Tamaño de la copia: $TAM bytes"
+          if [ "$TAM" -lt 1000 ]; then echo "::error::La copia salió vacía"; exit 1; fi
+
+      - name: Cifrar la copia
+        env:
+          CLAVE: ${{ secrets.CLAVE_RESPALDO }}
+        run: |
+          FECHA=$(TZ=America/Argentina/Buenos_Aires date +%F)
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$CLAVE" \
+              --symmetric --cipher-algo AES256 -o "respaldo-$FECHA.dump.gpg" respaldo.dump
+          rm respaldo.dump
+          echo "FECHA=$FECHA" >> "$GITHUB_ENV"
+
+      - name: Guardar la copia (90 días)
+        uses: actions/upload-artifact@v4
+        with:
+          name: respaldo-${{ env.FECHA }}
+          path: respaldo-${{ env.FECHA }}.dump.gpg
+          retention-days: 90
+          compression-level: 0
