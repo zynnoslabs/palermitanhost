@@ -456,6 +456,9 @@ def convertir_serpapi(props, prop, params):
         precio = _precio_serpapi(p, noches)   # ### CAMBIO AQUÍ ###
         if not precio:
             continue
+        tope = TOPE_NOCHE.get(mon)   # ### CAMBIO AQUÍ ### descarta valores fuera de rango (ej. US$ 1.046)
+        if tope and not (tope[0] <= precio <= tope[1]):
+            continue
         info = " · ".join(p.get("essential_info") or [])
         m = RE_DORM.search(info)
         dorm = int(m.group(1)) if m else (0 if RE_ESTUDIO.search(info) else None)
