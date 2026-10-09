@@ -48,6 +48,25 @@ def _guardar_historial(historial):
     """, (json.dumps(historial, ensure_ascii=False),))
 
 
+MAX_CARACTERES_HISTORIAL = 6000   # ### CAMBIO AQUÍ ### tope de la conversación que se manda a la IA
+
+
+def _recortar(historial):
+    """### CAMBIO AQUÍ ### se queda con los últimos turnos que entran en el tope (los pedidos muy grandes
+    los rechaza Groq). Siempre empieza con un mensaje del usuario."""
+    historial = historial[-(MAX_HISTORIAL * 2):]
+    total, out = 0, []
+    for m in reversed(historial):
+        total += len(m.get("content") or "")
+        if out and total > MAX_CARACTERES_HISTORIAL:
+            break
+        out.append(m)
+    out.reverse()
+    while out and out[0].get("role") != "user":
+        out.pop(0)
+    return out
+
+
 def get_db():
     """Obtiene una conexión del pool de base de datos."""
     import database as _db_mod
@@ -117,14 +136,25 @@ def build_context(db, alias=None, mencionados=()):
                           f"= {monedas.formatear(tot_ars / tc, 'USD')} (TC {tc:,.2f})")
 
     # ── Ocupación últimos 90 días ─────────────────────────────────────────────
-    cur.execute("""
-        SELECT COUNT(DISTINCT fecha_inicio::date) as dias_con_reserva
-        FROM reservas
-        WHERE fecha_inicio::date >= CURRENT_DATE - INTERVAL '90 days'
-          AND COALESCE(estado, 'completada') != 'cancelada'
-    """)
-    row = cur.fetchone()
-    dias_ocupados = row[0] if row else 0
+    # ### CAMBIO AQUÍ ### noches realmente ocupadas ÷ (90 días × propiedades activas).
+    # Antes contaba días de LLEGADA: una estadía de 10 noches valía 1 día.
+    import metricas
+    from datetime import date as _date
+    cur.execute("SELECT propiedad_id, fecha_inicio, fecha_fin, noches, estado FROM reservas")
+    _cols = [d[0] for d in cur.description]
+    _todas = [dict(zip(_cols, r)) for r in cur.fetchall()]
+    _hoy = _date.today()
+    _activas = sum(1 for p in propiedades if (p[-1] or "activa") != "inactiva") or 1
+    _m90 = metricas.calcular_metricas(metricas.filtrar_reservas(_todas, _hoy - timedelta(days=89), _hoy),
+                                      _hoy - timedelta(days=89), _hoy, 0, _activas)
+    noches_90 = _m90.get("noches_ocupadas", 0)
+    ocup_90 = _m90.get("tasa_ocupacion", 0)
+    _nombres = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+                "septiembre", "octubre", "noviembre", "diciembre"]
+    # ### CAMBIO AQUÍ ### las MISMAS temporadas que usa la sección Precios (antes decía otras)
+    from precio_estrategico import TEMPORADA_MULTIPLICADORES as _TM
+    temporadas_txt = ", ".join(f"{_nombres[m - 1]} {t.lower()} (×{str(x).replace('.', ',')})"
+                               for m, (t, x) in sorted(_TM.items()))
 
     # ── Config: chat_huespedes activo? ───────────────────────────────────────
     # ### CAMBIO AQUÍ ### — mercado desde la tabla competencia, en la moneda de cada propiedad
@@ -217,11 +247,11 @@ estratégicas y responder con precisión usando los datos reales del negocio.
 {chr(10).join(lineas_ing) or "  - Sin ingresos cargados"}
 - Tipo de cambio cargado: {f"{tc:,.2f} pesos por dólar" if tc else "no cargado"}
 - Total noches alquiladas: {total_noches}
-- Días con reservas (últimos 90): {dias_ocupados} de 90 ({dias_ocupados/90*100:.0f}%)
+- Ocupación últimos 90 días: {noches_90} noches ocupadas ({str(ocup_90).replace(".", ",")}% de las noches disponibles de {_activas} propiedad(es) activa(s))
 
 ═══ COMPETENCIA (última búsqueda con IA, sección Competencia) ═══
 {mercado_txt}
-- Temporada alta: diciembre-enero, Carnaval; baja: junio-agosto
+- Temporadas que usa el sistema para los precios: {temporadas_txt}
 
 ═══ INSTRUCCIONES ═══
 - Responde siempre en español rioplatense, directo y profesional.
@@ -248,33 +278,33 @@ def chat():
     db = get_db()
     # ### CAMBIO AQUÍ ### alias de huéspedes: el nombre real nunca sale del sistema
     alias = {}
-    try:
-        cur = db.cursor()
-        cur.execute("SELECT TRIM(huesped_nombre), MIN(id) FROM reservas "
-                    "WHERE COALESCE(TRIM(huesped_nombre),'') <> '' GROUP BY TRIM(huesped_nombre)")
-        alias = privacidad.armar_alias(cur.fetchall())
-    except Exception as e:
-        db.rollback()
-        print(f"[asistente] Error armando alias: {e}")
-    historial = _cargar_historial()
-    historial.append({"role": "user", "content": mensaje})
-    if len(historial) > MAX_HISTORIAL * 2:
-        historial = historial[-(MAX_HISTORIAL * 2):]
-    enviados, mencionados = [], set()
-    for m in historial:
-        txt, usados = privacidad.ocultar(m["content"], alias)
-        enviados.append({"role": m["role"], "content": txt})
-        mencionados |= usados
-    try:
-        system_prompt = build_context(db, alias, mencionados)
-    except Exception as e:
-        db.rollback()
-        print(f"[asistente] Error construyendo contexto: {e}")
-        system_prompt = (
-            "Eres el asistente de negocio de Palermitan Host. "
-            "Actualmente no puedo acceder a los datos del sistema, "
-            "pero puedo ayudarte con preguntas generales."
-        )
+    try:   # ### CAMBIO AQUÍ ### la conexión se devuelve SIEMPRE (antes, un error la dejaba tomada)
+        try:
+            cur = db.cursor()
+            cur.execute("SELECT TRIM(huesped_nombre), MIN(id) FROM reservas "
+                        "WHERE COALESCE(TRIM(huesped_nombre),'') <> '' GROUP BY TRIM(huesped_nombre)")
+            alias = privacidad.armar_alias(cur.fetchall())
+        except Exception as e:
+            db.rollback()
+            print(f"[asistente] Error armando alias: {e}")
+        historial = _cargar_historial()
+        historial.append({"role": "user", "content": mensaje[:4000]})
+        historial = _recortar(historial)
+        enviados, mencionados = [], set()
+        for m in historial:
+            txt, usados = privacidad.ocultar(m["content"], alias)
+            enviados.append({"role": m["role"], "content": txt})
+            mencionados |= usados
+        try:
+            system_prompt = build_context(db, alias, mencionados)
+        except Exception as e:
+            db.rollback()
+            print(f"[asistente] Error construyendo contexto: {e}")
+            system_prompt = (
+                "Eres el asistente de negocio de Palermitan Host. "
+                "Actualmente no puedo acceder a los datos del sistema, "
+                "pero puedo ayudarte con preguntas generales."
+            )
     finally:
         release_db(db)
 
@@ -285,10 +315,12 @@ def chat():
         respuesta = privacidad.mostrar(ia.texto_respuesta(resp), alias)   # ### CAMBIO AQUÍ ### alias → nombre real
     except Exception as e:
         print(f"[asistente] Error Groq: {e}")
-        respuesta = ia.explicar_error(e)   # ### CAMBIO AQUÍ ### mensaje claro (límite de uso, clave inválida, etc.)
+        # ### CAMBIO AQUÍ ### el error NO se guarda en la conversación (antes quedaba trabado el chat):
+        # se muestra y se puede volver a preguntar
+        return jsonify({"respuesta": "⚠ " + ia.explicar_error(e), "error": True})
 
     historial.append({"role": "assistant", "content": respuesta})
-    _guardar_historial(historial[-(MAX_HISTORIAL * 2):])
+    _guardar_historial(_recortar(historial))
 
     return jsonify({
         "respuesta": respuesta,

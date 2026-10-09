@@ -86,6 +86,7 @@ jobs:
           path: ${{ env.NOMBRE }}
           retention-days: 90
           compression-level: 0
+          overwrite: true          # ### CAMBIO AQUÍ ### una 2ª copia manual el mismo día ya no falla
 
       # ### CAMBIO AQUÍ ### copia anual permanente en "Releases" (no se borra sola)
       - name: Guardar la copia anual (permanente)

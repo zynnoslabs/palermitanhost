@@ -7,35 +7,40 @@
 
 {% if paso == 1 %}
 <div class="form-card">
-  <!-- ### CAMBIO AQUÍ ### — instrucciones paso a paso para bajar el CSV de Airbnb -->
-  <p>Subí el archivo con tus reservas que te da Airbnb. Para descargarlo:</p>
+  <!-- ### CAMBIO AQUÍ ### — instrucciones para los DOS archivos de Airbnb -->
+  {% if not propiedades %}
+  <div class="alert alert-warn">Antes de importar, creá tus propiedades en <a class="link" href="{{ url_for('nueva_propiedad') }}">Propiedades</a>.</div>
+  {% endif %}
+  <p>Subí los archivos que te da Airbnb (desde la computadora, en modo anfitrión):</p>
   <ol class="muted" style="margin:8px 0 14px 20px;line-height:1.7">
-    <li>Entrá a Airbnb desde la computadora, en modo anfitrión.</li>
-    <li>Menú → <strong>Ganancias</strong> → <strong>Historial de transacciones</strong>.</li>
-    <li>Elegí las fechas y tocá <strong>Exportar CSV</strong>.</li>
+    <li><strong>Ganancias</strong> (montos exactos): Menú → Ganancias → Historial de transacciones → elegí las fechas → <strong>Exportar CSV</strong>.</li>
+    <li><strong>Reservas</strong> (reservas futuras, huésped y estado): Menú → Reservas → Todas → <strong>Exportar</strong> → CSV.</li>
   </ol>
-  <p class="muted" style="font-size:.85rem">Este archivo trae solo tus propias reservas y cobros. Los precios de la competencia los busca la IA en la sección Competencia.</p>
+  <p class="muted" style="font-size:.85rem">Podés subirlos en cualquier orden y repetirlos cuando quieras: no se duplica nada.
+  Subí el archivo tal cual lo descarga Airbnb (si lo abriste y guardaste con Excel también funciona).</p>
   <form method="post" enctype="multipart/form-data">
     <div class="form-group">
       <label>Archivo CSV de Airbnb</label>
-      <input type="file" name="csv_file" accept=".csv" required>
+      <input type="file" name="csv_file" accept=".csv,text/csv" required>
     </div>
-    <button type="submit" class="btn btn-primary">Analizar CSV</button>
+    <button type="submit" class="btn btn-primary" {% if not propiedades %}disabled{% endif %}>Analizar CSV</button>
   </form>
 </div>
 
 {% elif paso == 2 %}
 <div class="form-card">
-  <h3>Asignación manual de columnas</h3>
-  <p>No se detectaron automáticamente estas columnas. Asignalas desde el desplegable:</p>
+  <h3>¿Qué columna es cada dato?</h3>
+  <p>No pudimos reconocer algunas columnas del archivo. Elegí cuál es cada una (las marcadas con * son obligatorias):</p>
   <form method="post" action="{{ url_for('importar_asignar') }}">
-    {% for col in no_detectadas %}
+    <input type="hidden" name="columnas" value="1">
+    <input type="hidden" name="t" value="{{ token }}">
+    {% for col in campos %}
     <div class="form-group">
-      <label><strong>{{ col }}</strong></label>
+      <label><strong>{{ etiquetas[col] }}</strong>{% if col in ['codigo_confirmacion','fecha_inicio','anuncio','ingreso_bruto'] %} *{% endif %}</label>
       <select name="col_{{ col }}">
-        <option value="">— No está en el CSV —</option>
+        <option value="">— No está en el archivo —</option>
         {% for h in encabezados %}
-          <option value="{{ loop.index0 }}">{{ h }}</option>
+          <option value="{{ loop.index0 }}" {% if mapa.get(col) == loop.index0 %}selected{% endif %}>{{ h }}</option>
         {% endfor %}
       </select>
     </div>
@@ -47,21 +52,25 @@
 {% elif paso == 3 %}
 <div class="form-card">
   <h3>Asignar anuncios a propiedades{{ info('asignar_anuncios') }}</h3>
-  <p>Cada nombre de anuncio detectado en el CSV necesita vincularse a una propiedad cargada en el sistema.</p>
+  <p>Archivo de <strong>{{ 'Ganancias' if tipo_archivo == 'ganancias' else 'Reservas' }}</strong>.
+     Indicá a qué propiedad del sistema corresponde cada anuncio. Queda guardado para la próxima vez.</p>
   <form method="post" action="{{ url_for('importar_asignar') }}">
     <input type="hidden" name="asignar" value="1">
-    {% for anuncio in anuncios %}
+    <input type="hidden" name="t" value="{{ token }}">
+    {% for anuncio, sugerida in anuncios %}
     <div class="form-group">
       <label>{{ anuncio }}</label>
-      <select name="prop_{{ anuncio }}">
+      <select name="prop_{{ loop.index0 }}">
         <option value="">— No importar —</option>
         {% for p in propiedades %}
-          <option value="{{ p.id }}">{{ p.nombre }}</option>
+          <option value="{{ p.id }}" {% if sugerida == p.id %}selected{% endif %}>{{ p.nombre }}</option>
         {% endfor %}
       </select>
     </div>
+    {% else %}
+    <p class="alert alert-warn">El archivo no tiene nombres de anuncio. Volvé a <a class="link" href="{{ url_for('importar') }}">subirlo</a>.</p>
     {% endfor %}
-    <button type="submit" class="btn btn-primary">Importar reservas</button>
+    {% if anuncios %}<button type="submit" class="btn btn-primary">Importar reservas</button>{% endif %}
   </form>
 </div>
 
@@ -69,24 +78,22 @@
 <div class="result-box">
   <h3>✅ Importación completada</h3>
   <ul>
-    <li>✔ <strong>{{ importadas }}</strong> reservas importadas</li>
-    <li>⏭ <strong>{{ duplicadas }}</strong> duplicadas omitidas</li>
-    {% if omitidas %}
-    <li>⚠ <strong>{{ omitidas|length }}</strong> filas con errores:</li>
-    </ul>
-    <div class="table-wrap">
-    <table class="tabla">
-      <thead><tr><th>Fila</th><th>Motivo</th></tr></thead>
-      <tbody>
-      {% for o in omitidas %}
-        <tr><td>{{ o.fila }}</td><td>{{ o.motivo }}</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    </div>
-    {% else %}
-    </ul>
-    {% endif %}
+    <li>✔ <strong>{{ importadas }}</strong> reservas nuevas</li>
+    <li>↻ <strong>{{ actualizadas }}</strong> reservas que ya estaban, actualizadas</li>
+    {% if n_ignoradas %}<li>⏭ <strong>{{ n_ignoradas }}</strong> filas que no son reservas (pagos, ajustes sin reserva, consultas, anuncios sin asignar)</li>{% endif %}
+    {% if n_errores %}<li>⚠ <strong>{{ n_errores }}</strong> filas con errores (revisalas abajo)</li>{% endif %}
+  </ul>
+  {% for titulo, lista in [('Filas con errores', errores), ('Filas que no se importaron', ignoradas)] if lista %}
+  <h4 style="margin-top:12px">{{ titulo }}</h4>
+  <div class="table-wrap">
+  <table class="tabla">
+    <thead><tr><th>Fila</th><th>Motivo</th></tr></thead>
+    <tbody>
+    {% for o in lista %}<tr><td>{{ o.fila }}</td><td>{{ o.motivo }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endfor %}
   <a href="{{ url_for('dashboard') }}" class="btn btn-primary">Ver dashboard</a>
   <a href="{{ url_for('importar') }}" class="btn">Importar otro CSV</a>
 </div>

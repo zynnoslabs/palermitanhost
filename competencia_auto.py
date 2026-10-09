@@ -20,9 +20,14 @@ _lock = threading.Lock()
 AR = timezone(timedelta(hours=-3))   # ### CAMBIO AQUÍ ### hora de Buenos Aires (el servidor usa UTC)
 
 
+CLAVE_BLOQUEO = 515151   # ### CAMBIO AQUÍ ### candado en la base para no correr dos búsquedas a la vez
+
+
 def clave_grupo(p):
-    # ### CAMBIO AQUÍ ### solo por barrio: la búsqueda ya no usa ambientes (gasta menos créditos)
-    return (p.get("barrio") or "").strip().lower()
+    # ### CAMBIO AQUÍ ### ciudad + barrio + ambientes: la búsqueda filtra por dormitorios y capacidad,
+    # así un monoambiente y un 4 ambientes del mismo barrio ya no comparten los mismos precios.
+    return ((p.get("ciudad") or "").strip().lower(), (p.get("barrio") or "").strip().lower(),
+            int(p.get("ambientes") or 0))
 
 
 def agrupar(propiedades):
@@ -34,7 +39,7 @@ def agrupar(propiedades):
     return list(grupos.values())
 
 
-DIAS_VIGENCIA = int(os.getenv("COMPETENCIA_DIAS", "30") or 30)   # ### CAMBIO AQUÍ ###
+DIAS_VIGENCIA = competencia_ia._env_int("COMPETENCIA_DIAS", 30)   # ### CAMBIO AQUÍ ### "30 días" ya no rompe el arranque
 
 
 def comparables_vigentes(pid, barrio):
@@ -100,9 +105,9 @@ def guardar_resultado(prop, res, tc):
     return stats
 
 
-def actualizar_grupo(grupo, tc):
+def actualizar_grupo(grupo, tc, max_paginas=None):
     """Una búsqueda para todo el grupo; se guarda para cada propiedad."""
-    res = competencia_ia.buscar_comparables(grupo[0], tc, con_resumen=False)
+    res = competencia_ia.buscar_comparables(grupo[0], tc, con_resumen=False, max_paginas_serpapi=max_paginas)
     if not res["ok"]:
         return res
     for p in grupo:
@@ -122,10 +127,38 @@ def _ultima_fecha(grupo):
     return (row or {}).get("f") or ""
 
 
+def _guardar_estado(estado):
+    db.execute("""
+        INSERT INTO config (clave, valor) VALUES ('competencia_ultima_corrida', %s)
+        ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor
+    """, (json.dumps(estado, ensure_ascii=False),))
+
+
+def presupuesto_serpapi(restantes, hoy=None):
+    """### CAMBIO AQUÍ ### búsquedas de Google que se pueden usar esta noche sin quedarse sin cupo
+    antes de fin de mes: lo que queda ÷ noches que faltan (incluida hoy)."""
+    if restantes is None:
+        return None
+    import calendar
+    hoy = hoy or datetime.now(AR).date()
+    noches = calendar.monthrange(hoy.year, hoy.month)[1] - hoy.day + 1
+    return max(int(restantes) // max(noches, 1), 0)
+
+
 def correr_noche():
     """Actualiza los grupos más desactualizados. Guarda un resumen de la corrida en config."""
     if not _lock.acquire(blocking=False):
         return {"ok": False, "mensaje": "Ya hay una actualización en curso."}
+    try:
+        with db.bloqueo(CLAVE_BLOQUEO) as obtenido:
+            if not obtenido:   # la está corriendo el otro proceso de Render
+                return {"ok": False, "mensaje": "Ya hay una actualización en curso."}
+            return _correr_noche()
+    finally:
+        _lock.release()
+
+
+def _correr_noche():
     inicio = datetime.now(AR)
     estado = {"inicio": inicio.strftime("%Y-%m-%d %H:%M"), "grupos": 0, "ok": 0,
               "errores": [], "creditos_tavily": 0, "tokens": 0, "terminado": False,
@@ -135,12 +168,22 @@ def correr_noche():
         props = db.query("SELECT * FROM propiedades ORDER BY id")
         grupos = sorted(agrupar(props), key=_ultima_fecha)
         hoy = datetime.now(AR).date().isoformat()
-        maximo = int(os.getenv("MAX_GRUPOS_POR_NOCHE", "10") or 10)
+        maximo = competencia_ia._env_int("MAX_GRUPOS_POR_NOCHE", 10)
         pendientes = [g for g in grupos if _ultima_fecha(g) != hoy][:maximo]
         estado["grupos"] = len(pendientes)
-        for g in pendientes:
+        _guardar_estado(estado)   # ### CAMBIO AQUÍ ### queda "en curso" aunque Render corte a la mitad
+        serp_key = os.getenv("SERPAPI_API_KEY")
+        cupo = presupuesto_serpapi(competencia_ia.serpapi_busquedas_restantes(serp_key)) if serp_key else None
+        for i, g in enumerate(pendientes):
+            # ### CAMBIO AQUÍ ### reparte el cupo del mes: 2 páginas solo si sobra para los grupos que faltan
+            paginas = None
+            if cupo is not None:
+                faltan = len(pendientes) - i
+                paginas = 0 if cupo <= 0 else (2 if cupo >= faltan + 1 else 1)
             try:
-                res = actualizar_grupo(g, tc)
+                res = actualizar_grupo(g, tc, paginas)
+                if cupo is not None:
+                    cupo -= res.get("busquedas_serpapi") or 0
                 estado["creditos_tavily"] += res.get("creditos_tavily") or 0
                 estado["tokens"] += res.get("tokens") or 0
                 estado["busquedas_serpapi"] += res.get("busquedas_serpapi") or 0   # ### CAMBIO AQUÍ ###
@@ -151,20 +194,25 @@ def correr_noche():
                 else:
                     estado["errores"].append(f"{g[0].get('barrio')}: {res['error']}")
             except Exception as e:
-                estado["errores"].append(f"{g[0].get('barrio')}: {e}")
+                estado["errores"].append(f"{g[0].get('barrio')}: {competencia_ia.limpiar_error(e)}")
         if os.getenv("SERPAPI_API_KEY"):   # ### CAMBIO AQUÍ ### consulta gratis, no gasta búsquedas
             estado["serpapi_restantes"] = competencia_ia.serpapi_busquedas_restantes(os.getenv("SERPAPI_API_KEY"))
     finally:
         estado["terminado"] = True
         estado["fin"] = datetime.now(AR).strftime("%Y-%m-%d %H:%M")
         try:
-            db.execute("""
-                INSERT INTO config (clave, valor) VALUES ('competencia_ultima_corrida', %s)
-                ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor
-            """, (json.dumps(estado, ensure_ascii=False),))
-        finally:
-            _lock.release()
+            _guardar_estado(estado)
+        except Exception:
+            pass
     return estado
+
+
+def en_curso():
+    """### CAMBIO AQUÍ ### True si la búsqueda automática está corriendo ahora (en cualquier proceso)."""
+    try:
+        return db.esta_bloqueado(CLAVE_BLOQUEO)
+    except Exception:
+        return False
 
 
 def correr_en_segundo_plano():

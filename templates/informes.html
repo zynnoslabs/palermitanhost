@@ -44,7 +44,7 @@
 <div class="form-card informe-completo">
   <div class="informe-meta muted">{{ informe.fecha_desde|fecha }} al {{ informe.fecha_hasta|fecha }} · Generado: {{ informe.creado_en|fecha(16) }}</div>
   {# ### CAMBIO AQUÍ ### antes se mostraba el texto de la IA sin escapar (podía meter código en la página) #}
-  <div class="informe-texto" style="white-space:pre-line">{{ informe.contenido }}</div>
+  <div class="informe-texto">{{ informe.contenido|md }}</div>{# ### CAMBIO AQUÍ ### títulos y negritas, siempre escapado #}
 </div>
 
 {% elif informes %}
@@ -55,12 +55,12 @@
   {% for inf in informes %}
   <tr>
     <td><a href="{{ url_for('ver_informe', iid=inf.id) }}" class="link">{{ inf.titulo }}</a></td>
-    <td>{{ inf.fecha_desde }} → {{ inf.fecha_hasta }}</td>
+    <td>{{ inf.fecha_desde|fecha }} → {{ inf.fecha_hasta|fecha }}</td>
     <td>{{ inf.creado_en|fecha }}</td>{# ### CAMBIO AQUÍ ### #}
     <td>
       <a href="{{ url_for('ver_informe', iid=inf.id) }}" class="btn btn-sm">Ver</a>
       <form method="post" action="{{ url_for('eliminar_informe', iid=inf.id) }}" style="display:inline">
-        <button class="btn btn-sm btn-danger" onclick="return confirm('¿Eliminar?')">✕</button>
+        <button class="btn btn-sm btn-danger" onclick="return confirm('¿Eliminar este informe?')" aria-label="Eliminar">✕</button>
       </form>
     </td>
   </tr>

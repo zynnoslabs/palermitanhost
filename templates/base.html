@@ -78,7 +78,7 @@
           {{ info('tipo_cambio') }} {% if tc_info %}TC: $ {{ "{:,.2f}".format(tc_info.valor|float).replace(",", "X").replace(".", ",").replace("X", ".") }}<span class="solo-compu"> · {{ tc_info.tipo }}</span>{% else %}⚠ <span class="solo-compu">Cargar tipo de cambio</span><span class="solo-cel">Cargar TC</span>{% endif %}
         </summary>
         <!-- ### CAMBIO AQUÍ ### max-width:none: antes el panel quedaba angosto y cortaba el selector -->
-        <div class="form-card" style="position:absolute;right:0;top:28px;z-index:50;width:300px;max-width:calc(100vw - 24px)">
+        <div class="form-card panel-tc" style="position:absolute;right:0;top:28px;z-index:50;width:300px;max-width:calc(100vw - 24px)">
           <form method="post" action="{{ url_for('tipo_cambio') }}" style="margin-bottom:10px">
             <label class="muted">Traer cotización (dolarapi.com)</label>
             <div style="display:flex;gap:6px">
@@ -89,7 +89,7 @@
           <form method="post" action="{{ url_for('tipo_cambio') }}">
             <label class="muted">O cargarlo a mano (pesos por dólar)</label>
             <div style="display:flex;gap:6px">
-              <input type="text" name="valor" placeholder="Ej: 1400" style="width:100%">
+              <input type="text" inputmode="decimal" name="valor" placeholder="Ej: 1400" style="width:100%" required>
               <button class="btn btn-sm">Guardar</button>
             </div>
           </form>

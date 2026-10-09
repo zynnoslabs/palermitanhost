@@ -7,7 +7,8 @@
 # ### CAMBIO AQUÍ ### — Estrategia de búsqueda: varias fuentes EN CADENA (si una falla, sigue la otra)
 #   1. Google Hotels → "alquileres vacacionales" vía SerpApi (serpapi.com): precio REAL por noche
 #      para fechas concretas, de Airbnb, VRBO, Booking... No usa IA ni tokens de Groq.
-#      Plan gratis: 250 búsquedas por mes (1 por barrio por noche alcanza de sobra).
+#      Plan gratis: 250 búsquedas por mes. ### CAMBIO AQUÍ ### la corrida nocturna reparte el cupo:
+#      usa como máximo (búsquedas que quedan ÷ noches que faltan del mes) y si no alcanza pasa a Tavily.
 #   2. Tavily (api.tavily.com): 1 crédito por búsqueda, fragmentos cortos con precio.
 #      La IA (modelo rápido de Groq) solo ordena esos fragmentos: pocos tokens.
 #   3. Respaldo: búsqueda web de Groq (browser_search). Lee páginas enteras: gasta MUCHOS tokens.
@@ -57,7 +58,7 @@ def _cliente():
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise ValueError("GROQ_API_KEY no configurada en .env")
-    return Groq(api_key=api_key, timeout=90)
+    return Groq(api_key=api_key, timeout=90, max_retries=0)   # ### CAMBIO AQUÍ ### sin reintentos ocultos
 
 
 def _ciudad(prop):   # ### CAMBIO AQUÍ ### la ciudad sale de la propiedad (antes fija)
@@ -370,6 +371,11 @@ def _fechas_serpapi():
     return entrada.isoformat(), (entrada + timedelta(days=noches)).isoformat()
 
 
+def limpiar_error(texto):
+    """### CAMBIO AQUÍ ### borra claves de los mensajes de error (se muestran en pantalla y quedan en la base)."""
+    return re.sub(r"(api_key|apikey|key|token)=[^&\s'\"]+", r"\1=***", str(texto))
+
+
 def serpapi_busquedas_restantes(api_key):
     """Consulta gratis (no gasta búsquedas). Devuelve el número o None si no se pudo saber."""
     try:
@@ -415,7 +421,11 @@ def _serpapi(prop, api_key, page_token=None):
         params["bedrooms"] = int(amb) - 1   # 2 ambientes = 1 dormitorio
     if page_token:
         params["next_page_token"] = page_token   # ### CAMBIO AQUÍ ### segunda página
-    r = requests.get(SERPAPI_URL, params=params, timeout=60)
+    # ### CAMBIO AQUÍ ### si falla la conexión, el mensaje NO lleva la URL (tenía la clave adentro)
+    try:
+        r = requests.get(SERPAPI_URL, params=params, timeout=40)
+    except requests.RequestException as e:
+        raise RuntimeError(f"SerpApi no respondió ({type(e).__name__}).") from None
     try:
         data = r.json()
     except Exception:
@@ -428,8 +438,9 @@ def _serpapi(prop, api_key, page_token=None):
     if err:
         if "hasn't returned any results" in err.lower():
             return [], params
-        raise RuntimeError(f"SerpApi: {err}")
-    r.raise_for_status()
+        raise RuntimeError(f"SerpApi: {limpiar_error(err)}")
+    if r.status_code >= 400:
+        raise RuntimeError(f"SerpApi respondió con error {r.status_code}.")
     params["_siguiente"] = (data.get("serpapi_pagination") or {}).get("next_page_token")
     return data.get("properties") or [], params
 
@@ -484,11 +495,21 @@ def convertir_serpapi(props, prop, params):
     return limpiar_comparables(crudos)
 
 
-def _buscar_serpapi(prop, api_key):
+def _env_int(nombre, defecto):
+    """### CAMBIO AQUÍ ### un número mal escrito en la configuración usa el valor por defecto (antes rompía)."""
+    try:
+        return int(str(os.getenv(nombre, "")).strip() or defecto)
+    except ValueError:
+        return defecto
+
+
+def _buscar_serpapi(prop, api_key, max_paginas=None):
     """### CAMBIO AQUÍ ### Hasta SERPAPI_PAGINAS páginas (1 búsqueda cada una). Pide la 2ª solo
-    si la 1ª trajo menos de SERPAPI_MIN_PRECIOS precios válidos."""
-    paginas = int(os.getenv("SERPAPI_PAGINAS", "2") or 2)
-    minimo = int(os.getenv("SERPAPI_MIN_PRECIOS", "10") or 10)
+    si la 1ª trajo menos de SERPAPI_MIN_PRECIOS precios válidos. max_paginas: límite por el cupo del mes."""
+    paginas = _env_int("SERPAPI_PAGINAS", 2)
+    if max_paginas is not None:
+        paginas = min(paginas, max_paginas)
+    minimo = _env_int("SERPAPI_MIN_PRECIOS", 10)
     todos, usadas, token, params = [], 0, None, {}
     while usadas < paginas:
         try:
@@ -541,7 +562,7 @@ def _buscar_groq(prop, resultado):
     return limpiar_comparables(data["comparables"])
 
 
-def buscar_comparables(prop, tc=None, con_resumen=True):
+def buscar_comparables(prop, tc=None, con_resumen=True, max_paginas_serpapi=None):
     """
     prop: dict de la tabla propiedades. tc: tipo de cambio USD->ARS (o None).
     Devuelve dict: ok, comparables, stats, resumen, error, fecha, fuente, creditos_tavily, tokens.
@@ -558,19 +579,27 @@ def buscar_comparables(prop, tc=None, con_resumen=True):
 
     # ### CAMBIO AQUÍ ### 1) Google alquileres vacacionales vía SerpApi (precios reales, sin IA)
     serp_key = os.getenv("SERPAPI_API_KEY")
-    if serp_key:
+    tavily_key = os.getenv("TAVILY_API_KEY")
+    if not serp_key and not tavily_key and os.getenv("COMPETENCIA_RESPALDO_GROQ", "0") != "1":
+        # ### CAMBIO AQUÍ ### antes decía "no se encontraron anuncios", que confunde
+        resultado["error"] = ("No hay ninguna fuente de búsqueda configurada: faltan las claves de SerpApi "
+                              "y/o Tavily en Render. Avisale a Pedro. (ERR-COMP-004)")
+        resultado["avisos"] = []
+        return resultado
+    if serp_key and max_paginas_serpapi != 0:
         try:
-            comparables, info = _buscar_serpapi(prop, serp_key)
+            comparables, info = _buscar_serpapi(prop, serp_key, max_paginas_serpapi)
             resultado["busquedas_serpapi"] = info["busquedas"]
             if comparables:
                 fuentes.append("Google (SerpApi)")
             else:
                 errores.append(f"Google: {info['resultados']} resultados, ninguno con precio por noche válido")
         except Exception as e:
-            errores.append(str(e))
+            errores.append(limpiar_error(e))
+    elif serp_key:
+        errores.append("Google: se reservaron las búsquedas que quedan del mes (se usó otra fuente)")
 
     # 2) Tavily (barato) solo si Google no trajo suficientes
-    tavily_key = os.getenv("TAVILY_API_KEY")
     if tavily_key and len(comparables) < MIN_COMPARABLES:
         try:
             extra, info = _buscar_tavily(prop, tavily_key)
@@ -583,7 +612,7 @@ def buscar_comparables(prop, tc=None, con_resumen=True):
                 errores.append(f"Tavily: {info['resultados']} resultados, solo {len(extra)} con precio por noche "
                                f"verificado ({info['mensuales']} eran precios mensuales, {info['dudosos']} dudosos)")
         except Exception as e:
-            errores.append(f"Tavily: {ia.explicar_error(e) if 'Groq' in str(e) or '429' in str(e) else e}")
+            errores.append(limpiar_error(f"Tavily: {ia.explicar_error(e) if 'Groq' in str(e) or '429' in str(e) else e}"))
 
     # 3) Respaldo Groq (caro) solo si nada trajo resultados
     # ### CAMBIO AQUÍ ### — apagado por defecto: gasta ~190.000 tokens y agota el cupo gratis de Groq
@@ -594,7 +623,7 @@ def buscar_comparables(prop, tc=None, con_resumen=True):
                 comparables = limpiar_comparables(comparables + extra)
                 fuentes.append("búsqueda web de Groq")
         except Exception as e:
-            errores.append(str(e))
+            errores.append(limpiar_error(e))
 
     resultado["fuente"] = " + ".join(fuentes) or None
     resultado["avisos"] = errores   # ### CAMBIO AQUÍ ### fuentes que fallaron aunque otra haya andado

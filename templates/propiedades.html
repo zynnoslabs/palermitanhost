@@ -16,18 +16,18 @@
   <tbody>
   {% for p in propiedades %}
   <tr>
-    <td><strong>{{ p.nombre }}</strong><br><small class="muted">{{ p.direccion }}</small></td>
-    <td>{{ p.barrio }}</td>
-    <td>{{ p.tipo|capitalize }}</td>
-    <td>{{ p.ambientes }}</td>
-    <td>{{ p.capacidad }} pers.</td>
+    <td><strong>{{ p.nombre }}</strong><br><small class="muted">{{ p.direccion or '' }}</small></td>
+    <td>{{ p.barrio or '—' }}</td>
+    <td>{{ (p.tipo or '—')|capitalize }}</td>
+    <td>{{ p.ambientes or '—' }}</td>{# ### CAMBIO AQUÍ ### antes mostraba "None" #}
+    <td>{{ (p.capacidad ~ ' pers.') if p.capacidad else '—' }}</td>
     <td>{{ p.precio_base|dinero(p.moneda) }}</td>{# ### CAMBIO AQUÍ ### #}
     <td>{{ ((p.costo_expensas or 0)+(p.costo_servicios or 0)+(p.costo_limpieza or 0)+(p.costo_comision or 0))|dinero(p.moneda) }}/mes</td>
     <td><span class="badge {{ 'badge-ok' if (p.estado or 'activa') == 'activa' else 'badge-warn' }}">{{ (p.estado or 'activa')|capitalize }}</span></td>{# ### CAMBIO AQUÍ ### #}
     <td>
       <a href="{{ url_for('editar_propiedad', pid=p.id) }}" class="btn btn-sm">Editar</a>
       <form method="post" action="{{ url_for('eliminar_propiedad', pid=p.id) }}" style="display:inline"
-            onsubmit="return confirm('¿Eliminar {{ p.nombre }}?')">
+            onsubmit='return confirm({{ ("¿Eliminar " ~ p.nombre ~ "?")|tojson }})'>{# ### CAMBIO AQUÍ ### nombres con apóstrofo (D'Angelo) salteaban la confirmación #}
         <button class="btn btn-sm btn-danger">Eliminar</button>
       </form>
     </td>

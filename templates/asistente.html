@@ -56,13 +56,13 @@
       <select name="propiedad_id" required>
         <option value="">Seleccioná una propiedad</option>
         {% for p in propiedades %}
-          <option value="{{ p.id }}">{{ p.nombre }}{% if not p.info_huespedes %} ⚠ Sin info cargada{% endif %}</option>
+          <option value="{{ p.id }}" {% if prop_prev == p.id %}selected{% endif %}>{{ p.nombre }}{% if not p.info_huespedes %} ⚠ Sin info cargada{% endif %}</option>
         {% endfor %}
       </select>
     </div>
     <div class="form-group">
       <label>Consulta del huésped</label>
-      <textarea name="mensaje" rows="4" required placeholder="Pegá aquí el mensaje del huésped..."></textarea>
+      <textarea name="mensaje" rows="4" required placeholder="Pegá aquí el mensaje del huésped...">{{ mensaje_prev or '' }}</textarea>{# ### CAMBIO AQUÍ ### si falla la IA no se pierde lo pegado #}
     </div>
     <button type="submit" class="btn btn-primary">Generar respuesta</button>
   </form>
@@ -170,24 +170,40 @@ function agregarBurbuja(texto, quien) {
   log.scrollTop = log.scrollHeight;
   return d;
 }
+// ### CAMBIO AQUÍ ### una pregunta por vez (los botones de ejemplo también esperan) y aviso si venció la sesión
+var ocupado = false;
+function bloquear(si) {
+  ocupado = si;
+  document.querySelectorAll('#chat-btn, .chips button').forEach(function(b){ b.disabled = si; });
+}
+function sesionVencida(el) {
+  el.innerHTML = 'Tu sesión venció. <a href="{{ url_for("login") }}">Volvé a ingresar</a> y repetí la pregunta.';
+}
 function preguntar(texto) {
   texto = (texto || '').trim();
-  if (!texto) return;
-  var inp = document.getElementById('chat-inp'), btn = document.getElementById('chat-btn');
-  inp.value = ''; btn.disabled = true;
+  if (!texto || ocupado) return;
+  var inp = document.getElementById('chat-inp');
+  inp.value = ''; bloquear(true);
   agregarBurbuja(texto, 'user');
   var espera = agregarBurbuja('Analizando…', 'ia');
   fetch('{{ url_for("asistente.chat") }}', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({mensaje: texto})
-  }).then(function(r){ return r.json(); })
-    .then(function(d){ espera.textContent = d.respuesta || d.error || 'Sin respuesta'; })
-    .catch(function(){ espera.textContent = 'Error de conexión. Probá de nuevo.'; })
-    .finally(function(){ btn.disabled = false; });
+  }).then(function(r){
+      if (r.status === 401) { sesionVencida(espera); return null; }
+      return r.json();
+    })
+    .then(function(d){ if (d) espera.textContent = d.respuesta || d.error || 'Sin respuesta'; })
+    .catch(function(){ espera.textContent = 'Error de conexión. Revisá internet y probá de nuevo.'; })
+    .finally(function(){ bloquear(false); });
 }
 function limpiarChat() {
+  if (ocupado) return;
   fetch('{{ url_for("asistente.limpiar_historial") }}', {method: 'POST'})
-    .then(function(){ document.getElementById('chat-log').innerHTML = ''; });
+    .then(function(r){
+      if (r.status === 401) { sesionVencida(agregarBurbuja('', 'ia')); return; }
+      if (r.ok) document.getElementById('chat-log').innerHTML = '';
+    });
 }
 function filtrar(estado) {
   document.querySelectorAll('.fila-consulta').forEach(function(tr){

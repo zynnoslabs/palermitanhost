@@ -34,7 +34,7 @@
   </form>
 </div>
 
-{% if stats %}
+{% if stats and hay_reservas %}{# ### CAMBIO AQUÍ ### sistema vacío: se muestra el primer paso #}
 <div class="stats-grid">
   <div class="stat-card">
     <div class="stat-num">{{ stats.total_reservas }}</div>
@@ -69,7 +69,7 @@
     <div class="stat-num">{{ resenas_pend }}</div>
     <div class="stat-lbl">Reseñas pendientes{{ info('resenas_pend') }}</div>
   </a>
-  {% if stats.anticipacion_prom %}
+  {% if stats.anticipacion_prom is not none %}{# ### CAMBIO AQUÍ ### 0 días también se muestra #}
   <div class="stat-card">
     <div class="stat-num">{{ stats.anticipacion_prom|num(0) }} días</div>
     <div class="stat-lbl">Anticipación promedio{{ info('anticipacion') }}</div>
@@ -141,8 +141,13 @@
 
 {% else %}
 <div class="empty-state">
-  <p>No hay reservas en el período seleccionado.</p>
+  {% if not propiedades %}
+  <p>Bienvenido. Para empezar, cargá tus propiedades y después importá el archivo de Airbnb.</p>
+  <a href="{{ url_for('nueva_propiedad') }}" class="btn btn-primary">1. Cargar primera propiedad</a>
+  {% else %}
+  <p>Todavía no hay reservas cargadas.</p>
   <a href="{{ url_for('importar') }}" class="btn btn-primary">Importar CSV de Airbnb</a>
+  {% endif %}
 </div>
 {% endif %}
 {% endblock %}
@@ -162,20 +167,21 @@ if (el7 && typeof Chart !== 'undefined') new Chart(el7, {
     scales:{y:{min:0, max:100, ticks:{callback:v=>v+'%'}}}}
 });
 const meses  = Object.keys(porMes);
+const etiquetas = meses.map(m => porMes[m].etiqueta || m);   // ### CAMBIO AQUÍ ### "oct 2026" en vez de "2026-10"
 const ingresos = meses.map(m => porMes[m].ingreso_bruto);
 const noches   = meses.map(m => porMes[m].noches);
 
 if(meses.length && typeof Chart !== 'undefined'){   // ### CAMBIO AQUÍ ### si no carga la librería, la página sigue andando
   new Chart(document.getElementById('chartIngresos'), {
     type:'bar',
-    data:{ labels:meses, datasets:[{label:'Ingreso bruto', data:ingresos,
+    data:{ labels:etiquetas, datasets:[{label:'Ingreso bruto', data:ingresos,
       backgroundColor:'rgba(99,102,241,0.75)', borderRadius:4}]},
     options:{responsive:true, plugins:{legend:{display:false}},
       scales:{y:{ticks:{callback:v=>'{{ 'US$' if vista == 'USD' else '$' }} '+v.toLocaleString('es-AR')}}}}
   });
   new Chart(document.getElementById('chartNoches'), {
     type:'bar',
-    data:{ labels:meses, datasets:[{label:'Noches', data:noches,
+    data:{ labels:etiquetas, datasets:[{label:'Noches', data:noches,
       backgroundColor:'rgba(16,185,129,0.75)', borderRadius:4}]},
     options:{responsive:true, plugins:{legend:{display:false}}}
   });

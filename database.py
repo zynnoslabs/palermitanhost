@@ -3,41 +3,64 @@ import os
 import psycopg2
 import psycopg2.extras
 import psycopg2.pool
+import psycopg2.extensions
+import threading
+from contextlib import contextmanager
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 # ### CAMBIO AQUÍ ### — lazy init: el pool se crea solo cuando se necesita
+# ### CAMBIO AQUÍ ### (revisión general):
+#  - ThreadedConnectionPool: la búsqueda nocturna corre en un hilo aparte y el pool simple no lo soporta.
+#  - Cada conexión se prueba antes de usarla: si la base se reinició, se descarta y se abre otra
+#    (antes la primera página después de un reinicio de Render daba error).
+#  - Toda conexión trabaja en hora de Buenos Aires.
+#  - Al devolverla al pool se cierra cualquier transacción abierta (si no, bloqueaba tablas).
 _pool = None
+_lock_pool = threading.Lock()
+ZONA = "America/Argentina/Buenos_Aires"
+
 
 def _get_pool():
     global _pool
     if _pool is None:
-        url = os.getenv("DATABASE_URL")
-        if not url:
-            raise RuntimeError(
-                "DATABASE_URL no está configurada. "
-                "Añadila en las variables de entorno de Render (o en .env local)."
-            )
-        _pool = psycopg2.pool.SimpleConnectionPool(1, 10, url)
+        with _lock_pool:
+            if _pool is None:
+                url = os.getenv("DATABASE_URL")
+                if not url:
+                    raise RuntimeError(
+                        "DATABASE_URL no está configurada. "
+                        "Añadila en las variables de entorno de Render (o en .env local)."
+                    )
+                _pool = psycopg2.pool.ThreadedConnectionPool(
+                    1, 10, url, connect_timeout=10,
+                    keepalives=1, keepalives_idle=60, keepalives_interval=10, keepalives_count=3)
     return _pool
 
 
-_con_hora_ar = set()   # ### CAMBIO AQUÍ ###
-
-
 def get_db():
-    conn = _get_pool().getconn()
-    # ### CAMBIO AQUÍ ### — la base también trabaja en hora de Buenos Aires (CURRENT_DATE, fechas guardadas)
-    if id(conn) not in _con_hora_ar:
+    pool = _get_pool()
+    for intento in range(3):
+        conn = pool.getconn()
         try:
+            if conn.closed:
+                raise psycopg2.InterfaceError("conexión cerrada")
             cur = conn.cursor()
-            cur.execute("SET TIME ZONE 'America/Argentina/Buenos_Aires'")
+            cur.execute("SELECT 1")
+            if conn.get_parameter_status("TimeZone") != ZONA:
+                cur.execute("SET TIME ZONE %s", (ZONA,))
             conn.commit()
             cur.close()
-            _con_hora_ar.add(id(conn))
-        except Exception:
-            conn.rollback()
+            return conn
+        except (psycopg2.OperationalError, psycopg2.InterfaceError):
+            try:
+                pool.putconn(conn, close=True)
+            except Exception:
+                pass
+            if intento == 2:
+                raise
     return conn
+
 
 # Alias para compatibilidad con asistente_route.py y exportar_routes.py
 def get_db_connection():
@@ -45,17 +68,63 @@ def get_db_connection():
 
 
 def _release(conn):
-    _get_pool().putconn(conn)
+    try:
+        if not conn.closed and conn.get_transaction_status() != psycopg2.extensions.TRANSACTION_STATUS_IDLE:
+            conn.rollback()
+        _get_pool().putconn(conn, close=bool(conn.closed))
+    except Exception:
+        try:
+            _get_pool().putconn(conn, close=True)
+        except Exception:
+            pass
 
 def release_db(conn):
     """Alias público de _release para blueprints externos."""
     _release(conn)
 
 
+def _rollback(conn):
+    try:
+        conn.rollback()
+    except Exception:
+        pass   # si la conexión se cortó, que se vea el error original
+
+
+@contextmanager
+def bloqueo(clave):
+    """### CAMBIO AQUÍ ### candado en la base: evita que la búsqueda de competencia corra dos veces a la vez
+    (aunque Render tenga 2 procesos). Devuelve True si se obtuvo."""
+    conn = get_db()
+    obtenido = False
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT pg_try_advisory_lock(%s)", (clave,))
+        obtenido = bool(cur.fetchone()[0])
+        conn.commit()
+        yield obtenido
+    finally:
+        try:
+            if obtenido:
+                cur = conn.cursor()
+                cur.execute("SELECT pg_advisory_unlock(%s)", (clave,))
+                conn.commit()
+        except Exception:
+            pass
+        _release(conn)
+
+
+def esta_bloqueado(clave):
+    row = query_one("SELECT COUNT(*) AS n FROM pg_locks WHERE locktype='advisory' AND objid=%s AND granted", (clave,))
+    return bool(row and row["n"])
+
+
 def init_db():
     conn = get_db()
     cur = conn.cursor()
     try:
+        # ### CAMBIO AQUÍ ### los 2 procesos de Render arrancan a la vez: uno espera al otro
+        cur.execute("SET LOCAL lock_timeout = '15s'")
+        cur.execute("SELECT pg_advisory_xact_lock(7171)")
         cur.execute("""
             CREATE TABLE IF NOT EXISTS propiedades (
                 id               SERIAL PRIMARY KEY,
@@ -203,6 +272,23 @@ def init_db():
             )
         """)
 
+        # ### CAMBIO AQUÍ ### cada cobro/ajuste de Airbnb por separado (sin repetir): el monto de cada
+        # reserva es la suma de sus cobros, aunque se importen meses que se superponen
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS movimientos_airbnb (
+                id           SERIAL PRIMARY KEY,
+                codigo       TEXT NOT NULL,
+                fecha        TEXT DEFAULT '',
+                tipo         TEXT DEFAULT 'reserva',
+                bruto        NUMERIC(14,2) DEFAULT 0,
+                neto         NUMERIC(14,2) DEFAULT 0,
+                comision     NUMERIC(14,2) DEFAULT 0,
+                limpieza     NUMERIC(14,2) DEFAULT 0,
+                importado_en TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE (codigo, fecha, tipo, bruto, neto, comision, limpieza)
+            )
+        """)
+
         cur.execute("""
             CREATE TABLE IF NOT EXISTS temporadas (
                 mes  INTEGER PRIMARY KEY,
@@ -251,7 +337,7 @@ def query(sql, params=()):
         cur.close()
         return [dict(r) for r in rows]
     except Exception:
-        conn.rollback()
+        _rollback(conn)
         raise
     finally:
         _release(conn)   # ### CAMBIO AQUÍ ### — siempre se devuelve al pool
@@ -266,7 +352,7 @@ def query_one(sql, params=()):
         cur.close()
         return dict(row) if row else None
     except Exception:
-        conn.rollback()
+        _rollback(conn)
         raise
     finally:
         _release(conn)
@@ -285,7 +371,7 @@ def execute(sql, params=()):
         cur.close()
         return lid
     except Exception:
-        conn.rollback()
+        _rollback(conn)
         raise
     finally:
         _release(conn)
@@ -299,7 +385,7 @@ def execute_many(sql, params_list):
         conn.commit()
         cur.close()
     except Exception:
-        conn.rollback()
+        _rollback(conn)
         raise
     finally:
         _release(conn)

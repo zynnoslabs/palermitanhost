@@ -24,13 +24,36 @@ def _norm(texto):
     return "".join(_norm_char(c) for c in texto)
 
 
+# ### CAMBIO AQUÍ ### palabras que NUNCA se tapan solas aunque un huésped se llame así
+# (antes "¿cuánto pagué de luz?" se mandaba como "¿cuánto pagué de Huésped #3?").
+NO_TAPAR = set("""
+enero febrero marzo abril mayo junio julio agosto septiembre setiembre octubre noviembre diciembre
+lunes martes miercoles jueves viernes sabado domingo
+luz sol mar paz rosa flor cielo estrella perla rocio aurora alba gloria victoria pilar consuelo amparo
+dolores angeles reyes cruz mercedes esperanza fe nieves soledad milagros remedios asuncion
+santos leon blanco rubio moreno castillo bravo rios campos delgado franco fuentes salvador vega
+nuevo nueva grande chico chica santa santo norte sur este oeste centro
+palermo recoleta belgrano nunez caballito almagro villa crespo urquiza devoto soho hollywood retiro
+boedo colegiales telmo boca puerto madero balvanera congreso tribunales once flores floresta
+saavedra coghlan chacarita barracas pompeya mataderos liniers versalles parque patricios agronomia
+buenos aires argentina cordoba mendoza rosario salta tucuman bariloche ushuaia jujuy neuquen
+madrid paris london londres roma miami chile uruguay brasil mexico peru espana
+airbnb booking google whatsapp
+""".split())
+
+
 def armar_alias(filas):
-    """filas: [(nombre, id_minimo_de_reserva)] → {nombre: 'Huésped #id'}"""
-    alias = {}
+    """filas: [(nombre, id_minimo_de_reserva)] → {nombre: 'Huésped #id'}
+    ### CAMBIO AQUÍ ### el mismo nombre escrito con o sin acento/mayúsculas es la MISMA persona."""
+    alias, por_norm = {}, {}
     for nombre, rid in filas:
-        n = (nombre or "").strip()
-        if n and n not in alias:
-            alias[n] = f"Huésped #{rid}"
+        n = re.sub(r"\s+", " ", (nombre or "").strip())
+        if not n or n in alias:
+            continue
+        k = _norm(n)
+        if k not in por_norm:
+            por_norm[k] = f"Huésped #{rid}"
+        alias[n] = por_norm[k]
     return alias
 
 
@@ -40,9 +63,11 @@ def _patrones(alias):
     pats = {}
     por_palabra = {}
     for nombre, a in alias.items():
-        pats[_norm(nombre)] = a
-        for palabra in re.findall(r"\w+", _norm(nombre)):
-            if len(palabra) >= MIN_LARGO_PALABRA:
+        completo = _norm(nombre)
+        if " " in completo or completo not in NO_TAPAR:
+            pats[completo] = a
+        for palabra in re.findall(r"\w+", completo):
+            if len(palabra) >= MIN_LARGO_PALABRA and palabra not in NO_TAPAR:
                 por_palabra.setdefault(palabra, set()).add(a)
     for palabra, dueños in por_palabra.items():
         if len(dueños) == 1 and palabra not in pats:
@@ -50,21 +75,31 @@ def _patrones(alias):
     return sorted(pats.items(), key=lambda x: -len(x[0]))
 
 
+_cache = {"clave": None, "regex": None, "mapa": None}
+
+
+def _regex(alias):
+    """### CAMBIO AQUÍ ### una sola búsqueda para todos los nombres (antes una por nombre: con cientos
+    de huéspedes cada mensaje tardaba segundos)."""
+    clave = tuple(sorted(alias.items()))
+    if _cache["clave"] != clave:
+        pats = _patrones(alias)
+        _cache["mapa"] = dict(pats)
+        _cache["regex"] = (re.compile(r"(?<!\w)(?:" + "|".join(re.escape(p) for p, _ in pats) + r")(?!\w)")
+                           if pats else None)
+        _cache["clave"] = clave
+    return _cache["regex"], _cache["mapa"]
+
+
 def ocultar(texto, alias):
     """Reemplaza los nombres de huéspedes por su alias. Devuelve (texto, aliases_usados)."""
     if not texto or not alias:
         return texto, set()
-    norm = _norm(texto)
-    ocupado = [False] * len(texto)
-    cambios = []   # (inicio, fin, alias)
-    for patron, a in _patrones(alias):
-        for m in re.finditer(r"(?<!\w)" + re.escape(patron) + r"(?!\w)", norm):
-            i, j = m.span()
-            if any(ocupado[i:j]):
-                continue
-            for k in range(i, j):
-                ocupado[k] = True
-            cambios.append((i, j, a))
+    regex, mapa = _regex(alias)
+    if regex is None:
+        return texto, set()
+    norm = _norm(texto)   # misma longitud que el texto: las posiciones coinciden
+    cambios = [(m.start(), m.end(), mapa[m.group(0)]) for m in regex.finditer(norm)]
     usados = set()
     for i, j, a in sorted(cambios, reverse=True):
         texto = texto[:i] + a + texto[j:]

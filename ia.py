@@ -65,7 +65,9 @@ def _cliente():
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise ValueError("GROQ_API_KEY no configurada en .env")
-    return Groq(api_key=api_key)
+    # ### CAMBIO AQUÍ ### máximo 50 s por intento y sin reintentos ocultos: antes una espera de Groq
+    # podía pasar los 120 s y el servidor cortaba la página con error 502
+    return Groq(api_key=api_key, timeout=50, max_retries=0)
 
 
 def generar_informe(metricas_dict, nombre_propiedad=None, periodo=None):
@@ -158,7 +160,8 @@ Respuesta:"""
                     "consult" in texto.lower() and "host" in texto.lower()
         return texto, pendiente
     except Exception as e:
-        return f"Error al generar respuesta: {explicar_error(e)}", True
+        # ### CAMBIO AQUÍ ### antes el texto del error se guardaba como si fuera la respuesta al huésped
+        raise RuntimeError(explicar_error(e))
 
 
 # ### CAMBIO AQUÍ ### — borrador de respuesta pública a una reseña
@@ -205,21 +208,28 @@ def _formatear_metricas(m):
         "moneda":             "Moneda de todos los montos",            # ### CAMBIO AQUÍ ###
         "tipo_cambio":        "Tipo de cambio usado (pesos por dólar)",
     }
+    def _es(v):   # ### CAMBIO AQUÍ ### números en formato argentino (1.234.567,5) para que la IA no los lea mal
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            t = f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            return t[:-3] if t.endswith(",00") else t
+        return v
     for key, label in mapeo.items():
         val = m.get(key)
         if val is not None:
-            lineas.append(f"- {label}: {val}")
+            lineas.append(f"- {label}: {_es(val)}")
+    if m.get("canceladas"):
+        lineas.append(f"- Reservas canceladas en el período (no suman noches): {m['canceladas']}")
 
     # Comparativas si vienen anidadas
     if "var_anterior" in m:
         lineas.append("\nVariación vs período anterior:")
         for k, v in m["var_anterior"].items():
             if v is not None:
-                lineas.append(f"  - {k}: {v:+.1f}%")
+                lineas.append(f"  - {k}: {v:+.1f}%".replace(".", ","))
     if "var_anio_ant" in m:
         lineas.append("\nVariación vs mismo período año anterior:")
         for k, v in m["var_anio_ant"].items():
             if v is not None:
-                lineas.append(f"  - {k}: {v:+.1f}%")
+                lineas.append(f"  - {k}: {v:+.1f}%".replace(".", ","))
 
     return "\n".join(lineas)

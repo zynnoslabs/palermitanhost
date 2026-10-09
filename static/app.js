@@ -49,3 +49,29 @@ function toggleMenu(abrir) {
   sb.classList.toggle('open', abierto);
   if (fondo) fondo.classList.toggle('visible', abierto);
 }
+
+// ### CAMBIO AQUÍ ### — evita el doble toque: al enviar un formulario, sus botones se desactivan
+// (antes, tocar dos veces "Guardar" o "Generar" creaba duplicados y gastaba la IA dos veces).
+document.addEventListener('submit', function (e) {
+  var f = e.target;
+  if (e.defaultPrevented || (f.method || '').toLowerCase() !== 'post') return;
+  if (f.dataset.enviando === '1') { e.preventDefault(); return; }
+  f.dataset.enviando = '1';
+  setTimeout(function () {   // después de armar los datos del formulario
+    f.querySelectorAll('button[type=submit], button:not([type]), input[type=submit]').forEach(function (b) {
+      b.disabled = true;
+      b.dataset.textoOriginal = b.textContent;
+      if (b.textContent.trim().length > 2) b.textContent = f.dataset.procesando || 'Procesando…';
+    });
+  }, 0);
+});
+// al volver con "atrás" el navegador puede mostrar la página guardada con los botones apagados
+window.addEventListener('pageshow', function () {
+  document.querySelectorAll('form[data-enviando]').forEach(function (f) {
+    delete f.dataset.enviando;
+    f.querySelectorAll('button, input[type=submit]').forEach(function (b) {
+      b.disabled = false;
+      if (b.dataset.textoOriginal) b.textContent = b.dataset.textoOriginal;
+    });
+  });
+});

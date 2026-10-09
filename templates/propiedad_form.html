@@ -1,72 +1,74 @@
 {% extends "base.html" %}
 {% block title %}{{ 'Editar' if prop else 'Nueva' }} propiedad – PalermitanHost{% endblock %}
 {% block content %}
+{# ### CAMBIO AQUÍ ### d = datos a mostrar (la propiedad, o lo que se escribió si hubo un error). Nunca "None" #}
+{% set d = prop or previo or {} %}
 <div class="page-header">
   <h2>{{ 'Editar propiedad' if prop else 'Nueva propiedad' }}</h2>
   <a href="{{ url_for('propiedades') }}" class="btn btn-sm">← Volver</a>
 </div>
 
-<form method="post" class="form-card">
+<form method="post" class="form-card">{# ### CAMBIO AQUÍ ### montos como texto: acepta 15.000 / 15000,50 / $ 30.000 #}
   <div class="form-grid">
     <div class="form-group">
       <label>Nombre *</label>
-      <input type="text" name="nombre" required value="{{ prop.nombre if prop else '' }}">
+      <input type="text" name="nombre" required value="{{ d.nombre or '' }}">
     </div>
     <div class="form-group">
       <label>Dirección</label>
-      <input type="text" name="direccion" value="{{ prop.direccion if prop else '' }}">
+      <input type="text" name="direccion" value="{{ d.direccion or '' }}">
     </div>
     <div class="form-group">
       <label>Barrio / Localidad</label>
-      <input type="text" name="barrio" value="{{ prop.barrio if prop else '' }}" required placeholder="Ej: Palermo">{# ### CAMBIO AQUÍ ### obligatorio: sin barrio no se puede buscar la competencia #}
+      <input type="text" name="barrio" value="{{ d.barrio or '' }}" required placeholder="Ej: Palermo">{# ### CAMBIO AQUÍ ### obligatorio: sin barrio no se puede buscar la competencia #}
     </div>
     <div class="form-group">{# ### CAMBIO AQUÍ ### ciudad #}
       <label>Ciudad</label>
-      <input type="text" name="ciudad" value="{{ prop.ciudad if prop and prop.ciudad else 'Buenos Aires' }}" required>
+      <input type="text" name="ciudad" value="{{ d.ciudad or 'Buenos Aires' }}" required>
     </div>
     <div class="form-group">
       <label>Tipo</label>
       <select name="tipo">
-        <option value="depto" {% if prop and prop.tipo=='depto' %}selected{% endif %}>Departamento</option>
-        <option value="casa"  {% if prop and prop.tipo=='casa'  %}selected{% endif %}>Casa</option>
+        <option value="depto" {% if d.tipo=='depto' %}selected{% endif %}>Departamento</option>
+        <option value="casa"  {% if d.tipo=='casa' %}selected{% endif %}>Casa</option>
       </select>
     </div>
     <div class="form-group">
       <label>Ambientes</label>
-      <input type="number" name="ambientes" min="1" value="{{ prop.ambientes if prop else '' }}">
+      <input type="text" inputmode="numeric" name="ambientes" value="{{ d.ambientes or '' }}">
     </div>
     <div class="form-group">
       <label>Capacidad (personas)</label>
-      <input type="number" name="capacidad" min="1" value="{{ prop.capacidad if prop else '' }}">
+      <input type="text" inputmode="numeric" name="capacidad" value="{{ d.capacidad or '' }}">
     </div>
     <!-- ### CAMBIO AQUÍ ### estado de la propiedad -->
     <div class="form-group">
       <label>Estado{{ info('estado_prop') }}</label>
       <select name="estado">
         {% for v, t in [('activa','Activa'),('mantenimiento','Mantenimiento'),('inactiva','Inactiva')] %}
-        <option value="{{ v }}" {% if prop and prop.estado == v %}selected{% endif %}>{{ t }}</option>
+        <option value="{{ v }}" {% if d.estado == v %}selected{% endif %}>{{ t }}</option>
         {% endfor %}
       </select>
     </div>
     <div class="form-group">
-      <label>Puntaje en Airbnb (ej: 4.85){{ info('puntaje') }}</label>
-      <input type="number" name="rating" step="0.01" min="1" max="5" value="{{ prop.rating if prop and prop.rating else '' }}">
+      <label>Puntaje en Airbnb (ej: 4,85){{ info('puntaje') }}</label>
+      <input type="text" inputmode="decimal" name="rating" value="{{ d.rating|monto_input }}">
     </div>
     <div class="form-group">
       <label>Cantidad de reseñas{{ info('cant_resenas') }}</label>
-      <input type="number" name="reviews_count" min="0" value="{{ prop.reviews_count if prop else 0 }}">
+      <input type="text" inputmode="numeric" name="reviews_count" value="{{ d.reviews_count or 0 }}">
     </div>
     <!-- ### CAMBIO AQUÍ ### moneda de la propiedad -->
     <div class="form-group">
       <label>Moneda (precio y costos){{ info('moneda_prop') }}</label>
       <select name="moneda">
-        <option value="ARS" {% if not prop or prop.moneda != 'USD' %}selected{% endif %}>Pesos (ARS)</option>
-        <option value="USD" {% if prop and prop.moneda == 'USD' %}selected{% endif %}>Dólares (USD)</option>
+        <option value="ARS" {% if d.moneda != 'USD' %}selected{% endif %}>Pesos (ARS)</option>
+        <option value="USD" {% if d.moneda == 'USD' %}selected{% endif %}>Dólares (USD)</option>
       </select>
     </div>
     <div class="form-group">
       <label>Precio base por noche{{ info('precio_base') }}</label>
-      <input type="number" name="precio_base" step="0.01" value="{{ prop.precio_base if prop else '' }}">
+      <input type="text" inputmode="decimal" name="precio_base" placeholder="Ej: 45.000" value="{{ d.precio_base|monto_input }}">
     </div>
   </div>
 
@@ -74,26 +76,26 @@
   <div class="form-grid">
     <div class="form-group">
       <label>Expensas</label>
-      <input type="number" name="costo_expensas" step="0.01" value="{{ prop.costo_expensas if prop else 0 }}">
+      <input type="text" inputmode="decimal" name="costo_expensas" value="{{ d.costo_expensas|monto_input(0) }}">
     </div>
     <div class="form-group">
       <label>Servicios</label>
-      <input type="number" name="costo_servicios" step="0.01" value="{{ prop.costo_servicios if prop else 0 }}">
+      <input type="text" inputmode="decimal" name="costo_servicios" value="{{ d.costo_servicios|monto_input(0) }}">
     </div>
     <div class="form-group">
       <label>Limpieza</label>
-      <input type="number" name="costo_limpieza" step="0.01" value="{{ prop.costo_limpieza if prop else 0 }}">
+      <input type="text" inputmode="decimal" name="costo_limpieza" value="{{ d.costo_limpieza|monto_input(0) }}">
     </div>
     <div class="form-group">
       <label>Comisión / otros</label>
-      <input type="number" name="costo_comision" step="0.01" value="{{ prop.costo_comision if prop else 0 }}">
+      <input type="text" inputmode="decimal" name="costo_comision" value="{{ d.costo_comision|monto_input(0) }}">
     </div>
   </div>
 
   <h3 class="section-title">Información para huéspedes{{ info('info_huespedes') }}</h3>
   <div class="form-group">
     <label>WiFi, check-in, reglas, cómo llegar, etc. (usa esto el asistente de IA)</label>
-    <textarea name="info_huespedes" rows="8" placeholder="Ej: WiFi: RedCasa / Clave: 12345678&#10;Check-in: 14:00 hs. Check-out: 11:00 hs.&#10;No se permiten fiestas ni mascotas.">{{ prop.info_huespedes if prop else '' }}</textarea>
+    <textarea name="info_huespedes" rows="8" placeholder="Ej: WiFi: RedCasa / Clave: 12345678&#10;Check-in: 14:00 hs. Check-out: 11:00 hs.&#10;No se permiten fiestas ni mascotas.">{{ d.info_huespedes or '' }}</textarea>
   </div>
 
   <div class="form-actions">

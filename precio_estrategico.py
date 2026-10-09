@@ -2,8 +2,24 @@
 precio_estrategico.py — Calculador de precio estratégico para Palermitan Host
 Combina datos de mercado con factores propios de la propiedad para sugerir precio óptimo.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
+from decimal import Decimal, ROUND_HALF_UP
 import math
+
+MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+         "septiembre", "octubre", "noviembre", "diciembre"]
+
+
+def _es(v, dec=0):
+    """### CAMBIO AQUÍ ### número en formato argentino: 45.000 / 4,8"""
+    v = float(Decimal(str(v)).quantize(Decimal(1).scaleb(-dec), rounding=ROUND_HALF_UP))
+    t = f"{v:,.{dec}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return t
+
+
+def _redondear(v, paso):
+    """### CAMBIO AQUÍ ### redondeo comercial (round() de Python redondea 32,5 a 32)."""
+    return int((Decimal(str(v)) / paso).quantize(Decimal("1"), rounding=ROUND_HALF_UP)) * paso
 
 # ── Temporadas ──────────────────────────────────────────────────────────────
 TEMPORADA_MULTIPLICADORES = {
@@ -73,12 +89,13 @@ def calcular_precio_estrategico(propiedad, mercado, reservas_historicas, fecha=N
 
     mes = fecha.month
     dia_semana = fecha.weekday()  # 0=lunes, 4=viernes, 5=sábado, 6=domingo
-    es_fin_de_semana = dia_semana in (4, 5, 6)  # viernes a domingo
+    # ### CAMBIO AQUÍ ### noches de viernes y sábado (la del domingo es de baja demanda)
+    es_fin_de_semana = dia_semana in (4, 5)
 
     nombre_temporada, mult_temporada = TEMPORADA_MULTIPLICADORES.get(mes, ("Media", 1.00))
 
     # ── Paso 1: base = mediana del mercado ──────────────────────────────────
-    precio_base = mercado.get("mediana", 30000)
+    precio_base = float(mercado.get("mediana") or 0)   # ### CAMBIO AQUÍ ### sin precio inventado de respaldo
     pasos = [{
         "paso": 1,
         "descripcion": f"Mediana de mercado ({mercado.get('cantidad_propiedades', 0)} comparables)",  # ### CAMBIO AQUÍ ###
@@ -88,15 +105,22 @@ def calcular_precio_estrategico(propiedad, mercado, reservas_historicas, fecha=N
     }]
 
     # ── Paso 2: ajuste por rating vs zona ────────────────────────────────────
-    rating_prop = float(propiedad.get("rating", 4.5) or 4.5)
-    rating_zona = float(mercado.get("rating_promedio_zona", 4.5) or 4.5)
-    diff_rating = rating_prop - rating_zona
-    # ±6% por cada 0.1 de diferencia, capped entre -12% y +18%
-    mult_rating = 1.0 + max(-0.12, min(0.18, diff_rating * 0.6))
+    # ### CAMBIO AQUÍ ### si falta el puntaje propio o el de la zona, no se ajusta (antes asumía 4,5)
+    rating_prop = float(propiedad.get("rating") or 0)
+    rating_zona = float(mercado.get("rating_promedio_zona") or 0) if mercado.get("rating_real", True) else 0
+    if rating_prop and rating_zona:
+        diff_rating = rating_prop - rating_zona
+        # ±6% por cada 0.1 de diferencia, capped entre -12% y +18%
+        mult_rating = 1.0 + max(-0.12, min(0.18, diff_rating * 0.6))
+        desc_rating = f"Ajuste por puntaje ({_es(rating_prop, 2)} vs zona {_es(rating_zona, 2)})"
+    else:
+        mult_rating = 1.0
+        desc_rating = ("Puntaje: sin ajuste (cargá tu puntaje de Airbnb en la propiedad)" if not rating_prop
+                       else "Puntaje: sin ajuste (la competencia no informa puntajes)")
     precio_paso2 = precio_base * mult_rating
     pasos.append({
         "paso": 2,
-        "descripcion": f"Ajuste por rating ({rating_prop:.1f} vs zona {rating_zona:.1f})",
+        "descripcion": desc_rating,
         "valor": precio_paso2,
         "multiplicador": mult_rating,
         "acumulado": precio_paso2,
@@ -118,7 +142,7 @@ def calcular_precio_estrategico(propiedad, mercado, reservas_historicas, fecha=N
     precio_paso4 = precio_paso3 * mult_temporada
     pasos.append({
         "paso": 4,
-        "descripcion": f"Temporada {nombre_temporada} (mes {mes})",
+        "descripcion": f"Temporada {nombre_temporada.lower()} ({MESES[mes - 1]})",
         "valor": precio_paso4,
         "multiplicador": mult_temporada,
         "acumulado": precio_paso4,
@@ -126,11 +150,13 @@ def calcular_precio_estrategico(propiedad, mercado, reservas_historicas, fecha=N
 
     # ── Paso 5: ocupación histórica ───────────────────────────────────────────
     pct_ocupacion = _calcular_ocupacion(reservas_historicas)
-    mult_ocup = _mult_ocupacion(pct_ocupacion)
+    # ### CAMBIO AQUÍ ### sin reservas cargadas no se baja el precio (antes asumía 40% y lo bajaba 5%)
+    mult_ocup = _mult_ocupacion(pct_ocupacion) if pct_ocupacion is not None else 1.0
     precio_paso5 = precio_paso4 * mult_ocup
     pasos.append({
         "paso": 5,
-        "descripcion": f"Ocupación histórica ({pct_ocupacion:.0f}% últimos 90 días)",
+        "descripcion": (f"Ocupación histórica ({pct_ocupacion:.0f}% últimos 90 días)" if pct_ocupacion is not None
+                        else "Ocupación histórica: sin reservas cargadas, sin ajuste"),
         "valor": precio_paso5,
         "multiplicador": mult_ocup,
         "acumulado": precio_paso5,
@@ -148,19 +174,18 @@ def calcular_precio_estrategico(propiedad, mercado, reservas_historicas, fecha=N
             "acumulado": precio_final,
         })
 
-    # ### CAMBIO AQUÍ ### — redondeo según la escala (ARS a $500, USD a $5)
-    paso_red = 500 if precio_final >= 5000 else 5
-    precio_sugerido = round(precio_final / paso_red) * paso_red
-    precio_minimo = round(precio_final * 0.85 / paso_red) * paso_red
-    precio_maximo = round(precio_final * 1.20 / paso_red) * paso_red
+    # ### CAMBIO AQUÍ ### — redondeo según la escala: pesos a $500, dólares de a 5 (o de a 1 si es barato)
+    paso_red = 500 if precio_final >= 5000 else (5 if precio_final >= 100 else 1)
+    precio_sugerido = _redondear(precio_final, paso_red)
+    precio_minimo = _redondear(precio_final * 0.85, paso_red)
+    precio_maximo = _redondear(precio_final * 1.20, paso_red)
 
     explicacion = (
         f"Precio calculado en base a la mediana de los comparables "
-        f"({mercado.get('simbolo', '$')} {precio_base:,.0f}), ajustado por el rating de la propiedad "
-        f"({rating_prop:.1f} vs {rating_zona:.1f} zona), sus {reviews} reseñas, "
-        f"la temporada {nombre_temporada} de {'diciembre' if mes==12 else 'mes ' + str(mes)}, "
-        f"ocupación histórica del {pct_ocupacion:.0f}%"
-        + (" y recargo de fin de semana." if es_fin_de_semana else ".")
+        f"({mercado.get('simbolo', '$')} {_es(precio_base)}), ajustado por el puntaje, "
+        f"las {reviews} reseñas, la temporada {nombre_temporada.lower()} de {MESES[mes - 1]}"
+        + (f", la ocupación histórica del {pct_ocupacion:.0f}%" if pct_ocupacion is not None else "")
+        + (" y recargo de fin de semana (viernes o sábado)." if es_fin_de_semana else ".")
     )
 
     return {
@@ -177,30 +202,16 @@ def calcular_precio_estrategico(propiedad, mercado, reservas_historicas, fecha=N
 
 
 def _calcular_ocupacion(reservas_historicas):
-    """Calcula % de días ocupados en los últimos 90 días."""
+    """% de noches ocupadas en los últimos 90 días. None si no hay reservas cargadas.
+    ### CAMBIO AQUÍ ### usa el mismo cálculo que el Dashboard (antes contaba 91 días sobre 90 → 101%,
+    e ignoraba las reservas sin fecha de salida)."""
     if not reservas_historicas:
-        return 40  # default moderado
-
+        return None
+    import metricas
     hoy = datetime.now().date()
-    desde = hoy - __import__("datetime").timedelta(days=90)
-    dias_ocupados = set()
-
-    for r in reservas_historicas:
-        try:
-            fi = r.get("fecha_inicio")
-            ff = r.get("fecha_fin")
-            if not fi or not ff:
-                continue
-            if isinstance(fi, str):
-                fi = datetime.fromisoformat(fi).date()
-            if isinstance(ff, str):
-                ff = datetime.fromisoformat(ff).date()
-            d = fi
-            while d < ff:
-                if desde <= d <= hoy:
-                    dias_ocupados.add(d)
-                d += __import__("datetime").timedelta(days=1)
-        except Exception:
-            pass
-
-    return (len(dias_ocupados) / 90) * 100
+    desde = hoy - timedelta(days=89)
+    # solo reservas futuras (todavía no hay historial cargado): no se ajusta
+    if not any((metricas._parse(r.get("fecha_inicio")) or hoy) <= hoy for r in reservas_historicas):
+        return None
+    m = metricas.calcular_metricas(metricas.filtrar_reservas(reservas_historicas, desde, hoy), desde, hoy, 0, 1)
+    return m.get("tasa_ocupacion", 0)

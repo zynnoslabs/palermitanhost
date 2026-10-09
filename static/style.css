@@ -636,3 +636,16 @@ select, input, textarea { max-width: 100%; }
 @media (max-width: 330px) {
   .stats-grid { grid-template-columns: 1fr; }
 }
+
+/* ### CAMBIO AQUÍ ### en pantallas táctiles (iPhone y también iPad) los campos van a 16px: evita el zoom automático */
+@media (pointer: coarse) {
+  input, select, textarea { font-size: 16px; }
+}
+/* ### CAMBIO AQUÍ ### en el celular el panel del tipo de cambio ocupa el ancho de la pantalla (no se sale por el costado) */
+@media (max-width: 768px) {
+  .panel-tc { position: fixed !important; left: 12px; right: 12px !important; top: 64px !important; width: auto !important; max-width: none !important; }
+}
+.informe-texto h3 { margin: 1.1rem 0 .4rem; font-size: 1.05rem; }
+.informe-texto h4 { margin: .9rem 0 .3rem; font-size: .95rem; }
+.informe-texto p { margin: .35rem 0; line-height: 1.6; }
+.informe-texto ul { margin: .35rem 0 .35rem 1.2rem; line-height: 1.6; }

@@ -59,7 +59,7 @@ for i, linea in enumerate(lineas):
     if not m:
         continue
     clave, valor = m.group(1), m.group(2).strip().strip('"').strip("'")
-    if clave in GENERADAS and not valor:
+    if clave in GENERADAS and (not valor or valor.startswith(("inventar", "cambiar"))):   # ### CAMBIO AQUÍ ### el valor de ejemplo no sirve
         valor = secrets.token_hex(GENERADAS[clave])
         lineas[i] = f"{clave}={valor}"
         cambio = True

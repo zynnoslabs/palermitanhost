@@ -19,9 +19,9 @@
   {% if auto_activa %}
     <strong>🌙 Actualización automática activada.</strong>{{ info('auto_competencia') }}
     {% if corrida %}
-      Última corrida: {{ corrida.inicio|replace('T', ' ') }} · {{ corrida.ok }}/{{ corrida.grupos }} zonas actualizadas
+      Última corrida: {{ corrida.inicio|fecha(16) }} · {{ corrida.ok }}/{{ corrida.grupos }} zonas actualizadas
       {% if corrida.busquedas_serpapi %} · {{ corrida.busquedas_serpapi }} búsqueda(s) de Google{% endif %}{% if corrida.creditos_tavily %} · {{ corrida.creditos_tavily }} créditos de Tavily{% endif %}
-      {% if not corrida.terminado %} · <em>en curso…</em>{% endif %}
+      {% if not corrida.terminado %} · <em>{{ 'en curso…' if corrida_activa else 'se interrumpió (se reintenta la próxima noche)' }}</em>{% endif %}{# ### CAMBIO AQUÍ ### #}
       {% for e in corrida.errores %}<div class="muted" style="font-size:.8rem">⚠ {{ e }}</div>{% endfor %}
     {% else %} Todavía no corrió ninguna vez.{% endif %}
   {% else %}
@@ -53,7 +53,7 @@
     </div>
   </form>
   <form method="post" action="{{ url_for('buscar_competencia') }}"
-        onsubmit="var b=this.querySelector('button');b.disabled=true;b.textContent='Buscando comparables… (hasta 1 min)';">
+        data-procesando="Buscando comparables… (hasta 1 min)">{# ### CAMBIO AQUÍ ### lo maneja app.js (y se reactiva al volver atrás) #}
     <input type="hidden" name="propiedad_id" value="{{ prop_sel.id if prop_sel else '' }}">
     <button type="submit" class="btn btn-primary">✦ Buscar comparables con IA</button>
   </form>

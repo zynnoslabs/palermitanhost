@@ -68,12 +68,19 @@ def anio_pendiente():
 
 
 # ── Contenido del zip ─────────────────────────────────────────────────────────
+def _seguro(v):
+    """### CAMBIO AQUÍ ### un texto que empieza con = o @ (o +/- seguido de letra) Excel lo ejecuta como fórmula."""
+    if isinstance(v, str) and v and (v[0] in "=@" or (v[0] in "+-" and len(v) > 1 and not v[1].isdigit() and v[1] not in " ,.")):
+        return "'" + v
+    return v
+
+
 def _csv(filas):
     txt = io.StringIO()
     if filas:
         w = csv.DictWriter(txt, fieldnames=list(filas[0].keys()))
         w.writeheader()
-        w.writerows(filas)
+        w.writerows({k: _seguro(v) for k, v in f.items()} for f in filas)
     return "﻿" + txt.getvalue()   # ﻿: Excel lee bien los acentos
 
 
@@ -96,7 +103,8 @@ def _datos_del_anio(anio):
     return {
         "reservas": db.query("""
             SELECT r.*, p.nombre AS propiedad FROM reservas r LEFT JOIN propiedades p ON p.id = r.propiedad_id
-            WHERE r.fecha_inicio >= %s AND r.fecha_inicio < %s ORDER BY r.fecha_inicio""", (desde, hasta)),
+            WHERE r.fecha_inicio < %s AND COALESCE(NULLIF(r.fecha_fin,''), r.fecha_inicio) > %s
+            ORDER BY r.fecha_inicio""", (hasta, desde)),   # ### CAMBIO AQUÍ ### incluye la estadía que cruza el 31/12
         "resenas": db.query("""
             SELECT r.*, p.nombre AS propiedad FROM resenas r LEFT JOIN propiedades p ON p.id = r.propiedad_id
             WHERE COALESCE(r.fecha,'') >= %s AND COALESCE(r.fecha,'') < %s ORDER BY r.fecha""", (desde, hasta)),
@@ -114,28 +122,46 @@ def _resumen_excel(anio, reservas):
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment
 
-    validas = [r for r in reservas if (r.get("estado") or "") != "cancelada"]
-    canceladas = len(reservas) - len(validas)
+    # ### CAMBIO AQUÍ ### mismo cálculo que el Dashboard: cada mes recibe sus noches y su parte del dinero
+    # (una estadía del 28/12 al 04/01 reparte 4 noches en un año y 3 en el otro)
+    import metricas
+    from datetime import date as _d
+    import calendar
+    canceladas = sum(1 for r in reservas if (r.get("estado") or "") == "cancelada")
 
-    def agrupar(clave):
+    def bloque(sel, d1, d2):
+        m = metricas.calcular_metricas(sel, d1, d2)
+        return {"reservas": m.get("total_reservas", 0), "noches": m.get("noches_ocupadas", 0),
+                "bruto": m.get("ingreso_bruto", 0), "comision": m.get("comisiones", 0), "neto": m.get("ingreso_neto", 0)}
+
+    def por_mes():
         g = {}
-        for r in validas:
-            k = (clave(r), r.get("moneda") or "ARS")
-            d = g.setdefault(k, {"reservas": 0, "noches": 0, "bruto": 0.0, "comision": 0.0, "neto": 0.0})
-            d["reservas"] += 1
-            d["noches"] += int(r.get("noches") or 0)
-            d["bruto"] += float(r.get("ingreso_bruto") or 0)
-            d["comision"] += float(r.get("comision_airbnb") or 0)
-            d["neto"] += float(r.get("ingreso_neto") or 0)
+        for mes in range(1, 13):
+            d1, d2 = _d(anio, mes, 1), _d(anio, mes, calendar.monthrange(anio, mes)[1])
+            for mon in ("ARS", "USD"):
+                sel = [r for r in reservas if (r.get("moneda") or "ARS") == mon]
+                b = bloque(sel, d1, d2)
+                if b["noches"] or b["bruto"]:
+                    g[(f"{anio}-{mes:02d}", mon)] = b
+        return g
+
+    def por_propiedad():
+        g = {}
+        for nombre in sorted({r.get("propiedad") or "Sin propiedad" for r in reservas}):
+            for mon in ("ARS", "USD"):
+                sel = [r for r in reservas if (r.get("propiedad") or "Sin propiedad") == nombre and (r.get("moneda") or "ARS") == mon]
+                if sel:
+                    g[(nombre, mon)] = bloque(sel, _d(anio, 1, 1), _d(anio, 12, 31))
         return g
 
     wb = Workbook()
     negrita, fondo = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="2A2A1E")
-    cab = ["", "Moneda", "Reservas", "Noches", "Ingreso bruto", "Comisiones", "Ingreso neto", "Precio prom./noche"]
+    cab = ["", "Moneda", "Reservas", "Noches", "Ingreso bruto", "Comisiones", "Ingreso neto", "Bruto por noche (con limpieza)"]
 
     def hoja(ws, titulo, filas_dict, etiqueta):
         ws.append([titulo]); ws["A1"].font = Font(bold=True, size=14)
-        ws.append([f"Generado el {hoy().isoformat()} · reservas canceladas excluidas ({canceladas})"])
+        ws.append([f"Generado el {hoy().strftime('%d/%m/%Y')} · canceladas: no suman noches ({canceladas}); "
+                   f"si Airbnb pagó algo por ellas, ese monto sí se cuenta"])
         ws.append([])
         ws.append([etiqueta] + cab[1:])
         for c in ws[4]:
@@ -143,7 +169,7 @@ def _resumen_excel(anio, reservas):
         totales = {}
         for (k, mon), d in sorted(filas_dict.items()):
             prom = d["bruto"] / d["noches"] if d["noches"] else 0
-            ws.append([k, mon, d["reservas"], d["noches"], round(d["bruto"], 2), round(d["comision"], 2), round(d["neto"], 2), round(prom, 2)])
+            ws.append([_seguro(k), mon, d["reservas"], d["noches"], round(d["bruto"], 2), round(d["comision"], 2), round(d["neto"], 2), round(prom, 2)])
             t = totales.setdefault(mon, {"reservas": 0, "noches": 0, "bruto": 0.0, "comision": 0.0, "neto": 0.0})
             for x in t:
                 t[x] += d[x]
@@ -159,10 +185,10 @@ def _resumen_excel(anio, reservas):
                 c.number_format = "#,##0.00"
                 c.alignment = Alignment(horizontal="right")
 
-    hoja(wb.active, f"Resumen {anio} por mes", agrupar(lambda r: (r.get("fecha_inicio") or "")[:7]), "Mes")
+    hoja(wb.active, f"Resumen {anio} por mes", por_mes(), "Mes")
     wb.active.title = "Por mes"
     hoja(wb.create_sheet("Por propiedad"), f"Resumen {anio} por propiedad",
-         agrupar(lambda r: r.get("propiedad") or "Sin propiedad"), "Propiedad")
+         por_propiedad(), "Propiedad")
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
@@ -222,7 +248,7 @@ SI ALGÚN DÍA EL SISTEMA SE ROMPE O SE PIERDEN DATOS
   y Releases ("Copia anual"), cifradas con tu frase CLAVE_RESPALDO.
 - Pasos técnicos para un programador:
   a) Crear una base PostgreSQL y un servicio web (Render) con el código de "codigo/".
-     Instalar: pip install -r requirements.txt · Iniciar: gunicorn app:app
+     Instalar: pip install -r requirements.txt · Iniciar: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
   b) Cargar las variables de entorno (ver codigo/.env.example).
   c) Al arrancar, el sistema crea las tablas solo.
   d) Restaurar datos: desde la copia cifrada (pg_restore, ver codigo/.github/workflows/respaldo.yml)

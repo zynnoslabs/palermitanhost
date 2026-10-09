@@ -11,19 +11,19 @@ AYUDA = {
     "tipo_cambio": "Pesos por dólar que usa el sistema para convertir. Podés traerlo de dolarapi.com (MEP, blue, oficial…) o cargarlo a mano.",
     # ── Dashboard ──────────────────────────────────────────────
     "dashboard": "Resumen del negocio en el período elegido. Usá el filtro para ver una propiedad o todas, y las fechas.",
-    "filtro": "Filtra todos los números del dashboard por propiedad y por fecha de llegada de las reservas.",
-    "reservas": "Cantidad de reservas que empiezan dentro del período elegido.",
-    "ocupacion": "Porcentaje de noches vendidas sobre las noches disponibles (días del período × cantidad de propiedades).",
-    "adr": "ADR: precio promedio cobrado por cada noche vendida. Ingreso bruto ÷ noches ocupadas.",
+    "filtro": "Filtra los números del dashboard por propiedad y por fechas. Cuentan las noches que caen dentro de esas fechas (una estadía que cruza de mes se reparte entre los dos).",
+    "reservas": "Cantidad de reservas con al menos una noche dentro del período elegido (sin contar las canceladas).",
+    "ocupacion": "Porcentaje de noches vendidas sobre las noches disponibles (días del período × propiedades activas). Las canceladas no cuentan.",
+    "adr": "ADR: precio promedio cobrado por cada noche vendida, sin la tarifa de limpieza. Ingreso de alojamiento ÷ noches ocupadas.",
     "revpar": "RevPAR: ingreso por noche disponible, vendida o no. Combina precio y ocupación: es la mejor medida de rendimiento.",
     "ingreso_bruto": "Lo que pagaron los huéspedes, antes de descontar comisiones y costos.",
-    "ingreso_neto_real": "Lo que te queda: ingreso bruto menos comisiones de la plataforma y costos fijos del período (expensas, servicios, limpieza…).",
+    "ingreso_neto_real": "Lo que te queda: lo que te paga Airbnb (ya sin su comisión) menos los costos fijos del período (expensas, servicios, limpieza…).",
     "estadia": "Cantidad promedio de noches por reserva.",
     "anticipacion": "Con cuántos días de anticipación reservan en promedio. Sirve para saber cuándo ajustar precios.",
     "resenas_pend": "Reseñas cargadas que todavía no respondiste. Tocá para ir a responderlas.",
     "ocup_7": "Porcentaje de tus propiedades ocupadas cada noche de la última semana.",
     "proximas": "Reservas que todavía no empezaron. Aparecen si importás el CSV de Reservas de Airbnb.",
-    "ingresos_mes": "Ingreso bruto de cada mes, en la moneda elegida arriba.",
+    "ingresos_mes": "Ingreso bruto de cada mes (últimos 12 meses como mínimo), en la moneda elegida arriba. Cada reserva aporta a cada mes según sus noches.",
     "noches_mes": "Noches vendidas por mes, sumando las propiedades filtradas.",
     "generar_informe": "La IA escribe un informe con los números del período: resumen, análisis, riesgos y recomendaciones. Queda guardado en Informes.",
     # ── Propiedades ────────────────────────────────────────────
@@ -37,7 +37,7 @@ AYUDA = {
     "costos_fijos": "Gastos mensuales fijos de la propiedad. Se descuentan del ingreso y marcan el precio mínimo para no perder plata.",
     "info_huespedes": "WiFi, horarios, reglas, cómo llegar… El asistente responde a los huéspedes SOLO con lo que escribas acá.",
     # ── Importar ───────────────────────────────────────────────
-    "importar": "Subí los CSV que exporta Airbnb. El de Reservas trae las futuras con huésped y estado; el de Ganancias trae los montos. Se combinan sin duplicar.",
+    "importar": "Subí los CSV que exporta Airbnb. El de Reservas trae las futuras con huésped y estado; el de Ganancias trae los montos exactos. Se combinan sin duplicar, aunque subas el mismo período dos veces.",
     "asignar_anuncios": "Indicá a qué propiedad del sistema corresponde cada anuncio del archivo. Los que no asignes no se importan.",
     # ── Precios ────────────────────────────────────────────────
     "precios": "Calcula un precio por noche para una fecha, partiendo de la competencia y ajustando por tu puntaje, reseñas, temporada, ocupación y fin de semana.",
@@ -53,8 +53,8 @@ AYUDA = {
     # ── Informes ───────────────────────────────────────────────
     "informes": "Informes generados por la IA. Podés verlos, imprimirlos o descargarlos en PDF y Excel.",
     # ── Competencia ────────────────────────────────────────────
-    "competencia": "Precios por noche de alojamientos parecidos a los tuyos (mismo barrio, ambientes y capacidad), buscados en internet.",
-    "auto_competencia": "Todas las noches el sistema actualiza solo la competencia de cada zona (barrio). Las propiedades del mismo barrio comparten la búsqueda y los precios se acumulan 30 días.",
+    "competencia": "Precios por noche de alojamientos parecidos a los tuyos (misma ciudad, barrio y cantidad de ambientes), buscados en internet.",
+    "auto_competencia": "Todas las noches el sistema actualiza solo la competencia. Las propiedades del mismo barrio y con los mismos ambientes comparten la búsqueda, y los precios se acumulan 30 días. Las búsquedas del mes se reparten para que no se terminen antes de fin de mes.",
     "buscar_comparables": "Busca ahora en Google los alquileres vacacionales del barrio (Airbnb, VRBO, Booking…) con precio por noche. Gasta 1 o 2 de las 250 búsquedas gratis del mes.",
     "mediana": "El precio del medio: la mitad de la competencia cobra menos y la otra mitad más. Es más confiable que el promedio.",
     "tendencia": "Cómo cambió la mediana del mercado en las últimas búsquedas. Sirve para ver si la zona sube o baja.",
