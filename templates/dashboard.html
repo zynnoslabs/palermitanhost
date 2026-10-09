@@ -41,7 +41,7 @@
     <div class="stat-lbl">Reservas{{ info('reservas') }}</div>
   </div>
   <div class="stat-card">
-    <div class="stat-num">{{ stats.tasa_ocupacion }}%</div>
+    <div class="stat-num">{{ stats.tasa_ocupacion|num }}%</div>
     <div class="stat-lbl">Ocupación{{ info('ocupacion') }}</div>
   </div>
   <div class="stat-card">
@@ -61,7 +61,7 @@
     <div class="stat-lbl">Ingreso neto real{{ info('ingreso_neto_real') }}</div>
   </div>
   <div class="stat-card">
-    <div class="stat-num">{{ stats.estadias_prom }} noches</div>
+    <div class="stat-num">{{ stats.estadias_prom|num }} noches</div>
     <div class="stat-lbl">Estadía promedio{{ info('estadia') }}</div>
   </div>
   <!-- ### CAMBIO AQUÍ ### reseñas pendientes -->
@@ -71,7 +71,7 @@
   </a>
   {% if stats.anticipacion_prom %}
   <div class="stat-card">
-    <div class="stat-num">{{ stats.anticipacion_prom }} días</div>
+    <div class="stat-num">{{ stats.anticipacion_prom|num(0) }} días</div>
     <div class="stat-lbl">Anticipación promedio{{ info('anticipacion') }}</div>
   </div>
   {% endif %}
@@ -94,7 +94,7 @@
       <tr>
         <td>{{ r.huesped_nombre or '—' }}</td>
         <td>{{ r.prop_nombre or '—' }}</td>
-        <td>{{ r.fecha_inicio }}</td>
+        <td>{{ r.fecha_inicio|fecha }}</td>
         <td>{{ r.noches or '—' }}</td>
         <td><span class="badge {{ 'badge-warn' if r.estado == 'pendiente' else 'badge-ok' }}">{{ (r.estado or 'confirmada')|capitalize }}</span></td>
       </tr>

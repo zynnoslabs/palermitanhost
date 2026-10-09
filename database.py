@@ -22,8 +22,22 @@ def _get_pool():
     return _pool
 
 
+_con_hora_ar = set()   # ### CAMBIO AQUÍ ###
+
+
 def get_db():
-    return _get_pool().getconn()
+    conn = _get_pool().getconn()
+    # ### CAMBIO AQUÍ ### — la base también trabaja en hora de Buenos Aires (CURRENT_DATE, fechas guardadas)
+    if id(conn) not in _con_hora_ar:
+        try:
+            cur = conn.cursor()
+            cur.execute("SET TIME ZONE 'America/Argentina/Buenos_Aires'")
+            conn.commit()
+            cur.close()
+            _con_hora_ar.add(id(conn))
+        except Exception:
+            conn.rollback()
+    return conn
 
 # Alias para compatibilidad con asistente_route.py y exportar_routes.py
 def get_db_connection():
@@ -118,6 +132,8 @@ def init_db():
         # ### CAMBIO AQUÍ ### — moneda (ARS o USD) en propiedades, reservas y competencia
         for tabla in ("propiedades", "reservas", "competencia"):
             cur.execute(f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS moneda TEXT DEFAULT 'ARS'")
+        # ### CAMBIO AQUÍ ### — ciudad de cada propiedad (se usa para buscar la competencia)
+        cur.execute("ALTER TABLE propiedades ADD COLUMN IF NOT EXISTS ciudad TEXT DEFAULT 'Buenos Aires'")
 
         cur.execute("""
             CREATE TABLE IF NOT EXISTS consultas_huespedes (

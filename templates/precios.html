@@ -38,9 +38,9 @@
     <div class="stat-card"><div class="stat-num">{{ fmt(mercado.mediana) }}</div><div class="stat-lbl">Mediana zona{{ info('mediana') }}</div></div>
     <div class="stat-card"><div class="stat-num">{{ fmt(mercado.min) }}</div><div class="stat-lbl">Precio más bajo</div></div>
     <div class="stat-card"><div class="stat-num">{{ fmt(mercado.max) }}</div><div class="stat-lbl">Precio más alto</div></div>
-    <div class="stat-card"><div class="stat-num">{{ mercado.rating_promedio_zona }}★</div><div class="stat-lbl">Puntaje promedio comparables</div></div>
+    <div class="stat-card"><div class="stat-num">{{ mercado.rating_promedio_zona|num(2) if mercado.rating_real else '—' }}★</div><div class="stat-lbl">Puntaje promedio comparables</div></div>
   </div>
-  <p class="muted" style="margin-top:8px">Fuente: {{ mercado.cantidad_propiedades }} comparables · búsqueda del {{ mercado.fecha }} ·
+  <p class="muted" style="margin-top:8px">Fuente: {{ mercado.cantidad_propiedades }} comparables · búsqueda del {{ mercado.fecha|fecha }} ·
     <a href="{{ url_for('competencia', pid=prop_sel.id) }}" class="link">Ver comparables ↗</a></p>
 </div>
 {% if mercado and mercado.sin_convertir %}<div class="alert alert-warn">{{ mercado.sin_convertir }} comparables están en otra moneda y no se usaron: cargá el tipo de cambio.</div>{% endif %}
@@ -80,7 +80,7 @@
       <tr>
         <td>{{ p.paso }}</td>
         <td>{{ p.descripcion }}</td>
-        <td>{{ '—' if p.paso == 1 else '×%.2f'|format(p.multiplicador) }}</td>
+        <td>{{ '—' if p.paso == 1 else '×' ~ (p.multiplicador|num(2)) }}</td>
         <td><strong>{{ fmt(p.acumulado) }}</strong></td>
       </tr>
     {% endfor %}

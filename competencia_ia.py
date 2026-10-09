@@ -60,12 +60,16 @@ def _cliente():
     return Groq(api_key=api_key, timeout=90)
 
 
+def _ciudad(prop):   # ### CAMBIO AQUÍ ### la ciudad sale de la propiedad (antes fija)
+    return (prop.get("ciudad") or "").strip() or "Buenos Aires"
+
+
 def _prompt(prop):
-    barrio = prop.get("barrio") or "Palermo"
+    barrio = (prop.get("barrio") or "").strip()   # ### CAMBIO AQUÍ ### sin "Palermo" de relleno
     tipo = prop.get("tipo") or "departamento"
     amb = prop.get("ambientes") or "?"
     cap = prop.get("capacidad") or "?"
-    return f"""Buscá en internet anuncios ACTUALES de alquiler temporario en Buenos Aires, Argentina,
+    return f"""Buscá en internet anuncios ACTUALES de alquiler temporario en {_ciudad(prop)}, Argentina,
 parecidos a esta propiedad:
 - Barrio: {barrio}
 - Tipo: {tipo}
@@ -207,7 +211,7 @@ def _resumen_ia(prop, stats):
         f"por noche (rango {monedas.formatear(stats['minimo'], mon)} a {monedas.formatear(stats['maximo'], mon)})."
     )
     try:
-        prompt = f"""Sos asesor de alquileres temporarios en Buenos Aires. Escribí en español rioplatense,
+        prompt = f"""Sos asesor de alquileres temporarios en {_ciudad(prop)}. Escribí en español rioplatense,
 con voseo, un resumen de máximo 4 oraciones para el dueño de "{prop.get('nombre')}".
 Datos de la competencia encontrada hoy (todo en {mon}): {stats['cantidad']} anuncios similares,
 mediana {stats['mediana']} por noche, mínimo {stats['minimo']}, máximo {stats['maximo']}.
@@ -224,10 +228,10 @@ Usá solo estos números, no inventes otros."""
 def _consultas_tavily(prop):
     # ### CAMBIO AQUÍ ### — las 2 variantes que mejor funcionaron en el diagnóstico (A y C).
     # Agregar ambientes o capacidad a la consulta dio 0 precios por noche.
-    barrio = prop.get("barrio") or "Palermo"
+    barrio, ciudad = (prop.get("barrio") or "").strip(), _ciudad(prop)   # ### CAMBIO AQUÍ ###
     return [
-        f"departamento por noche {barrio} Buenos Aires",
-        f"{barrio} Buenos Aires apartment price per night",
+        f"departamento por noche {barrio} {ciudad}",
+        f"{barrio} {ciudad} apartment price per night",
     ]
 
 
@@ -259,7 +263,7 @@ def _prompt_extraer(prop, resultados):
     bloques = []
     for i, r in enumerate(resultados):
         bloques.append(f"[{i}] {r.get('title', '')}\nURL: {r.get('url', '')}\n{(r.get('content') or '')[:700]}")
-    return f"""Estos son resultados de búsqueda de alquileres temporarios en Buenos Aires.
+    return f"""Estos son resultados de búsqueda de alquileres temporarios en {_ciudad(prop)}.
 Propiedad a comparar: {prop.get('ambientes') or '?'} ambientes, {prop.get('capacidad') or '?'} huéspedes,
 barrio {prop.get('barrio') or '?'}.
 
@@ -396,12 +400,12 @@ def _precio_serpapi(p, noches):
 
 
 def _serpapi(prop, api_key, page_token=None):
-    barrio = prop.get("barrio") or "Palermo"
+    barrio = (prop.get("barrio") or "").strip()   # ### CAMBIO AQUÍ ###
     entrada, salida = _fechas_serpapi()
     amb = prop.get("ambientes") or 0
     params = {
         "engine": "google_hotels", "vacation_rentals": "true",
-        "q": f"{barrio}, Buenos Aires, Argentina",
+        "q": f"{barrio}, {_ciudad(prop)}, Argentina",
         "check_in_date": entrada, "check_out_date": salida,
         "adults": max(int(prop.get("capacidad") or 2), 1),
         "currency": prop.get("moneda") or "USD", "gl": "ar", "hl": "es",
@@ -465,7 +469,7 @@ def convertir_serpapi(props, prop, params):
         m = RE_CAPAC.search(info)
         cap = int(m.group(1) or m.group(2)) if m else None
         link = p.get("link") or ("https://www.google.com/travel/search?q=" +
-                                 requests.utils.quote(f"{p.get('name', '')} {barrio} Buenos Aires"))
+                                 requests.utils.quote(f"{p.get('name', '')} {barrio} {_ciudad(prop)}"))
         crudos.append({
             "plataforma": _plataforma_serpapi(p),
             "titulo": p.get("name") or "",
@@ -546,6 +550,11 @@ def buscar_comparables(prop, tc=None, con_resumen=True):
                  "fecha": datetime.now(timezone(timedelta(hours=-3))).date().isoformat(), "fuente": None, "creditos_tavily": 0, "tokens": 0}
     comparables, errores, fuentes = [], [], []
     resultado["busquedas_serpapi"] = 0
+    # ### CAMBIO AQUÍ ### sin barrio no se busca (antes buscaba "Palermo" para cualquier propiedad)
+    if not (prop.get("barrio") or "").strip():
+        resultado["error"] = "La propiedad no tiene barrio cargado. Editala en Propiedades y completá el barrio."
+        resultado["avisos"] = []
+        return resultado
 
     # ### CAMBIO AQUÍ ### 1) Google alquileres vacacionales vía SerpApi (precios reales, sin IA)
     serp_key = os.getenv("SERPAPI_API_KEY")

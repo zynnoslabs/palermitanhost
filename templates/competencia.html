@@ -87,7 +87,7 @@
 
 {% if resumen %}
 <div class="card">
-  <div class="card-title">Qué dice la IA <span class="muted">· búsqueda del {{ resumen.fecha }}{% if resumen.fuente %} · fuente: {{ resumen.fuente }}{% endif %}</span></div>
+  <div class="card-title">Qué dice la IA <span class="muted">· búsqueda del {{ resumen.fecha|fecha }}{% if resumen.fuente %} · fuente: {{ resumen.fuente }}{% endif %}</span></div>
   <p style="white-space:pre-line">{{ resumen.texto }}</p>
 </div>
 {% endif %}
@@ -98,8 +98,8 @@
 <div class="card" style="margin-bottom:16px">
   <div class="card-title">Tendencia del mercado{{ info('tendencia') }} <span class="muted">· mediana por noche ({{ ult.moneda }}), últimos {{ historial|length }} registros</span></div>
   {% if ant.mediana %}{% set var = ((ult.mediana - ant.mediana) / ant.mediana * 100) %}
-  <p>Desde el {{ ant.fecha }} la mediana pasó de {{ ant.mediana|dinero(ant.moneda) }} a {{ ult.mediana|dinero(ult.moneda) }}
-    (<strong style="color:{{ '#2d6a46' if var >= 0 else '#9b4a4a' }}">{{ '%+.1f'|format(var) }}%</strong>).</p>
+  <p>Desde el {{ ant.fecha|fecha }} la mediana pasó de {{ ant.mediana|dinero(ant.moneda) }} a {{ ult.mediana|dinero(ult.moneda) }}
+    (<strong style="color:{{ '#2d6a46' if var >= 0 else '#9b4a4a' }}">{{ '+' if var > 0 else '' }}{{ var|num }}%</strong>).</p>
   {% endif %}
   <canvas id="chartHist" height="90"></canvas>
 </div>
@@ -122,8 +122,8 @@
     <td>{{ r.precio_noche|dinero(r.moneda) }}{# ### CAMBIO AQUÍ ### precio original + equivalente #}
         {% set mp = prop_sel.moneda or 'ARS' %}
         {% if (r.moneda or 'ARS') != mp and tc_info %}<br><small class="muted">≈ {{ r.precio_noche|dinero(r.moneda, mp) }}</small>{% endif %}</td>
-    <td>{{ "%.2f"|format(r.rating) if r.rating else '—' }}</td>
-    <td>{{ r.fecha }}</td>
+    <td>{{ r.rating|num(2) if r.rating else '—' }}</td>
+    <td>{{ r.fecha|fecha }}</td>
     {# ### CAMBIO AQUÍ ### solo links http/https (bloquea "javascript:" y otros esquemas peligrosos) #}
     <td>{% if url and url.lower().startswith(('http://', 'https://')) %}<a href="{{ url }}" target="_blank" rel="noopener noreferrer" class="link">Ver anuncio ↗</a>{% else %}—{% endif %}</td>
     <td>

@@ -93,7 +93,7 @@
               <button class="btn btn-sm">Guardar</button>
             </div>
           </form>
-          {% if tc_info and tc_info.fecha %}<p class="muted" style="margin-top:8px">Última actualización: {{ tc_info.fecha }}</p>{% endif %}
+          {% if tc_info and tc_info.fecha %}<p class="muted" style="margin-top:8px">Última actualización: {{ tc_info.fecha|fecha }}</p>{% endif %}
         </div>
       </details>
       {% endif %}

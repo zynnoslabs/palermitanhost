@@ -55,8 +55,8 @@
     {% for r in huespedes %}
     <tr>
       <td>{{ r.huesped_nombre or '—' }}</td>
-      <td>{{ r.fecha_inicio }}</td>
-      <td>{{ r.fecha_fin or '—' }}</td>
+      <td>{{ r.fecha_inicio|fecha }}</td>
+      <td>{{ r.fecha_fin|fecha or '—' }}</td>
       <td>{{ (r.canal or 'airbnb')|capitalize }}</td>
       <td>{{ r.ingreso_bruto|dinero(r.moneda) }}</td>
       <td><span class="badge {{ 'badge-warn' if r.estado in ('pendiente','cancelada') else 'badge-ok' }}">{{ (r.estado or 'completada')|capitalize }}</span></td>

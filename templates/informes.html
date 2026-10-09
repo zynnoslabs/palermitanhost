@@ -42,7 +42,7 @@
 
 {% if informe %}
 <div class="form-card informe-completo">
-  <div class="informe-meta muted">{{ informe.fecha_desde }} al {{ informe.fecha_hasta }} · Generado: {{ informe.creado_en|fecha(16) }}</div>
+  <div class="informe-meta muted">{{ informe.fecha_desde|fecha }} al {{ informe.fecha_hasta|fecha }} · Generado: {{ informe.creado_en|fecha(16) }}</div>
   {# ### CAMBIO AQUÍ ### antes se mostraba el texto de la IA sin escapar (podía meter código en la página) #}
   <div class="informe-texto" style="white-space:pre-line">{{ informe.contenido }}</div>
 </div>

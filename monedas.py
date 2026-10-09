@@ -98,7 +98,8 @@ def formatear(monto, moneda):
     if monto is None:
         return "—"
     simbolo = "US$" if moneda == "USD" else "$"
-    return f"{simbolo} {monto:,.0f}".replace(",", ".")
+    signo = "-" if round(monto) < 0 else ""   # ### CAMBIO AQUÍ ### antes: "$ -253.236"
+    return f"{signo}{simbolo} {abs(monto):,.0f}".replace(",", ".")
 
 
 def convertir_reservas(reservas, vista, tc):

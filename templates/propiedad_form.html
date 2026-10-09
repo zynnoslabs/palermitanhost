@@ -18,7 +18,11 @@
     </div>
     <div class="form-group">
       <label>Barrio / Localidad</label>
-      <input type="text" name="barrio" value="{{ prop.barrio if prop else '' }}">
+      <input type="text" name="barrio" value="{{ prop.barrio if prop else '' }}" required placeholder="Ej: Palermo">{# ### CAMBIO AQUÍ ### obligatorio: sin barrio no se puede buscar la competencia #}
+    </div>
+    <div class="form-group">{# ### CAMBIO AQUÍ ### ciudad #}
+      <label>Ciudad</label>
+      <input type="text" name="ciudad" value="{{ prop.ciudad if prop and prop.ciudad else 'Buenos Aires' }}" required>
     </div>
     <div class="form-group">
       <label>Tipo</label>

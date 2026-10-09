@@ -138,7 +138,7 @@
 <div class="card" style="margin-bottom:12px">
   <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
     <div><strong>{{ r.huesped or 'Huésped' }}</strong> · {{ r.prop_nombre }}
-      {% if r.puntaje %} · {{ r.puntaje }}★{% endif %} · <span class="muted">{{ r.fecha }}</span></div>
+      {% if r.puntaje %} · {{ r.puntaje }}★{% endif %} · <span class="muted">{{ r.fecha|fecha }}</span></div>
     {% if r.pendiente %}<span class="badge badge-warn">Pendiente</span>{% else %}<span class="badge badge-ok">Respondida</span>{% endif %}
   </div>
   <p style="margin:8px 0">“{{ r.texto }}”</p>

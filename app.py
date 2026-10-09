@@ -1,5 +1,11 @@
 # app.py
 import os
+import time
+# ### CAMBIO AQUÍ ### — el servidor de Render usa hora UTC: de 21 a 24 h ya era "mañana".
+# Con esto date.today() y datetime.now() dan la hora de Buenos Aires en todo el sistema.
+os.environ["TZ"] = "America/Argentina/Buenos_Aires"
+if hasattr(time, "tzset"):
+    time.tzset()
 import json
 from datetime import datetime, date, timedelta   # ### CAMBIO AQUÍ ###
 from functools import wraps
@@ -63,16 +69,42 @@ from ruta_precios    import precios_bp
 
 app.register_blueprint(asistente_bp)
 app.register_blueprint(exportar_bp)
-app.register_blueprint(precios_bp)
+# app.register_blueprint(precios_bp)   # ### CAMBIO AQUÍ ### desactivado: scrapeaba Airbnb y tenía precios fijos de Palermo (la app usa /precios)
 
 # ### CAMBIO AQUÍ ### — PostgreSQL devuelve fechas como datetime; antes {{ x[:10] }} rompía la página
 @app.template_filter("fecha")
 def filtro_fecha(valor, largo=10):
+    # ### CAMBIO AQUÍ ### — fechas en formato argentino: 05/10/2026 (antes 2026-10-05)
     if not valor:
         return ""
-    if hasattr(valor, "strftime"):
-        return valor.strftime("%Y-%m-%d %H:%M" if largo > 10 else "%Y-%m-%d")
-    return str(valor)[:largo]
+    if not hasattr(valor, "strftime"):
+        txt = str(valor).replace("T", " ")
+        for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d"):
+            try:
+                valor = datetime.strptime(txt[:16] if "%H" in fmt else txt[:10], fmt)
+                break
+            except ValueError:
+                continue
+        else:
+            return str(valor)[:largo]
+    if largo > 10 and isinstance(valor, datetime):
+        return valor.strftime("%d/%m/%Y %H:%M")
+    return valor.strftime("%d/%m/%Y")
+
+
+@app.template_filter("num")
+def filtro_num(valor, decimales=1):
+    # ### CAMBIO AQUÍ ### — números con coma decimal: 70,8 (antes 70.8)
+    if valor is None or valor == "":
+        return "—"
+    try:
+        v = float(valor)
+    except (TypeError, ValueError):
+        return str(valor)
+    txt = f"{v:,.{decimales}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    if decimales and txt.endswith("," + "0" * decimales):
+        txt = txt[: -(decimales + 1)]
+    return txt
 
 
 def _costos_y_unidades(prop_id, vista="ARS", tc=None):
@@ -323,8 +355,8 @@ def nueva_propiedad():
             INSERT INTO propiedades
             (nombre,direccion,barrio,tipo,ambientes,capacidad,precio_base,
              costo_expensas,costo_servicios,costo_limpieza,costo_comision,info_huespedes,estado,
-             rating,reviews_count,moneda)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+             rating,reviews_count,moneda,ciudad)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """, (
             f.get("nombre"), f.get("direccion"), f.get("barrio"), f.get("tipo"),
             f.get("ambientes") or None, f.get("capacidad") or None,
@@ -332,7 +364,8 @@ def nueva_propiedad():
             f.get("costo_expensas") or 0, f.get("costo_servicios") or 0,
             f.get("costo_limpieza") or 0, f.get("costo_comision") or 0,
             f.get("info_huespedes",""), f.get("estado","activa"),   # ### CAMBIO AQUÍ ###
-            f.get("rating") or None, f.get("reviews_count") or 0, f.get("moneda","ARS")
+            f.get("rating") or None, f.get("reviews_count") or 0, f.get("moneda","ARS"),
+            (f.get("ciudad") or "").strip() or "Buenos Aires"   # ### CAMBIO AQUÍ ###
         ))
         flash("Propiedad creada correctamente.", "ok")
         return redirect(url_for("propiedades"))
@@ -352,7 +385,7 @@ def editar_propiedad(pid):
             UPDATE propiedades SET nombre=%s,direccion=%s,barrio=%s,tipo=%s,ambientes=%s,
             capacidad=%s,precio_base=%s,costo_expensas=%s,costo_servicios=%s,
             costo_limpieza=%s,costo_comision=%s,info_huespedes=%s,estado=%s,
-            rating=%s,reviews_count=%s,moneda=%s
+            rating=%s,reviews_count=%s,moneda=%s,ciudad=%s
             WHERE id=%s
         """, (
             f.get("nombre"), f.get("direccion"), f.get("barrio"), f.get("tipo"),
@@ -361,7 +394,8 @@ def editar_propiedad(pid):
             f.get("costo_expensas") or 0, f.get("costo_servicios") or 0,
             f.get("costo_limpieza") or 0, f.get("costo_comision") or 0,
             f.get("info_huespedes",""), f.get("estado","activa"),   # ### CAMBIO AQUÍ ###
-            f.get("rating") or None, f.get("reviews_count") or 0, f.get("moneda","ARS"), pid
+            f.get("rating") or None, f.get("reviews_count") or 0, f.get("moneda","ARS"),
+            (f.get("ciudad") or "").strip() or "Buenos Aires", pid   # ### CAMBIO AQUÍ ###
         ))
         flash("Propiedad actualizada.", "ok")
         return redirect(url_for("propiedades"))
@@ -489,6 +523,8 @@ def importar_asignar():
         # y después el de Ganancias sin duplicar.
         importadas = 0
         duplicadas = 0
+        # ### CAMBIO AQUÍ ### qué export es: "Ganancias" (montos exactos) o "Reservas" (monto aproximado)
+        solo_completar = importador.tipo_de_archivo(csv_encabezados) == "reservas"
         for fila in filas_ok:
             try:
                 nueva = db.execute("""
@@ -501,11 +537,20 @@ def importar_asignar():
                       huesped_nombre = COALESCE(NULLIF(EXCLUDED.huesped_nombre,''), reservas.huesped_nombre),
                       estado = CASE WHEN EXCLUDED.estado = 'completada' AND reservas.estado = 'cancelada'
                                     THEN reservas.estado ELSE EXCLUDED.estado END,
-                      ingreso_bruto   = CASE WHEN EXCLUDED.ingreso_bruto  > 0 THEN EXCLUDED.ingreso_bruto  ELSE reservas.ingreso_bruto END,
-                      comision_airbnb = CASE WHEN EXCLUDED.comision_airbnb <> 0 THEN EXCLUDED.comision_airbnb ELSE reservas.comision_airbnb END,
-                      limpieza        = CASE WHEN EXCLUDED.limpieza       > 0 THEN EXCLUDED.limpieza       ELSE reservas.limpieza END,
-                      ingreso_neto    = CASE WHEN EXCLUDED.ingreso_neto   > 0 THEN EXCLUDED.ingreso_neto   ELSE reservas.ingreso_neto END,
+                      -- ### CAMBIO AQUÍ ### el archivo de "Reservas" no pisa los montos que ya vinieron del de Ganancias
+                      ingreso_bruto   = CASE WHEN %s AND reservas.ingreso_bruto <> 0 THEN reservas.ingreso_bruto
+                                             WHEN EXCLUDED.ingreso_bruto  > 0 THEN EXCLUDED.ingreso_bruto  ELSE reservas.ingreso_bruto END,
+                      comision_airbnb = CASE WHEN %s AND reservas.comision_airbnb <> 0 THEN reservas.comision_airbnb
+                                             WHEN EXCLUDED.comision_airbnb <> 0 THEN EXCLUDED.comision_airbnb ELSE reservas.comision_airbnb END,
+                      limpieza        = CASE WHEN %s AND reservas.limpieza <> 0 THEN reservas.limpieza
+                                             WHEN EXCLUDED.limpieza       > 0 THEN EXCLUDED.limpieza       ELSE reservas.limpieza END,
+                      ingreso_neto    = CASE WHEN %s AND reservas.ingreso_neto <> 0 THEN reservas.ingreso_neto
+                                             WHEN EXCLUDED.ingreso_neto   > 0 THEN EXCLUDED.ingreso_neto   ELSE reservas.ingreso_neto END,
                       anticipacion_dias = COALESCE(EXCLUDED.anticipacion_dias, reservas.anticipacion_dias),
+                      propiedad_id = EXCLUDED.propiedad_id,
+                      fecha_inicio = EXCLUDED.fecha_inicio,
+                      fecha_fin    = COALESCE(EXCLUDED.fecha_fin, reservas.fecha_fin),
+                      noches       = CASE WHEN EXCLUDED.noches > 0 THEN EXCLUDED.noches ELSE reservas.noches END,
                       moneda = EXCLUDED.moneda
                     RETURNING (xmax = 0)
                 """, (
@@ -513,7 +558,8 @@ def importar_asignar():
                     fila["fecha_inicio"], fila["fecha_fin"], fila["noches"],
                     fila["ingreso_bruto"], fila["comision_airbnb"],
                     fila["limpieza"], fila["ingreso_neto"], fila["anticipacion_dias"],
-                    fila.get("huesped_nombre", ""), fila.get("estado", "completada"), fila["moneda"]
+                    fila.get("huesped_nombre", ""), fila.get("estado", "completada"), fila["moneda"],
+                    solo_completar, solo_completar, solo_completar, solo_completar
                 ))
                 if nueva:
                     importadas += 1
@@ -673,7 +719,8 @@ def precios():
         if st:
             mercado = {
                 "mediana": st["mediana"], "min": st["minimo"], "max": st["maximo"],
-                "rating_promedio_zona": st["rating"] or 4.5,
+                "rating_promedio_zona": st["rating"] or 4.5,   # 4.5 solo para el cálculo
+                "rating_real": bool(st["rating"]),        # ### CAMBIO AQUÍ ### en pantalla "—" si no hay puntajes
                 "cantidad_propiedades": st["cantidad"],
                 "sin_convertir": st["sin_convertir"],
                 "simbolo": "US$" if prop_sel.get("moneda") == "USD" else "$",

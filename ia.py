@@ -165,7 +165,7 @@ Respuesta:"""
 def responder_resena(texto_resena, puntaje=None, nombre_propiedad="la propiedad", huesped_alias=None):
     """Devuelve un borrador de respuesta del anfitrión a una reseña. No inventa datos."""
     estrellas = f"Puntaje: {puntaje}/5" if puntaje else "Puntaje: no informado"
-    prompt = f"""Sos el anfitrión de {nombre_propiedad}, un alquiler temporario en Buenos Aires.
+    prompt = f"""Sos el anfitrión de {nombre_propiedad}, un alquiler temporario.
 Escribí una respuesta pública, breve (máximo 4 oraciones), cordial y profesional a esta reseña.
 {estrellas}
 {f"Quien escribió la reseña: {huesped_alias}" if huesped_alias else ""}
