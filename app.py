@@ -21,6 +21,7 @@ import competencia_auto  # ### CAMBIO AQUÍ ###
 import hmac
 import ayuda   # ### CAMBIO AQUÍ ### textos del ícono 'i'
 import privacidad   # ### CAMBIO AQUÍ ### nombres de huéspedes ocultos para la IA
+import archivo_anual   # ### CAMBIO AQUÍ ### archivo anual descargable
 
 from werkzeug.middleware.proxy_fix import ProxyFix   # ### CAMBIO AQUÍ ###
 
@@ -291,6 +292,7 @@ def dashboard():
     return render_template("dashboard.html",
         propiedades=propiedades, stats=stats, por_mes=por_mes,   # ### CAMBIO AQUÍ ### se escapa con |tojson
         alerta_comp=competencia_auto.alerta_sin_datos(),   # ### CAMBIO AQUÍ ### aviso si la competencia no se actualiza
+        archivo_pendiente=archivo_anual.anio_pendiente(),   # ### CAMBIO AQUÍ ### aviso del archivo anual
         desde=desde, hasta=hasta, prop_id=prop_id, informes=informes,
         proximas=proximas, resenas_pend=resenas_pend, ocup_7=ocup_7)
 
@@ -834,32 +836,39 @@ TABLAS_RESPALDO_EXCLUIDAS = {"login_intentos"}
 @app.route("/respaldo/descargar")
 @login_required
 def descargar_respaldo():
-    import csv, io, zipfile
+    import io, zipfile
     from flask import send_file
-    tablas = [r["table_name"] for r in db.query("""
-        SELECT table_name FROM information_schema.tables
-        WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name
-    """) if r["table_name"] not in TABLAS_RESPALDO_EXCLUIDAS]
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        for t in tablas:
-            filas = db.query(f'SELECT * FROM "{t}" ORDER BY 1')   # nombre sacado de la propia base
-            txt = io.StringIO()
-            if filas:
-                w = csv.DictWriter(txt, fieldnames=list(filas[0].keys()))
-                w.writeheader()
-                w.writerows(filas)
-            z.writestr(f"{t}.csv", "\ufeff" + txt.getvalue())   # \ufeff: Excel lee bien los acentos
+        archivo_anual.escribir_base_completa(z)   # ### CAMBIO AQUÍ ### misma función que el archivo anual
     buf.seek(0)
     nombre = f"palermitanhost-respaldo-{datetime.now().strftime('%Y-%m-%d')}.zip"
     return send_file(buf, mimetype="application/zip", as_attachment=True, download_name=nombre)
+
+
+# ### CAMBIO AQUÍ ### — ARCHIVO ANUAL: datos del año + resumen + base completa + código + LEEME
+@app.route("/archivo-anual/<int:anio>")
+@login_required
+def descargar_archivo_anual(anio):
+    from flask import send_file
+    if anio not in archivo_anual.anios_con_datos():
+        flash(f"No hay reservas cargadas en {anio}.", "error")
+        return redirect(url_for("informes"))
+    buf = archivo_anual.generar_zip(anio)
+    if anio < archivo_anual.hoy().year:   # solo los años terminados apagan el aviso del Dashboard
+        archivo_anual.marcar_descargado(anio)
+    return send_file(buf, mimetype="application/zip", as_attachment=True,
+                     download_name=f"PalermitanHost-Archivo-anual-{anio}.zip")
 
 
 @app.route("/informes")
 @login_required
 def informes():
     lista = db.query("SELECT id, titulo, fecha_desde, fecha_hasta, creado_en FROM informes ORDER BY creado_en DESC")
-    return render_template("informes.html", informes=lista)
+    # ### CAMBIO AQUÍ ### años disponibles para el archivo anual y si ya se descargaron
+    anios = [{"anio": a, "descargado": archivo_anual.descargado(a), "en_curso": a >= archivo_anual.hoy().year}
+             for a in archivo_anual.anios_con_datos()]
+    return render_template("informes.html", informes=lista, anios_archivo=anios)
 
 
 @app.route("/informes/<int:iid>")

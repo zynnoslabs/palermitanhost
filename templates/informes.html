@@ -25,6 +25,19 @@
     <span class="muted" style="font-size:.85rem">Todos los datos del sistema en un .zip (se abre con Excel). Guardalo en tu compu o en tu Drive.</span></div>
   <a href="{{ url_for('descargar_respaldo') }}" class="btn btn-primary">⬇ Descargar copia</a>
 </div>
+{# ### CAMBIO AQUÍ ### archivo anual por año #}
+{% if anios_archivo %}
+<div class="card" style="margin-bottom:16px">
+  <strong>Archivo anual</strong>{{ info('archivo_anual') }}<br>
+  <span class="muted" style="font-size:.85rem">Resumen del año en Excel, reservas, reseñas e informes de ese año, copia completa de la base y del código, y un LEEME con cómo restaurar el sistema.</span>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+    {% for a in anios_archivo %}
+    <a href="{{ url_for('descargar_archivo_anual', anio=a.anio) }}" class="btn btn-sm {{ 'btn-primary' if not a.descargado and not a.en_curso }}">
+      ⬇ {{ a.anio }}{% if a.en_curso %} (en curso){% elif a.descargado %} ✓{% else %} · pendiente{% endif %}</a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
 {% endif %}
 
 {% if informe %}

@@ -2,6 +2,14 @@
 {% block title %}Dashboard – PalermitanHost{% endblock %}
 
 {% block content %}
+{# ### CAMBIO AQUÍ ### aviso fijo hasta descargar el archivo del año que terminó #}
+{% if archivo_pendiente %}
+<div class="alert alert-warn" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+  <div><strong>📦 Descargá el archivo anual {{ archivo_pendiente }}.</strong>{{ info('archivo_anual') }}<br>
+    <span style="font-size:.85rem">Trae el resumen del año, todas tus reservas, reseñas e informes, y una copia completa del sistema. Guardalo en tu compu y en Drive. Este aviso se va cuando lo descargás.</span></div>
+  <a href="{{ url_for('descargar_archivo_anual', anio=archivo_pendiente) }}" class="btn btn-primary">⬇ Descargar archivo {{ archivo_pendiente }}</a>
+</div>
+{% endif %}
 {# ### CAMBIO AQUÍ ### aviso si la búsqueda automática de competencia no trae datos hace días #}
 {% if alerta_comp %}
 <div class="alert alert-error">

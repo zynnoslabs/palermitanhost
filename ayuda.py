@@ -63,6 +63,7 @@ AYUDA = {
     "referencia_zona": "Mediana de los precios por noche de la zona: los que encontró la IA en los últimos 30 días más los competidores que cargaste vos. Cuantos más datos, más confiable.",
     "fuentes_busqueda": "Primero Google (alquileres vacacionales, precio real por noche). Si falla o se terminan las búsquedas del mes, Tavily. Así la competencia no se queda sin datos.",
     "alerta_competencia": "Aparece si durante 3 días seguidos ninguna fuente trajo precios de la competencia. Debajo figura el motivo.",
+    "archivo_anual": "Al terminar cada año, descargá su archivo: resumen en Excel, reservas, reseñas e informes del año, copia completa de la base y del código, y cómo restaurar el sistema. Los datos no se borran del sistema.",
     "respaldo": "Descarga todas las tablas (propiedades, reservas, reseñas, competencia...) en archivos CSV. Además el sistema hace una copia automática cifrada todas las semanas. Hacelo una vez por mes como copia extra.",
     "competidor_directo": "Opcional: un anuncio parecido al tuyo que conocés. Cargá su precio por noche. Nunca se borra solo.",
 }
