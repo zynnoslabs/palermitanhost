@@ -124,7 +124,8 @@
         {% if (r.moneda or 'ARS') != mp and tc_info %}<br><small class="muted">≈ {{ r.precio_noche|dinero(r.moneda, mp) }}</small>{% endif %}</td>
     <td>{{ "%.2f"|format(r.rating) if r.rating else '—' }}</td>
     <td>{{ r.fecha }}</td>
-    <td>{% if url %}<a href="{{ url }}" target="_blank" rel="noopener" class="link">Ver anuncio ↗</a>{% else %}—{% endif %}</td>
+    {# ### CAMBIO AQUÍ ### solo links http/https (bloquea "javascript:" y otros esquemas peligrosos) #}
+    <td>{% if url and url.lower().startswith(('http://', 'https://')) %}<a href="{{ url }}" target="_blank" rel="noopener noreferrer" class="link">Ver anuncio ↗</a>{% else %}—{% endif %}</td>
     <td>
       <form method="post" action="{{ url_for('eliminar_competencia', cid=r.id, pid=prop_sel.id if prop_sel else None) }}" style="display:inline">
         <button class="btn btn-sm btn-danger" onclick="return confirm('¿Eliminar?')">✕</button>

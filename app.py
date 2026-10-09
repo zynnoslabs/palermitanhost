@@ -143,6 +143,34 @@ def _alias_huespedes(extra=None):
     return alias
 
 
+# ### CAMBIO AQUÍ ### — SEGURIDAD XSS: solo se guardan links http/https
+def _link_seguro(url):
+    url = (url or "").strip()
+    return url[:500] if url.lower().startswith(("http://", "https://")) else ""
+
+
+# ### CAMBIO AQUÍ ### — SEGURIDAD: encabezados en todas las respuestas.
+# CSP: el navegador solo carga scripts de este sitio y de cdnjs (Chart.js), y solo se conecta a este sitio.
+# Aunque alguien lograra meter código, no podría mandar datos a otro servidor ni cargar scripts externos.
+CSP = ("default-src 'self'; "
+       "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
+       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+       "font-src 'self' https://fonts.gstatic.com data:; "
+       "img-src 'self' data:; connect-src 'self'; object-src 'none'; "
+       "base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
+
+
+@app.after_request
+def encabezados_seguridad(resp):
+    resp.headers.setdefault("Content-Security-Policy", CSP)
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    if os.getenv("RENDER"):
+        resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    return resp
+
+
 # ── Inicializar DB al arrancar ───────────────────────────────────────────────
 with app.app_context():
     db.init_db()
@@ -528,7 +556,7 @@ def competencia():
             f.get("ambientes") or None, f.get("capacidad") or None,
             float(f.get("precio_noche",0) or 0),
             f.get("fecha") or date.today().isoformat(), f.get("fuente",""), f.get("notas",""),
-            f.get("link",""), f.get("zona",""), f.get("moneda","ARS"),   # ### CAMBIO AQUÍ ###
+            _link_seguro(f.get("link","")), f.get("zona",""), f.get("moneda","ARS"),   # ### CAMBIO AQUÍ ### link validado
             request.args.get("pid", type=int),   # ### CAMBIO AQUÍ ### queda asociado a la propiedad
             f.get("plataforma") or "Manual", f.get("titulo","")
         ))

@@ -142,7 +142,7 @@ def limpiar_comparables(crudos):
         if not isinstance(c, dict):
             continue
         link = str(c.get("link") or "").strip()
-        if not link.startswith("http") or link in links_vistos:
+        if not link.lower().startswith(("http://", "https://")) or link in links_vistos:   # ### CAMBIO AQUÍ ### solo http/https
             continue
         precio = _a_numero(c.get("precio_noche"))
         if not precio or precio <= 0:
