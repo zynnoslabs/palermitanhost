@@ -1,41 +1,62 @@
-# ### CAMBIO AQUÍ ### — Archivo nuevo: COPIA DE SEGURIDAD AUTOMÁTICA SEMANAL
+# ### CAMBIO AQUÍ ### — COPIA DE SEGURIDAD: SEMANAL (90 días) + ANUAL (PERMANENTE)
 #
-# Todos los lunes a las 4:00 (hora de Buenos Aires) GitHub copia la base de datos de Render,
-# la cifra con una clave y la guarda 90 días en la pestaña "Actions" del repositorio.
-# Así, aunque se borre algo en Render, hay copia afuera.
+# SEMANAL: todos los lunes a las 4:00 (Buenos Aires) copia la base de datos de Render, la cifra
+#          y la guarda 90 días en la pestaña "Actions". Cada copia se borra sola a los 90 días.
+# ANUAL:   el 1° de enero a las 4:00 guarda una copia completa del año que terminó en la pestaña
+#          "Releases" del repositorio. Esa NO se borra nunca (una por año: "Copia anual 2026", etc.).
+#          Cada copia contiene TODA la base (todos los años hasta ese día), cifrada.
 #
 # CONFIGURAR UNA SOLA VEZ (GitHub → repo → Settings → Secrets and variables → Actions → New repository secret):
 #   DATABASE_URL_EXTERNA  → en Render: base de datos → Connect → "External Database URL"
 #   CLAVE_RESPALDO        → una frase larga inventada. GUARDARLA: sin ella la copia no se puede abrir.
 #
-# PROBARLA: pestaña Actions → "Copia de seguridad semanal" → "Run workflow".
+# PROBARLA: pestaña Actions → "Copia de seguridad" → "Run workflow" → elegir semanal o anual.
 #
 # RESTAURAR (solo si se perdió algo):
-#   1. Actions → la corrida que quieras → descargar el archivo "respaldo-...".
-#   2. gpg --batch --passphrase "TU_CLAVE" -o respaldo.dump -d respaldo-AAAA-MM-DD.dump.gpg
+#   1. Semanal: Actions → la corrida → descargar "respaldo-...".  Anual: Releases → descargar el archivo .gpg
+#   2. gpg --batch --passphrase "TU_CLAVE" -o respaldo.dump -d ARCHIVO.dump.gpg
 #   3. pg_restore --clean --if-exists --no-owner -d "URL_DE_LA_BASE" respaldo.dump
 
-name: Copia de seguridad semanal
+name: Copia de seguridad
 
 on:
   schedule:
-    - cron: "0 7 * * 1"     # lunes 07:00 UTC = 04:00 en Buenos Aires
+    - cron: "0 7 * * 1"     # semanal: lunes 07:00 UTC = 04:00 en Buenos Aires
+    - cron: "0 7 1 1 *"     # ### CAMBIO AQUÍ ### anual: 1° de enero 04:00 en Buenos Aires
   workflow_dispatch:         # botón "Run workflow" para hacerla a mano
+    inputs:
+      tipo:
+        description: "Tipo de copia"
+        type: choice
+        options: [semanal, anual]
+        default: semanal
+
+permissions:
+  contents: write            # ### CAMBIO AQUÍ ### necesario para crear la copia anual en "Releases"
 
 jobs:
   respaldo:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Verificar configuración
+      - name: Verificar configuración y tipo de copia
         env:
           DB: ${{ secrets.DATABASE_URL_EXTERNA }}
           CLAVE: ${{ secrets.CLAVE_RESPALDO }}
+          PROGRAMA: ${{ github.event.schedule }}
+          MANUAL: ${{ inputs.tipo }}
         run: |
           if [ -z "$DB" ] || [ -z "$CLAVE" ]; then
             echo "::error::Faltan los secretos DATABASE_URL_EXTERNA y/o CLAVE_RESPALDO (ver arriba de este archivo)."
             exit 1
           fi
+          # ### CAMBIO AQUÍ ### decide si es la copia semanal o la anual
+          if [ "$PROGRAMA" = "0 7 1 1 *" ] || [ "$MANUAL" = "anual" ]; then TIPO=anual; else TIPO=semanal; fi
+          FECHA=$(TZ=America/Argentina/Buenos_Aires date +%F)
+          ANIO=$(TZ=America/Argentina/Buenos_Aires date -d "yesterday" +%Y)   # el año que terminó
+          [ "$MANUAL" = "anual" ] && ANIO=$(TZ=America/Argentina/Buenos_Aires date +%Y)   # prueba manual: año actual
+          echo "TIPO=$TIPO" >> "$GITHUB_ENV"; echo "FECHA=$FECHA" >> "$GITHUB_ENV"; echo "ANIO=$ANIO" >> "$GITHUB_ENV"
+          echo "Copia $TIPO del $FECHA"
 
       - name: Copiar la base de datos
         env:
@@ -51,16 +72,32 @@ jobs:
         env:
           CLAVE: ${{ secrets.CLAVE_RESPALDO }}
         run: |
-          FECHA=$(TZ=America/Argentina/Buenos_Aires date +%F)
+          if [ "$TIPO" = "anual" ]; then NOMBRE="respaldo-anual-$ANIO.dump.gpg"; else NOMBRE="respaldo-$FECHA.dump.gpg"; fi
           gpg --batch --yes --pinentry-mode loopback --passphrase "$CLAVE" \
-              --symmetric --cipher-algo AES256 -o "respaldo-$FECHA.dump.gpg" respaldo.dump
+              --symmetric --cipher-algo AES256 -o "$NOMBRE" respaldo.dump
           rm respaldo.dump
-          echo "FECHA=$FECHA" >> "$GITHUB_ENV"
+          echo "NOMBRE=$NOMBRE" >> "$GITHUB_ENV"
 
-      - name: Guardar la copia (90 días)
+      - name: Guardar la copia semanal (90 días)
+        if: env.TIPO == 'semanal'
         uses: actions/upload-artifact@v4
         with:
           name: respaldo-${{ env.FECHA }}
-          path: respaldo-${{ env.FECHA }}.dump.gpg
+          path: ${{ env.NOMBRE }}
           retention-days: 90
           compression-level: 0
+
+      # ### CAMBIO AQUÍ ### copia anual permanente en "Releases" (no se borra sola)
+      - name: Guardar la copia anual (permanente)
+        if: env.TIPO == 'anual'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ETIQUETA="copia-anual-$ANIO"
+          if gh release view "$ETIQUETA" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$ETIQUETA" "$NOMBRE" --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$ETIQUETA" "$NOMBRE" --repo "$GITHUB_REPOSITORY" \
+              --title "Copia anual $ANIO" \
+              --notes "Copia completa de la base de datos al cierre de $ANIO, cifrada con CLAVE_RESPALDO. Ver cómo restaurarla en .github/workflows/respaldo.yml."
+          fi
