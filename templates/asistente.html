@@ -94,7 +94,7 @@
   <thead><tr><th>Propiedad</th><th>Consulta</th><th>Respuesta</th><th>Estado</th><th>Fecha</th></tr></thead>
   <tbody>
   {% for c in historial %}
-  <tr class="fila-consulta" data-estado="{{ 'pendiente' if c.pendiente else 'respondida' }}">
+  <tr class="fila-consulta" data-estado="{{ 'pendiente' if c.pendiente else 'respondida' }}" {% if c.pendiente %}data-resaltar="consultas-pendientes"{% endif %}>
     <td>{{ c.prop_nombre }}</td>
     <td>{{ c.mensaje }}</td>
     <td>
@@ -135,7 +135,7 @@
 </div>
 
 {% for r in resenas %}
-<div class="card" style="margin-bottom:12px">
+<div class="card" style="margin-bottom:12px" {% if r.pendiente %}data-resaltar="resenas-pendientes"{% endif %}>
   <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
     <div><strong>{{ r.huesped or 'Huésped' }}</strong> · {{ r.prop_nombre }}
       {% if r.puntaje %} · {{ r.puntaje }}★{% endif %} · <span class="muted">{{ r.fecha|fecha }}</span></div>

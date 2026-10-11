@@ -79,7 +79,7 @@
         <a href="{{ url_for('cambiar_moneda', m='USD') }}" class="btn btn-sm {{ 'btn-primary' if vista == 'USD' }}">USD</a>
       </span>
       <details style="position:relative">
-        <summary class="topbar-meta" style="cursor:pointer;list-style:none">
+        <summary class="topbar-meta" id="tc" style="cursor:pointer;list-style:none">
           {{ info('tipo_cambio') }} {% if tc_info %}TC: $ {{ "{:,.2f}".format(tc_info.valor|float).replace(",", "X").replace(".", ",").replace("X", ".") }}<span class="solo-compu"> · {{ tc_info.tipo }}</span>{% else %}⚠ <span class="solo-compu">Cargar tipo de cambio</span><span class="solo-cel">Cargar TC</span>{% endif %}
         </summary>
         <!-- ### CAMBIO AQUÍ ### max-width:none: antes el panel quedaba angosto y cortaba el selector -->

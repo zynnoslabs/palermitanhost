@@ -75,3 +75,33 @@ window.addEventListener('pageshow', function () {
     });
   });
 });
+
+// ### CAMBIO AQUÍ ### — al llegar desde una alerta (?resaltar=...), lo que hay que revisar se ilumina
+// unos segundos y la página se mueve hasta ahí. No queda nada seleccionado.
+(function () {
+  var params = new URLSearchParams(location.search);
+  var claves = (params.get('resaltar') || '').split(',').filter(Boolean);
+  if (!claves.length) return;
+  function iluminar() {
+    var els = [];
+    claves.forEach(function (k) {
+      var sel = '#' + (window.CSS && CSS.escape ? CSS.escape(k) : k) + ', [name="' + k + '"], [data-resaltar~="' + k + '"]';
+      var hallados = [];
+      try { hallados = document.querySelectorAll(sel); } catch (err) { return; }   // dirección rara: se ignora
+      hallados.forEach(function (e) {
+        var caja = (e.matches('input, select, textarea') && e.closest('.form-group')) || e;
+        if (els.indexOf(caja) < 0) els.push(caja);
+      });
+    });
+    if (!els.length) return;
+    els[0].scrollIntoView({behavior: 'smooth', block: 'center'});
+    els.forEach(function (e) { e.classList.add('resaltado'); });
+    setTimeout(function () { els.forEach(function (e) { e.classList.remove('resaltado'); }); }, 3500);
+    // se saca el parámetro de la dirección: al recargar no vuelve a titilar
+    params.delete('resaltar');
+    var q = params.toString();
+    history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + location.hash);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iluminar);
+  else iluminar();
+})();

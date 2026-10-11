@@ -32,7 +32,7 @@
 </div>
 
 {% if mercado %}
-<div class="card" style="margin-bottom:16px">
+<div class="card" style="margin-bottom:16px" id="mercado">
   <div class="card-title">Mercado — {{ prop_sel.barrio or '' }}{{ info('mercado') }} <span class="muted">· en {{ mp }}, la moneda de la propiedad</span></div>
   <div class="stats-grid">
     <div class="stat-card"><div class="stat-num">{{ fmt(mercado.mediana) }}</div><div class="stat-lbl">Mediana zona{{ info('mediana') }}</div></div>

@@ -60,7 +60,7 @@ def revisar(propiedad_id=None, hoy=None):
         add("alta", "Reservas superpuestas",
             f"En {s['prop']}, {s['a'].get('huesped_nombre') or 'un huésped'} y {s['b'].get('huesped_nombre') or 'otro huésped'} "
             f"comparten {noches} noche(s) ({_f(s['desde'])} al {_f(s['hasta'])}). Puede ser un anuncio asignado a la propiedad "
-            f"equivocada al importar, o una doble reserva.", "calendario?dia=" + s["desde"].isoformat())
+            f"equivocada al importar, o una doble reserva.", f"calendario?mes={s['desde']:%Y-%m}&dia={s['desde'].isoformat()}&resaltar=dia-{s['desde'].isoformat()}")
 
     # 2) Reserva confirmada en una propiedad inactiva o en mantenimiento
     estado_prop = {p["id"]: (p.get("estado") or "activa") for p in props}
@@ -69,7 +69,7 @@ def revisar(propiedad_id=None, hoy=None):
         if fi and ff and ff >= hoy and (r.get("estado") or "") != "cancelada" and estado_prop.get(r["propiedad_id"]) != "activa":
             add("alta", "Reserva en propiedad fuera de servicio",
                 f"{r.get('huesped_nombre') or 'Un huésped'} llega el {_f(fi)} a {nombres[r['propiedad_id']]}, "
-                f"que figura como {estado_prop[r['propiedad_id']]}.", "propiedades")
+                f"que figura como {estado_prop[r['propiedad_id']]}.", f"propiedades/{r['propiedad_id']}/editar?resaltar=estado")
 
     # 3) Solicitudes pendientes que llegan pronto
     for r in reservas:
@@ -77,7 +77,7 @@ def revisar(propiedad_id=None, hoy=None):
         if fi and (r.get("estado") or "") == "pendiente" and hoy <= fi <= hoy + timedelta(days=3):
             add("alta", "Solicitud sin confirmar",
                 f"{r.get('huesped_nombre') or 'Un huésped'} llega el {_f(fi)} a {nombres[r['propiedad_id']]} y la reserva "
-                f"sigue pendiente. Revisalo en Airbnb.", "calendario?dia=" + fi.isoformat())
+                f"sigue pendiente. Revisalo en Airbnb.", f"calendario?mes={fi:%Y-%m}&dia={fi.isoformat()}&resaltar=dia-{fi.isoformat()}")
 
     # 4) Estadías que ya terminaron y no tienen el cobro cargado (si alguna vez se subió Ganancias)
     ganancias = db.query_one("SELECT valor FROM config WHERE clave='ultima_importacion_ganancias'")
@@ -91,7 +91,7 @@ def revisar(propiedad_id=None, hoy=None):
             ej = ", ".join((r.get("huesped_nombre") or "?") for r in sin_cobro[:3])
             add("media", "Estadías terminadas sin el cobro cargado",
                 f"{len(sin_cobro)} reserva(s) ya terminaron hace más de una semana y no figuran en el archivo de Ganancias "
-                f"({ej}{'…' if len(sin_cobro) > 3 else ''}). Subí el archivo de Ganancias actualizado.", "importar")
+                f"({ej}{'…' if len(sin_cobro) > 3 else ''}). Subí el archivo de Ganancias actualizado.", "importar?resaltar=frecuencia")
 
     # 5) Archivos de Airbnb viejos
     if reservas:
@@ -101,16 +101,18 @@ def revisar(propiedad_id=None, hoy=None):
             if not ultima:
                 add("media", f"Nunca se subió el archivo de {nombre}",
                     f"Subilo en Importar CSV para que {'aparezcan las reservas futuras y cancelaciones' if tipo == 'reservas' else 'los montos sean exactos'}.",
-                    "importar")
+                    "importar?resaltar=frecuencia")
             elif (hoy - ultima).days > dias:
                 add("media", f"El archivo de {nombre} tiene {(hoy - ultima).days} días",
                     f"Lo ideal es subirlo {'una vez por semana' if tipo == 'reservas' else 'una vez por mes'}. "
-                    f"Hasta entonces pueden faltar reservas nuevas o cancelaciones.", "importar")
+                    f"Hasta entonces pueden faltar reservas nuevas o cancelaciones.", "importar?resaltar=frecuencia")
 
     # 6) Propiedades con datos incompletos
     for p in props:
         if (p.get("estado") or "activa") == "inactiva":
             continue
+        campos = {"barrio": "barrio", "precio base": "precio_base",
+                  "costos fijos": "costo_expensas,costo_servicios,costo_limpieza,costo_comision"}
         faltan = [n for n, ok in (("barrio", (p.get("barrio") or "").strip()), ("precio base", p.get("precio_base")),
                                   ("costos fijos", any(p.get(k) for k in ("costo_expensas", "costo_servicios", "costo_limpieza", "costo_comision"))))
                   if not ok]
@@ -118,19 +120,19 @@ def revisar(propiedad_id=None, hoy=None):
             add("media", f"Faltan datos de {p['nombre']}",
                 f"Completá: {', '.join(faltan)}. " + ("Sin barrio no se busca la competencia. " if "barrio" in faltan else "")
                 + ("Sin costos, el ingreso neto real sale más alto de lo que es." if "costos fijos" in faltan else ""),
-                f"propiedades/{p['id']}/editar")
+                f"propiedades/{p['id']}/editar?resaltar=" + ",".join(campos[x] for x in faltan))
 
     # 7) Reseñas y consultas sin responder hace más de una semana
     q = db.query_one("""SELECT COUNT(*) n FROM resenas WHERE pendiente = 1 AND creada_en < NOW() - INTERVAL '7 days'
                         AND (%s::int IS NULL OR propiedad_id = %s::int)""", (propiedad_id, propiedad_id))["n"]
     if q:
         add("media", f"{q} reseña(s) sin responder hace más de una semana",
-            "Responder las reseñas ayuda a mantener el puntaje y la confianza de los próximos huéspedes.", "asistente?tab=resenas")
+            "Responder las reseñas ayuda a mantener el puntaje y la confianza de los próximos huéspedes.", "asistente?tab=resenas&resaltar=resenas-pendientes")
     q = db.query_one("""SELECT COUNT(*) n FROM consultas_huespedes WHERE pendiente = 1 AND creada_en < NOW() - INTERVAL '2 days'
                         AND (%s::int IS NULL OR propiedad_id = %s::int)""", (propiedad_id, propiedad_id))["n"]
     if q:
         add("media", f"{q} consulta(s) de huéspedes pendientes", "Hay consultas marcadas como pendientes hace más de 2 días.",
-            "asistente?tab=huespedes")
+            "asistente?tab=huespedes&resaltar=consultas-pendientes")
 
     # 8) Tipo de cambio viejo cuando hay cosas en dólares
     hay_usd = any((p.get("moneda") or "ARS") == "USD" for p in props) or any((r.get("moneda") or "ARS") == "USD" for r in reservas)
@@ -138,10 +140,10 @@ def revisar(propiedad_id=None, hoy=None):
     if hay_usd:
         f_tc = metricas.fecha_valida((tc or {}).get("fecha")) if tc else None
         if not tc:
-            add("media", "Falta el tipo de cambio", "Hay montos en dólares y no se pueden sumar con los pesos. Cargalo arriba a la derecha.")
+            add("media", "Falta el tipo de cambio", "Hay montos en dólares y no se pueden sumar con los pesos. Cargalo arriba a la derecha.", "?resaltar=tc")
         elif f_tc and (hoy - f_tc).days > 7:
             add("media", f"El tipo de cambio tiene {(hoy - f_tc).days} días",
-                "Actualizalo arriba a la derecha para que las conversiones entre pesos y dólares sean correctas.")
+                "Actualizalo arriba a la derecha para que las conversiones entre pesos y dólares sean correctas.", "?resaltar=tc")
 
     # 9) Muchas noches libres en las próximas 2 semanas (oportunidad de bajar precio o promocionar)
     for p in props:
@@ -161,7 +163,7 @@ def revisar(propiedad_id=None, hoy=None):
         if libres >= 7 and any(r["propiedad_id"] == p["id"] for r in reservas):
             add("info", f"{p['nombre']}: {libres} noches libres en las próximas 2 semanas",
                 "Puede convenir bajar un poco el precio o activar una promoción en Airbnb. Mirá la sección Precios.",
-                f"precios?propiedad_id={p['id']}")
+                f"calendario?propiedad_id={p['id']}")
 
     # 10) Precio base muy lejos del mercado
     try:
@@ -178,7 +180,7 @@ def revisar(propiedad_id=None, hoy=None):
                         f"Tu precio base es {monedas.formatear(p['precio_base'], p.get('moneda') or 'ARS')} y la mediana de la zona "
                         f"{monedas.formatear(st['mediana'], p.get('moneda') or 'ARS')}. "
                         + ("Podrías estar dejando plata sobre la mesa." if dif < 0 else "Puede costarte reservas."),
-                        f"precios?propiedad_id={p['id']}")
+                        f"precios?propiedad_id={p['id']}&resaltar=mercado")
     except Exception as e:
         print(f"[alertas] mercado: {e}")
 
@@ -190,7 +192,7 @@ def revisar(propiedad_id=None, hoy=None):
         m = metricas.calcular_metricas(conv, d1, hoy, costos, max(len(props), 1))
         if m and m["ingreso_neto_real"] < 0:
             add("alta", "Este mes los costos superan a los ingresos",
-                f"Ingreso neto real del mes: {monedas.formatear(m['ingreso_neto_real'], 'ARS')}. Revisá precios y ocupación.", "")
+                f"Ingreso neto real del mes: {monedas.formatear(m['ingreso_neto_real'], 'ARS')}. Revisá precios y ocupación.", "?resaltar=neto")
 
     al.sort(key=lambda a: ORDEN[a["nivel"]])
     return al

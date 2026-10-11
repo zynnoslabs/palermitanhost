@@ -12,7 +12,7 @@
   <div class="alert alert-warn">Todavía no cargaste propiedades: al importar, el sistema las crea con el nombre que tienen en Airbnb. Después completás su barrio, precio y costos.</div>
   {% endif %}
   {# ### CAMBIO AQUÍ ### cada cuánto subir cada archivo, con la fecha de la última carga #}
-  <div class="alert alert-ok" style="margin-bottom:14px">
+  <div class="alert alert-ok" style="margin-bottom:14px" id="frecuencia">
     <strong>📅 Lo ideal:</strong> el archivo de <strong>Reservas una vez por semana</strong> y el de <strong>Ganancias una vez por mes</strong>.
     <div style="margin-top:6px;font-size:.88rem;line-height:1.7">
       {% for tipo, nombre, cada in [('reservas', 'Reservas', 'semana'), ('ganancias', 'Ganancias', 'mes')] %}
