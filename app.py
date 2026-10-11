@@ -12,7 +12,7 @@ from datetime import datetime, date, timedelta   # ### CAMBIO AQUÍ ###
 from functools import wraps
 
 from flask import (Flask, render_template, request, redirect, url_for,
-                   session, flash, jsonify)
+                   session, flash, jsonify, abort)   # ### CAMBIO AQUÍ ### abort
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -462,6 +462,38 @@ def _alertas_seguras(prop_id):
 def _volver_al_dashboard():
     destino = request.form.get("volver") or ""
     return redirect(destino if destino.startswith("/") and not destino.startswith("//") else url_for("dashboard"))
+
+
+# ### CAMBIO AQUÍ ### BORRAR TODOS LOS DATOS (solo para servicios de prueba)
+# Apagado por defecto: solo existe si en Render se agrega la variable PERMITIR_BORRAR_TODO=si.
+# En el servicio de Adriano NO se pone esa variable, así nunca puede borrar todo por error.
+TABLAS_DATOS = ["reservas_historial", "movimientos_airbnb", "reservas", "competencia_historial", "competencia",
+                "consultas_huespedes", "resenas", "informes", "temporadas", "propiedades", "config", "login_intentos"]
+FRASE_BORRAR = "BORRAR TODO"
+
+
+def _borrar_permitido():
+    return os.environ.get("PERMITIR_BORRAR_TODO", "").strip().lower() in ("si", "sí", "1", "true")
+
+
+@app.route("/borrar-todo", methods=["GET", "POST"])
+@login_required
+def borrar_todo():
+    if not _borrar_permitido():
+        abort(404)
+    if request.method == "POST":
+        frase_ok = (request.form.get("frase") or "").strip().upper() == FRASE_BORRAR
+        clave_ok = hmac.compare_digest((request.form.get("password") or "").encode(), ADMIN_PASS.encode())
+        if not (frase_ok and clave_ok):
+            flash(f"No se borró nada: escribí exactamente {FRASE_BORRAR} y tu contraseña.", "error")
+            return redirect(url_for("borrar_todo"))
+        db.execute("SET lock_timeout = '10s'; TRUNCATE " + ", ".join(TABLAS_DATOS) + " RESTART IDENTITY CASCADE")
+        db.init_db()   # vuelve a poner la configuración inicial
+        flash("Listo: se borraron todos los datos. El sistema quedó vacío, como recién instalado.", "success")
+        return redirect(url_for("dashboard"))
+    return render_template("borrar_todo.html", frase=FRASE_BORRAR,
+        cuenta={t: db.query_one(f"SELECT COUNT(*) AS n FROM {t}")["n"]
+                for t in ("propiedades", "reservas", "movimientos_airbnb", "competencia", "resenas", "consultas_huespedes", "informes")})
 
 
 # ### CAMBIO AQUÍ ### ocultar una alerta por unos días / volver a mostrarlas

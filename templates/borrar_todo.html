@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Borrar todos los datos – PalermitanHost{% endblock %}
+{# ### CAMBIO AQUÍ ### — página nueva: deja el sistema vacío (solo si PERMITIR_BORRAR_TODO=si en Render) #}
+{% block content %}
+<div class="page-header"><h2>Borrar todos los datos</h2></div>
+<div class="card" style="max-width:560px">
+  <div class="alerta alerta-alta" style="margin-bottom:14px">
+    <strong>⚠ Esto no se puede deshacer</strong>
+    <span>Se borran las propiedades, reservas, cobros, historial, competencia, reseñas, consultas, informes y la configuración. El sistema queda como recién instalado. Tu usuario y contraseña no cambian.</span>
+  </div>
+  <p class="muted" style="margin-bottom:6px">Hoy hay cargado:</p>
+  <ul style="margin:0 0 14px 18px; font-size:.9rem">
+    <li>{{ cuenta.propiedades }} propiedades · {{ cuenta.reservas }} reservas · {{ cuenta.movimientos_airbnb }} cobros</li>
+    <li>{{ cuenta.competencia }} anuncios de competencia · {{ cuenta.resenas }} reseñas · {{ cuenta.consultas_huespedes }} consultas · {{ cuenta.informes }} informes</li>
+  </ul>
+  <form method="post">
+    <div class="form-group">
+      <label>Escribí <strong>{{ frase }}</strong> para confirmar</label>
+      <input type="text" name="frase" autocomplete="off" required>
+    </div>
+    <div class="form-group">
+      <label>Tu contraseña</label>
+      <input type="password" name="password" autocomplete="current-password" required>
+    </div>
+    <button type="submit" class="btn btn-danger">Borrar todo</button>
+    <a href="{{ url_for('dashboard') }}" class="btn">Cancelar</a>
+  </form>
+</div>
+{% endblock %}
