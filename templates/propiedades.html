@@ -10,15 +10,15 @@
 <div class="table-wrap">
 <table class="tabla">
   <thead><tr>
-    <th>Nombre</th><th>Barrio</th><th>Tipo</th><th>Amb.</th><th>Cap.</th>
+    <th>Nombre</th><th>Ubicación</th><th>Tipo</th><th>Amb.</th><th>Cap.</th>
     <th>Precio base</th><th>Costos/mes</th><th>Estado</th><th>Acciones</th>
   </tr></thead>
   <tbody>
   {% for p in propiedades %}
   <tr>
-    <td><strong>{{ p.nombre }}</strong><br><small class="muted">{{ p.direccion or '' }}</small></td>
-    <td>{{ p.barrio or '—' }}</td>
-    <td>{{ (p.tipo or '—')|capitalize }}</td>
+    <td><strong>{{ p.nombre }}</strong><br><small class="muted">{{ p.direccion or '' }}{% if p.piso_depto %} · {{ p.piso_depto }}{% endif %}</small></td>
+    <td>{{ p.barrio or '—' }}<br><small class="muted">{{ p.ciudad or '' }}{% if p.pais and p.pais != 'Argentina' %}, {{ p.pais }}{% endif %}</small></td>
+    <td>{{ TIPOS.get(p.tipo, p.tipo or '—') }}{% if p.m2 %}<br><small class="muted">{{ p.m2 }} m²{% if p.cochera %} · cochera{% endif %}</small>{% elif p.cochera %}<br><small class="muted">cochera</small>{% endif %}</td>
     <td>{{ p.ambientes or '—' }}</td>{# ### CAMBIO AQUÍ ### antes mostraba "None" #}
     <td>{{ (p.capacidad ~ ' pers.') if p.capacidad else '—' }}</td>
     <td>{{ p.precio_base|dinero(p.moneda) }}</td>{# ### CAMBIO AQUÍ ### #}

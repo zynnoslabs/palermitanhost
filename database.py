@@ -203,6 +203,10 @@ def init_db():
             cur.execute(f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS moneda TEXT DEFAULT 'ARS'")
         # ### CAMBIO AQUÍ ### — ciudad de cada propiedad (se usa para buscar la competencia)
         cur.execute("ALTER TABLE propiedades ADD COLUMN IF NOT EXISTS ciudad TEXT DEFAULT 'Buenos Aires'")
+        # ### CAMBIO AQUÍ ### ubicación completa y características de la propiedad
+        for col_sql in ("pais TEXT DEFAULT 'Argentina'", "pais_codigo TEXT DEFAULT 'AR'", "provincia TEXT DEFAULT ''",
+                        "piso_depto TEXT DEFAULT ''", "m2 INTEGER", "cochera INTEGER DEFAULT 0"):
+            cur.execute(f"ALTER TABLE propiedades ADD COLUMN IF NOT EXISTS {col_sql}")
 
         cur.execute("""
             CREATE TABLE IF NOT EXISTS consultas_huespedes (

@@ -65,12 +65,26 @@ def _ciudad(prop):   # ### CAMBIO AQUÍ ### la ciudad sale de la propiedad (ante
     return (prop.get("ciudad") or "").strip() or "Buenos Aires"
 
 
+def _pais(prop):   # ### CAMBIO AQUÍ ### el país también sale de la propiedad
+    return (prop.get("pais") or "").strip() or "Argentina"
+
+
+def _zona(prop):
+    """'Palermo, Buenos Aires, Argentina' (sin repetir la provincia si es igual a la ciudad)."""
+    partes = [(prop.get("barrio") or "").strip(), _ciudad(prop)]
+    prov = (prop.get("provincia") or "").strip()
+    if prov and prov.lower() not in _ciudad(prop).lower() and "autónoma" not in prov.lower():
+        partes.append(prov)
+    partes.append(_pais(prop))
+    return ", ".join(p for p in partes if p)
+
+
 def _prompt(prop):
     barrio = (prop.get("barrio") or "").strip()   # ### CAMBIO AQUÍ ### sin "Palermo" de relleno
     tipo = prop.get("tipo") or "departamento"
     amb = prop.get("ambientes") or "?"
     cap = prop.get("capacidad") or "?"
-    return f"""Buscá en internet anuncios ACTUALES de alquiler temporario en {_ciudad(prop)}, Argentina,
+    return f"""Buscá en internet anuncios ACTUALES de alquiler temporario en {_zona(prop)},
 parecidos a esta propiedad:
 - Barrio: {barrio}
 - Tipo: {tipo}
@@ -411,10 +425,10 @@ def _serpapi(prop, api_key, page_token=None):
     amb = prop.get("ambientes") or 0
     params = {
         "engine": "google_hotels", "vacation_rentals": "true",
-        "q": f"{barrio}, {_ciudad(prop)}, Argentina",
+        "q": _zona(prop),
         "check_in_date": entrada, "check_out_date": salida,
         "adults": max(int(prop.get("capacidad") or 2), 1),
-        "currency": prop.get("moneda") or "USD", "gl": "ar", "hl": "es",
+        "currency": prop.get("moneda") or "USD", "gl": (prop.get("pais_codigo") or "AR").lower(), "hl": "es",
         "api_key": api_key,
     }
     if amb and int(amb) > 1:

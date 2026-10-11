@@ -88,6 +88,7 @@ def build_context(db, alias=None, mencionados=()):
     # ── Propiedades ──────────────────────────────────────────────────────────
     cur.execute("""
         SELECT id, nombre, tipo, barrio, ambientes, capacidad,
+               COALESCE(ciudad, '') AS ciudad, m2, COALESCE(cochera, 0) AS cochera,
                precio_base, COALESCE(moneda, 'ARS') as moneda,
                COALESCE(descripcion, '') as descripcion,
                COALESCE(info_huespedes, '') as info_huespedes,
@@ -179,8 +180,9 @@ def build_context(db, alias=None, mencionados=()):
     for p in propiedades:
         pd = dict(zip(cols_prop, p))
         prop_lines.append(
-            f"- [{pd['id']}] {pd['nombre']} | {pd['tipo']} | {pd['barrio']} | "
+            f"- [{pd['id']}] {pd['nombre']} | {pd['tipo']} | {pd['barrio']}, {pd['ciudad']} | "
             f"{pd['ambientes']} amb | cap: {pd['capacidad']} | "
+            f"{(str(pd['m2']) + ' m² | ') if pd['m2'] else ''}{'con cochera | ' if pd['cochera'] else ''}"
             f"precio base: {monedas.formatear(pd['precio_base'] or 0, pd['moneda'])} | "
             f"rating: {pd['rating'] or 'N/A'} ({pd['reviews_count'] or 0} reseñas) | "
             f"estado: {pd['estado']}"

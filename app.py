@@ -456,7 +456,26 @@ def propiedades():
 # Antes: "15.000" se guardaba como 15, y "2,5" o "$ 30.000" daban error 500.
 COLUMNAS_PROP = ("nombre", "direccion", "barrio", "tipo", "ambientes", "capacidad", "precio_base",
                  "costo_expensas", "costo_servicios", "costo_limpieza", "costo_comision", "info_huespedes",
-                 "estado", "rating", "reviews_count", "moneda", "ciudad")
+                 "estado", "rating", "reviews_count", "moneda", "ciudad",
+                 "pais", "pais_codigo", "provincia", "piso_depto", "m2", "cochera")   # ### CAMBIO AQUÍ ###
+
+# ### CAMBIO AQUÍ ### tipos de alojamiento (antes solo departamento o casa)
+TIPOS = {"depto": "Departamento", "monoambiente": "Monoambiente / Estudio", "loft": "Loft", "ph": "PH",
+         "duplex": "Dúplex", "casa": "Casa", "cabana": "Cabaña", "quinta": "Quinta / Casa de campo",
+         "habitacion": "Habitación privada", "habitacion_compartida": "Habitación compartida",
+         "suite": "Suite / Hotel boutique", "otro": "Otro"}
+app.jinja_env.globals["TIPOS"] = TIPOS
+
+
+def _paises():
+    """### CAMBIO AQUÍ ### lista de países (static/geo/paises.json), leída una sola vez."""
+    if not hasattr(_paises, "lista"):
+        with open(os.path.join(app.static_folder, "geo", "paises.json"), encoding="utf-8") as f:
+            _paises.lista = json.load(f)
+    return _paises.lista
+
+
+app.jinja_env.globals["paises"] = _paises
 
 
 def _leer_propiedad(f):
@@ -475,7 +494,8 @@ def _leer_propiedad(f):
             errores.append(f"No se entendió el número '{txt}'. Escribilo así: 15000 o 15.000,50")
         return v
 
-    nombres = {"ambientes": "ambientes", "capacidad": "capacidad", "reviews_count": "cantidad de reseñas"}
+    nombres = {"ambientes": "ambientes", "capacidad": "capacidad", "reviews_count": "cantidad de reseñas",
+               "m2": "superficie (m²)"}
 
     def entero(k, maximo, minimo=1):
         txt = (f.get(k) or "").strip()
@@ -491,7 +511,7 @@ def _leer_propiedad(f):
         "nombre": (f.get("nombre") or "").strip()[:120],
         "direccion": (f.get("direccion") or "").strip()[:200],
         "barrio": (f.get("barrio") or "").strip()[:80],
-        "tipo": f.get("tipo") if f.get("tipo") in ("depto", "casa") else "depto",
+        "tipo": f.get("tipo") if f.get("tipo") in TIPOS else "depto",
         "ambientes": entero("ambientes", 20),
         "capacidad": entero("capacidad", 50),
         "precio_base": monto("precio_base"),
@@ -502,8 +522,24 @@ def _leer_propiedad(f):
         "rating": None,
         "reviews_count": entero("reviews_count", 100000, minimo=0) or 0,
         "moneda": f.get("moneda") if f.get("moneda") in monedas.MONEDAS else "ARS",
-        "ciudad": (f.get("ciudad") or "").strip()[:80] or "Buenos Aires",
+        "ciudad": (f.get("ciudad") or "").strip()[:80],
+        # ### CAMBIO AQUÍ ### ubicación y características
+        "pais_codigo": (f.get("pais_codigo") or "AR").strip().upper()[:2],
+        "provincia": (f.get("provincia") or "").strip()[:80],
+        "piso_depto": (f.get("piso_depto") or "").strip()[:40],
+        "m2": entero("m2", 100000),
+        "cochera": 1 if f.get("cochera") == "1" else 0,
     }
+    pais = next((p for p in _paises() if p["c"] == datos["pais_codigo"]), None)
+    if not pais:
+        errores.append("Elegí el país de la propiedad.")
+        pais = {"c": "AR", "n": "Argentina"}
+    datos["pais_codigo"], datos["pais"] = pais["c"], pais["n"]
+    if not datos["ciudad"]:
+        if datos["pais_codigo"] == "AR" and not datos["provincia"]:
+            datos["ciudad"], datos["provincia"] = "Buenos Aires", "Ciudad Autónoma de Buenos Aires"
+        else:
+            errores.append("Completá la ciudad: se usa para buscar la competencia.")
     txt = (f.get("rating") or "").strip()
     if txt:
         v = importador.parsear_monto(txt)

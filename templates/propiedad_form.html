@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ 'Editar' if prop else 'Nueva' }} propiedad – PalermitanHost{% endblock %}
+
 {% block content %}
 {# ### CAMBIO AQUÍ ### d = datos a mostrar (la propiedad, o lo que se escribió si hubo un error). Nunca "None" #}
 {% set d = prop or previo or {} %}
@@ -9,39 +10,21 @@
 </div>
 
 <form method="post" class="form-card">{# ### CAMBIO AQUÍ ### montos como texto: acepta 15.000 / 15000,50 / $ 30.000 #}
+  {# ### CAMBIO AQUÍ ### formulario ordenado: datos básicos, ubicación (país → provincia → ciudad) y características #}
+  <h3 class="section-title" style="margin-top:0">Datos básicos</h3>
   <div class="form-grid">
     <div class="form-group">
-      <label>Nombre *</label>
-      <input type="text" name="nombre" required value="{{ d.nombre or '' }}">
+      <label>Nombre de la propiedad *{{ info('nombre_prop') }}</label>
+      <input type="text" name="nombre" required value="{{ d.nombre or '' }}" placeholder="Ej: Depto Soho 2 amb">
     </div>
     <div class="form-group">
-      <label>Dirección</label>
-      <input type="text" name="direccion" value="{{ d.direccion or '' }}">
-    </div>
-    <div class="form-group">
-      <label>Barrio / Localidad</label>
-      <input type="text" name="barrio" value="{{ d.barrio or '' }}" required placeholder="Ej: Palermo">{# ### CAMBIO AQUÍ ### obligatorio: sin barrio no se puede buscar la competencia #}
-    </div>
-    <div class="form-group">{# ### CAMBIO AQUÍ ### ciudad #}
-      <label>Ciudad</label>
-      <input type="text" name="ciudad" value="{{ d.ciudad or 'Buenos Aires' }}" required>
-    </div>
-    <div class="form-group">
-      <label>Tipo</label>
+      <label>Tipo de alojamiento</label>
       <select name="tipo">
-        <option value="depto" {% if d.tipo=='depto' %}selected{% endif %}>Departamento</option>
-        <option value="casa"  {% if d.tipo=='casa' %}selected{% endif %}>Casa</option>
+        {% for v, t in TIPOS.items() %}
+        <option value="{{ v }}" {% if (d.tipo or 'depto') == v %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
       </select>
     </div>
-    <div class="form-group">
-      <label>Ambientes</label>
-      <input type="text" inputmode="numeric" name="ambientes" value="{{ d.ambientes or '' }}">
-    </div>
-    <div class="form-group">
-      <label>Capacidad (personas)</label>
-      <input type="text" inputmode="numeric" name="capacidad" value="{{ d.capacidad or '' }}">
-    </div>
-    <!-- ### CAMBIO AQUÍ ### estado de la propiedad -->
     <div class="form-group">
       <label>Estado{{ info('estado_prop') }}</label>
       <select name="estado">
@@ -50,6 +33,68 @@
         {% endfor %}
       </select>
     </div>
+  </div>
+
+  <h3 class="section-title">Ubicación{{ info('ubicacion') }}</h3>
+  <div class="form-grid" id="ubicacion" data-provincia="{{ d.provincia or '' }}">
+    <div class="form-group">
+      <label>País *</label>
+      <select name="pais_codigo" id="pais" required>
+        {% for p in paises() %}
+        <option value="{{ p.c }}" {% if (d.pais_codigo or 'AR') == p.c %}selected{% endif %}>{{ p.n }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Provincia / Estado</label>
+      <select id="provincia-sel" style="display:none"></select>
+      <input type="text" name="provincia" id="provincia" value="{{ d.provincia or '' }}" placeholder="Ej: Buenos Aires">
+    </div>
+    <div class="form-group">
+      <label>Ciudad *</label>
+      <input type="text" name="ciudad" id="ciudad" list="dl-ciudades" value="{{ d.ciudad or ('Buenos Aires' if not prop else '') }}" required autocomplete="off" placeholder="Elegí o escribí la ciudad">
+      <datalist id="dl-ciudades"></datalist>
+    </div>
+    <div class="form-group">
+      <label>Barrio *</label>
+      <input type="text" name="barrio" id="barrio" list="dl-barrios" value="{{ d.barrio or '' }}" required autocomplete="off" placeholder="Ej: Palermo">{# obligatorio: sin barrio no se puede buscar la competencia #}
+      <datalist id="dl-barrios"></datalist>
+    </div>
+    <div class="form-group">
+      <label>Calle y número</label>
+      <input type="text" name="direccion" value="{{ d.direccion or '' }}" placeholder="Ej: Honduras 4800">
+    </div>
+    <div class="form-group">
+      <label>Piso / Depto</label>
+      <input type="text" name="piso_depto" value="{{ d.piso_depto or '' }}" placeholder="Ej: 3° B">
+    </div>
+  </div>
+
+  <h3 class="section-title">Características</h3>
+  <div class="form-grid">
+    <div class="form-group">
+      <label>Ambientes</label>
+      <input type="text" inputmode="numeric" name="ambientes" value="{{ d.ambientes or '' }}" placeholder="Ej: 2">
+    </div>
+    <div class="form-group">
+      <label>Capacidad (personas)</label>
+      <input type="text" inputmode="numeric" name="capacidad" value="{{ d.capacidad or '' }}" placeholder="Ej: 4">
+    </div>
+    <div class="form-group">
+      <label>Superficie (m²)</label>
+      <input type="text" inputmode="numeric" name="m2" value="{{ d.m2 or '' }}" placeholder="Ej: 45">
+    </div>
+    <div class="form-group">
+      <label>Cochera</label>
+      <select name="cochera">
+        <option value="0" {% if not d.cochera %}selected{% endif %}>No</option>
+        <option value="1" {% if d.cochera %}selected{% endif %}>Sí</option>
+      </select>
+    </div>
+  </div>
+
+  <h3 class="section-title">Airbnb y precio</h3>
+  <div class="form-grid">
     <div class="form-group">
       <label>Puntaje en Airbnb (ej: 4,85){{ info('puntaje') }}</label>
       <input type="text" inputmode="decimal" name="rating" value="{{ d.rating|monto_input }}">
@@ -103,4 +148,7 @@
     <a href="{{ url_for('propiedades') }}" class="btn">Cancelar</a>
   </div>
 </form>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='ubicacion.js') }}"></script>
 {% endblock %}

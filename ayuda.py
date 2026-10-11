@@ -27,6 +27,8 @@ AYUDA = {
     "noches_mes": "Noches vendidas por mes, sumando las propiedades filtradas.",
     "generar_informe": "La IA escribe un informe con los números del período: resumen, análisis, riesgos y recomendaciones. Queda guardado en Informes.",
     # ── Propiedades ────────────────────────────────────────────
+    "nombre_prop": "Cómo la llamás vos para reconocerla (no tiene que ser igual al título de Airbnb). Ej: Depto Soho 2 amb.",
+    "ubicacion": "Elegí país, provincia y ciudad de la lista (o escribila si no aparece). Ciudad y barrio se usan para buscar la competencia de la zona.",
     "propiedades": "Tus unidades. Cada una tiene su moneda, sus costos y la información que usa el asistente para responder a huéspedes.",
     "huespedes_prop": "Reservas importadas de la propiedad elegida, con huésped, fechas, plataforma, monto y estado.",
     "estado_prop": "Activa: se alquila. Mantenimiento: temporalmente fuera. Inactiva: no cuenta en ocupación ni en la búsqueda automática.",
