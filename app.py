@@ -715,7 +715,21 @@ def importar():
                                    etiquetas=importador.ETIQUETAS, campos=list(importador.ETIQUETAS))
         return redirect(url_for("importar_asignar", t=token))
 
-    return render_template("importar.html", propiedades=propiedades, paso=1)
+    return render_template("importar.html", propiedades=propiedades, paso=1, frecuencia=_frecuencia_importacion())
+
+
+# ### CAMBIO AQUÍ ### cada cuánto conviene subir cada archivo y cuándo fue la última vez
+FRECUENCIA_DIAS = {"reservas": 7, "ganancias": 31}
+
+
+def _frecuencia_importacion():
+    out = {}
+    for tipo, dias in FRECUENCIA_DIAS.items():
+        row = db.query_one("SELECT valor FROM config WHERE clave=%s", (f"ultima_importacion_{tipo}",))
+        ultima = met.fecha_valida(row["valor"]) if row and row["valor"] else None
+        hace = (date.today() - ultima).days if ultima else None
+        out[tipo] = {"ultima": ultima, "hace": hace, "vencida": hace is None or hace > dias}
+    return out
 
 
 @app.route("/importar/asignar", methods=["GET","POST"])
@@ -849,6 +863,10 @@ def importar_asignar():
             """, (list({m["codigo"] for m in movimientos}),))
 
         _borrar_pendiente(token)
+        if importadas or actualizadas:   # ### CAMBIO AQUÍ ### se anota la fecha para el aviso de la próxima carga
+            db.execute("""INSERT INTO config (clave, valor) VALUES (%s, %s)
+                          ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor""",
+                       (f"ultima_importacion_{importador.tipo_de_archivo(encabezados)}", date.today().isoformat()))
         errores = [o for o in omitidas if o.get("clase") == "error"]
         ignoradas = [o for o in omitidas if o.get("clase") != "error"]
         if creadas:

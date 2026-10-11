@@ -11,10 +11,25 @@
   {% if not propiedades %}
   <div class="alert alert-warn">Todavía no cargaste propiedades: al importar, el sistema las crea con el nombre que tienen en Airbnb. Después completás su barrio, precio y costos.</div>
   {% endif %}
+  {# ### CAMBIO AQUÍ ### cada cuánto subir cada archivo, con la fecha de la última carga #}
+  <div class="alert alert-ok" style="margin-bottom:14px">
+    <strong>📅 Lo ideal:</strong> el archivo de <strong>Reservas una vez por semana</strong> y el de <strong>Ganancias una vez por mes</strong>.
+    <div style="margin-top:6px;font-size:.88rem;line-height:1.7">
+      {% for tipo, nombre, cada in [('reservas', 'Reservas', 'semana'), ('ganancias', 'Ganancias', 'mes')] %}
+      {% set f = frecuencia[tipo] %}
+      <div>• {{ nombre }}:
+        {% if f.ultima %}última carga el {{ f.ultima|fecha }}
+          ({{ 'hoy' if f.hace == 0 else ('hace ' ~ f.hace ~ (' día' if f.hace == 1 else ' días')) }})
+          {% if f.vencida %} — <strong style="color:#9b4a4a">ya toca subirlo</strong>{% else %} ✓{% endif %}
+        {% else %}<strong style="color:#9b4a4a">todavía no se cargó nunca</strong>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
   <p>Subí los archivos que te da Airbnb (desde la computadora, en modo anfitrión):</p>
   <ol class="muted" style="margin:8px 0 14px 20px;line-height:1.7">
-    <li><strong>Ganancias</strong> (montos exactos): Menú → Ganancias → Historial de transacciones → elegí las fechas → <strong>Exportar CSV</strong>.</li>
-    <li><strong>Reservas</strong> (reservas futuras, huésped y estado): Menú → Reservas → Todas → <strong>Exportar</strong> → CSV.</li>
+    <li><strong>Ganancias</strong> (montos exactos de lo que ya cobraste) — <em>una vez por mes</em>: Menú → Ganancias → Historial de transacciones → elegí las fechas → <strong>Exportar CSV</strong>.</li>
+    <li><strong>Reservas</strong> (reservas futuras, quién viene y cancelaciones) — <em>una vez por semana</em>: Menú → Reservas → Todas → <strong>Exportar</strong> → CSV.</li>
   </ol>
   <p class="muted" style="font-size:.85rem">Podés subirlos en cualquier orden y repetirlos cuando quieras: no se duplica nada.
   Subí el archivo tal cual lo descarga Airbnb (si lo abriste y guardaste con Excel también funciona).</p>
