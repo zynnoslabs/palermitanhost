@@ -12,6 +12,7 @@ from datetime import date, timedelta, datetime
 import database as db
 import metricas
 import monedas
+import disposicion_pago   # ### CAMBIO AQUÍ ###
 
 ORDEN = {"alta": 0, "media": 1, "info": 2}
 DIAS_OCULTA = 7   # ### CAMBIO AQUÍ ### una alerta ocultada vuelve a aparecer después de esto (si sigue pasando)
@@ -147,6 +148,19 @@ def revisar(propiedad_id=None, hoy=None):
         elif f_tc and (hoy - f_tc).days > 7:
             add("media", f"El tipo de cambio tiene {(hoy - f_tc).days} días",
                 "Actualizalo arriba a la derecha para que las conversiones entre pesos y dólares sean correctas.", "?resaltar=tc")
+
+    # ### CAMBIO AQUÍ ### 8b) Se está vendiendo más rápido de lo normal → se puede cobrar más
+    for p in props:
+        if (p.get("estado") or "activa") != "activa":
+            continue
+        try:
+            f = disposicion_pago.oportunidad(p, reservas, hoy, monedas.tc_valor())
+        except Exception:
+            f = None
+        if f:
+            add("info", f"{p['nombre']}: se está vendiendo más rápido de lo normal",
+                f"{f['nombre']}: ya vendiste {f['real']}% de las noches; lo normal a esta altura es {f['esperado']}%. "
+                f"Podés subir el precio de las noches libres.", f"precios?propiedad_id={p['id']}&resaltar=ritmo")
 
     # 9) Muchas noches libres en las próximas 2 semanas (oportunidad de bajar precio o promocionar)
     for p in props:

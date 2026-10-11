@@ -739,3 +739,20 @@ select, input, textarea { max-width: 100%; }
 .alerta-ocultar button:hover, .alerta-ocultar button:focus-visible { background:rgba(0,0,0,.08); color:#333; }
 .alertas-ocultas { display:flex; gap:8px; align-items:center; font-size:.82rem; margin:0; }
 .link-btn { background:none; border:none; padding:0; color:var(--gold-hover); text-decoration:underline; cursor:pointer; font-size:inherit; }
+
+/* ### CAMBIO AQUÍ ### ¿cuánto más podrías cobrar? */
+.ritmo-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:10px; }
+.ritmo-item { border:1px solid var(--border); border-left:5px solid #9aa0a6; border-radius:8px; padding:10px 12px; }
+.ritmo-subir { border-left-color:#2e8b57; background:#f0f8f3; }
+.ritmo-bajar { border-left-color:#e08e0b; background:#fdf6e8; }
+.ritmo-tit { font-weight:700; font-size:.88rem; }
+.ritmo-num { font-size:1.15rem; font-weight:700; margin:2px 0 6px; }
+.ritmo-num .muted { font-size:.78rem; font-weight:400; }
+.ritmo-barra { position:relative; height:8px; background:rgba(0,0,0,.08); border-radius:4px; margin-bottom:8px; }
+.ritmo-barra i { position:absolute; left:0; top:0; bottom:0; background:var(--gold); border-radius:4px; }
+.ritmo-barra b { position:absolute; top:-3px; width:2px; height:14px; background:#333; }
+.ritmo-txt { font-size:.82rem; line-height:1.35; }
+tr.fila-subir td:last-child { color:#2e7d4f; font-weight:600; }
+tr.fila-limite td:last-child { color:#a86a00; }
+.tabla-dispo td, .tabla-dispo th { white-space:nowrap; }
+.tabla-dispo td.col-dice { white-space:normal; min-width:260px; }

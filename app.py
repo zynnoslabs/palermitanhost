@@ -29,6 +29,7 @@ import hmac
 import ayuda   # ### CAMBIO AQUÍ ### textos del ícono 'i'
 import privacidad   # ### CAMBIO AQUÍ ### nombres de huéspedes ocultos para la IA
 import archivo_anual   # ### CAMBIO AQUÍ ### archivo anual descargable
+import disposicion_pago   # ### CAMBIO AQUÍ ### cuánto más podrías cobrar
 import novedades   # ### CAMBIO AQUÍ ### historial, calendario y avisos de hoy/mañana
 import alertas   # ### CAMBIO AQUÍ ### situaciones raras o pendientes
 
@@ -1205,8 +1206,16 @@ def precios():
                 if resultado.get("precio_maximo", 0) <= resultado["precio_sugerido"]:
                     resultado["precio_maximo"] = math.ceil(resultado["precio_sugerido"] * 1.2 / paso_piso) * paso_piso
 
+    # ### CAMBIO AQUÍ ### ¿cuánto más podrías cobrar? (anticipación y ritmo de ventas)
+    dispo = None
+    if prop_sel:
+        try:
+            dispo = disposicion_pago.analizar(prop_sel, db.query("SELECT * FROM reservas WHERE propiedad_id=%s", (pid,)),
+                                              mediana_mercado=mercado["mediana"] if mercado else None, tc=monedas.tc_valor())
+        except Exception as e:
+            print(f"[disposicion] {e}")
     return render_template("precios.html", propiedades=propiedades, prop_sel=prop_sel,
-                           resultado=resultado, mercado=mercado, fecha=fecha)
+                           resultado=resultado, mercado=mercado, fecha=fecha, dispo=dispo)
 
 
 # ════════════════════════════════════════════════════════════════════════════

@@ -6,6 +6,11 @@
 from markupsafe import Markup, escape
 
 AYUDA = {
+    # ── ### CAMBIO AQUÍ ### ¿Cuánto más podrías cobrar? ──
+    "disposicion": "Airbnb no dice cuánto más habría pagado un huésped, pero hay una pista: si una fecha se vende mucho antes de lo normal, a ese precio sobraba demanda. Se calcula con las reservas cargadas (necesita el archivo de Reservas, que trae cuándo se hizo cada reserva).",
+    "ritmo": "Cuánto de cada período ya está vendido, comparado con lo que normalmente tenés vendido a esta misma distancia. Ejemplo: si a 20 días de una fecha normalmente tenés 30% vendido y hoy tenés 60%, la demanda está fuerte y podés subir.",
+    "techo": "Lo que te pagaron por noche (sin limpieza) en el último año. El 'techo probado' es el precio más alto que ya te pagaron varias veces: subir por encima de eso es territorio nuevo, conviene hacerlo de a 5%.",
+    "anticipacion_res": "Días entre que el huésped reservó y que llegó. Se compara con tu anticipación normal (la mediana de tus reservas).",
     # ── Generales ──────────────────────────────────────────────
     "ver_en": "Elegí en qué moneda ver los totales. Cada propiedad guarda sus montos en su propia moneda; acá solo se convierten para mostrarlos.",
     "tipo_cambio": "Pesos por dólar que usa el sistema para convertir. Podés traerlo de dolarapi.com (MEP, blue, oficial…) o cargarlo a mano.",

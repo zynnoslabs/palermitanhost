@@ -90,5 +90,75 @@
   <div class="respuesta-texto" style="margin-top:12px"><strong>Resumen:</strong> {{ resultado.explicacion }}</div>
 </div>
 {% endif %}
+
+{# ### CAMBIO AQUÍ ### ¿cuánto más podrías cobrar? — anticipación y ritmo de ventas #}
+{% if prop_sel %}
+<div class="form-card" id="disposicion" style="margin-top:16px">
+  <h3>¿Cuánto más podrías cobrar?{{ info('disposicion') }}</h3>
+  {% if not dispo %}
+    <p class="muted">Todavía no hay reservas de esta propiedad. Subí el archivo de Reservas de Airbnb y acá vas a ver si te convenía cobrar más.</p>
+  {% else %}
+    {% if not dispo.suficiente %}
+    <div class="alert alert-warn">Hay {{ dispo.con_fecha }} reservas con la fecha en que se hicieron; se necesitan al menos 5 para comparar.
+      Esa fecha viene en el <strong>archivo de Reservas</strong> (columna "Reservada"): subilo en Importar CSV.</div>
+    {% else %}
+    <p class="muted" style="margin-bottom:12px">Normalmente te reservan <strong>{{ dispo.mediana_ant }} días antes</strong> de la llegada{{ info('anticipacion_res') }}.
+      Cuando una fecha se vende mucho antes que eso, a ese precio sobraba demanda.</p>
+    {% endif %}
+
+    {% if dispo.ritmo %}
+    <div id="ritmo" style="margin-bottom:16px">
+      <h4 style="margin-bottom:6px">Cómo venís vendiendo{{ info('ritmo') }}</h4>
+      <div class="ritmo-grid">
+        {% for f in dispo.ritmo.filas %}
+        <div class="ritmo-item ritmo-{{ f.tipo }}">
+          <div class="ritmo-tit">{{ f.nombre }}</div>
+          <div class="ritmo-num">{{ f.real }}% <span class="muted">vendido · lo normal: {{ f.esperado }}%</span></div>
+          <div class="ritmo-barra"><i style="width:{{ [f.real, 100]|min }}%"></i><b style="left:{{ [f.esperado, 100]|min }}%" title="Lo normal"></b></div>
+          <div class="ritmo-txt">{{ f.texto }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      <p class="muted" style="font-size:.8rem;margin-top:6px">Lo normal sale de tus últimos {{ dispo.ritmo.dias_hist }} días (ocupación {{ dispo.ritmo.ocup_normal }}%). No distingue feriados ni eventos: usalo como guía.</p>
+    </div>
+    {% endif %}
+
+    {% if dispo.techo %}
+    <div class="stats-grid" style="margin-bottom:6px">
+      <div class="stat-card"><div class="stat-num">{{ fmt(dispo.techo.mediana) }}</div><div class="stat-lbl">Lo que te pagan normalmente</div></div>
+      <div class="stat-card"><div class="stat-num">{{ fmt(dispo.techo.p90) }}</div><div class="stat-lbl">Techo probado{{ info('techo') }}</div></div>
+      <div class="stat-card"><div class="stat-num">{{ fmt(dispo.techo.maximo) }}</div><div class="stat-lbl">Lo más alto que te pagaron</div></div>
+      {% if dispo.techo.sobre_mercado is not none %}
+      <div class="stat-card"><div class="stat-num">{{ dispo.techo.sobre_mercado }} de {{ dispo.techo.cantidad }}</div><div class="stat-lbl">Reservas por encima de la mediana de la zona</div></div>
+      {% endif %}
+    </div>
+    <p class="muted" style="font-size:.8rem;margin-bottom:14px">Por noche, sin limpieza, en {{ mp }}. Último año.</p>
+    {% endif %}
+
+    {% if dispo.filas %}
+    <h4 style="margin-bottom:6px">Tus últimas reservas</h4>
+    <div class="table-wrap"><table class="tabla tabla-dispo">
+      <thead><tr><th>Huésped</th><th>Reservó</th><th>Llegada</th><th>Anticipación</th><th>Por noche</th>{% if mercado %}<th>vs zona</th>{% endif %}<th>Qué dice</th></tr></thead>
+      <tbody>
+      {% for f in dispo.filas %}
+      <tr class="fila-{{ f.tipo }}">
+        <td>{{ f.huesped }}</td>
+        <td>{{ f.reservo|fecha if f.reservo else '—' }}</td>
+        <td>{{ f.llegada|fecha }}</td>
+        <td>{{ (f.ant ~ (' día' if f.ant == 1 else ' días')) if f.ant is not none else '—' }}</td>
+        <td>{{ fmt(f.precio) if f.precio else '—' }}</td>
+        {% if mercado %}<td>{{ ('+' if f.vs_mercado > 0 else '') ~ f.vs_mercado ~ '%' if f.vs_mercado is not none else '—' }}</td>{% endif %}
+        <td class="col-dice">{{ f.texto }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% endif %}
+
+    <div class="respuesta-texto" style="margin-top:12px"><strong>Cómo encontrar tu precio máximo:</strong> subí de a 5% cada vez que una fecha se venda antes de lo normal. Si fechas cercanas pasan 2 semanas sin reservarse, bajá un paso. Así vas encontrando hasta dónde paga la gente sin quedarte con noches vacías. Ojo: Airbnb muestra más arriba en las búsquedas a los que están más baratos que la zona, así que subir mucho de golpe puede bajar las visitas.</div>
+    {% if dispo.sin_tc %}<p class="muted" style="margin-top:6px">{{ dispo.sin_tc }} reservas en otra moneda no tienen monto: cargá el tipo de cambio.</p>{% endif %}
+  {% endif %}
+</div>
+{% endif %}
 {% endif %}
 {% endblock %}
