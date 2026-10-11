@@ -439,6 +439,7 @@ def dashboard():
         [r for r in reservas if r.get("estado") != "cancelada" and (not prop_id or r.get("propiedad_id") == prop_id)],
         hoy - timedelta(days=6), hoy, unidades_activas)
 
+    al_vis, al_ocu = _alertas_seguras(prop_id)   # ### CAMBIO AQUÍ ### las ocultadas van aparte
     return render_template("dashboard.html",
         propiedades=propiedades, stats=stats, por_mes=por_mes,   # ### CAMBIO AQUÍ ### se escapa con |tojson
         alerta_comp=competencia_auto.alerta_sin_datos(),   # ### CAMBIO AQUÍ ### aviso si la competencia no se actualiza
@@ -446,16 +447,37 @@ def dashboard():
         desde=desde, hasta=hasta, prop_id=prop_id, informes=informes,
         proximas=proximas, resenas_pend=resenas_pend, ocup_7=ocup_7, hay_reservas=bool(reservas),
         avisos=novedades.avisos(prop_id),   # ### CAMBIO AQUÍ ### hoy / mañana / novedades
-        alertas=_alertas_seguras(prop_id))
+        alertas=al_vis, alertas_ocultas=al_ocu)
 
 
 def _alertas_seguras(prop_id):
-    """### CAMBIO AQUÍ ### si una revisión falla, el Dashboard igual se muestra."""
+    """### CAMBIO AQUÍ ### si una revisión falla, el Dashboard igual se muestra. Devuelve (visibles, ocultas)."""
     try:
-        return alertas.revisar(prop_id)
+        return alertas.separar(alertas.revisar(prop_id))
     except Exception as e:
         print(f"[alertas] {e}")
-        return []
+        return [], []
+
+
+def _volver_al_dashboard():
+    destino = request.form.get("volver") or ""
+    return redirect(destino if destino.startswith("/") and not destino.startswith("//") else url_for("dashboard"))
+
+
+# ### CAMBIO AQUÍ ### ocultar una alerta por unos días / volver a mostrarlas
+@app.route("/alertas/ocultar", methods=["POST"])
+@login_required
+def alerta_ocultar():
+    alertas.ocultar(request.form.get("clave", "").strip())
+    flash(f"Alerta ocultada por {alertas.DIAS_OCULTA} días. Si el problema sigue, vuelve a aparecer.", "success")
+    return _volver_al_dashboard()
+
+
+@app.route("/alertas/mostrar", methods=["POST"])
+@login_required
+def alerta_mostrar():
+    alertas.mostrar_todas()
+    return _volver_al_dashboard()
 
 
 # ════════════════════════════════════════════════════════════════════════════

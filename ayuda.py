@@ -27,7 +27,7 @@ AYUDA = {
     "noches_mes": "Noches vendidas por mes, sumando las propiedades filtradas.",
     "generar_informe": "La IA escribe un informe con los números del período: resumen, análisis, riesgos y recomendaciones. Queda guardado en Informes.",
     # ── Propiedades ────────────────────────────────────────────
-    "alertas": "El sistema revisa solo tus datos y avisa: reservas que se pisan, solicitudes sin confirmar, cobros que faltan, archivos viejos, datos incompletos, noches libres y precios lejos del mercado. Rojo = revisar ya; naranja = pendiente; azul = oportunidad.",
+    "alertas": "El sistema revisa solo tus datos y avisa: reservas que se pisan, solicitudes sin confirmar, cobros que faltan, archivos viejos, datos incompletos, noches libres y precios lejos del mercado. Rojo = revisar ya; naranja = pendiente; azul = oportunidad. Cuando lo solucionás, la alerta desaparece sola. Si no te interesa, tocá la ✕ y se oculta 7 días (si el problema sigue, vuelve a aparecer).",
     "calendario": "Cada día muestra cuánto está ocupado y si alguien llega, se va, hubo un cobro o una novedad. Tocá un día para ver el detalle.",
     "nombre_prop": "Cómo la llamás vos para reconocerla (no tiene que ser igual al título de Airbnb). Ej: Depto Soho 2 amb.",
     "ubicacion": "Elegí país, provincia y ciudad de la lista (o escribila si no aparece). Ciudad y barrio se usan para buscar la competencia de la zona.",

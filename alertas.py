@@ -5,6 +5,8 @@
 # "media" = algo para hacer (archivos viejos, reseñas sin responder, datos incompletos).
 # "info" = oportunidades (noches libres, precio lejos del mercado).
 
+import hashlib
+import json
 from datetime import date, timedelta, datetime
 
 import database as db
@@ -12,6 +14,7 @@ import metricas
 import monedas
 
 ORDEN = {"alta": 0, "media": 1, "info": 2}
+DIAS_OCULTA = 7   # ### CAMBIO AQUÍ ### una alerta ocultada vuelve a aparecer después de esto (si sigue pasando)
 
 
 def _f(d):
@@ -195,4 +198,51 @@ def revisar(propiedad_id=None, hoy=None):
                 f"Ingreso neto real del mes: {monedas.formatear(m['ingreso_neto_real'], 'ARS')}. Revisá precios y ocupación.", "?resaltar=neto")
 
     al.sort(key=lambda a: ORDEN[a["nivel"]])
+    for a in al:   # ### CAMBIO AQUÍ ### identificador estable (no cambia con los montos del día)
+        a["clave"] = hashlib.sha1(f"{a['titulo']}|{a['link']}".encode()).hexdigest()[:12]
     return al
+
+
+# ════════════ ### CAMBIO AQUÍ ### OCULTAR ALERTAS ════════════
+# Se guardan en config como {clave: "fecha hasta la que no se muestra"}. Las alertas no se borran:
+# si el problema sigue, vuelve a aparecer pasado el plazo.
+def _leer_ocultas():
+    fila = db.query_one("SELECT valor FROM config WHERE clave = 'alertas_ocultas'")
+    try:
+        datos = json.loads(fila["valor"]) if fila and fila["valor"] else {}
+        return datos if isinstance(datos, dict) else {}
+    except (ValueError, TypeError):
+        return {}
+
+
+def _guardar_ocultas(datos):
+    db.execute("""INSERT INTO config (clave, valor) VALUES ('alertas_ocultas', %s)
+                  ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor""", (json.dumps(datos),))
+
+
+def ocultar(clave, hoy=None):
+    if not clave or len(clave) > 40:
+        return
+    hoy = hoy or date.today()
+    datos = {k: v for k, v in _leer_ocultas().items() if v >= hoy.isoformat()}   # limpia las vencidas
+    datos[clave] = (hoy + timedelta(days=DIAS_OCULTA)).isoformat()
+    _guardar_ocultas(datos)
+
+
+def mostrar_todas():
+    _guardar_ocultas({})
+
+
+def separar(lista, hoy=None):
+    """Devuelve (visibles, ocultas)."""
+    hoy = (hoy or date.today()).isoformat()
+    datos = _leer_ocultas()
+    vis, ocu = [], []
+    for a in lista:
+        hasta = datos.get(a.get("clave"))
+        if hasta and hasta >= hoy:
+            a["oculta_hasta"] = hasta
+            ocu.append(a)
+        else:
+            vis.append(a)
+    return vis, ocu

@@ -19,21 +19,36 @@
   <div style="margin-top:4px"><a href="{{ url_for('competencia') }}" class="link">Ver Competencia ↗</a></div>
 </div>
 {% endif %}
-{# ### CAMBIO AQUÍ ### alertas: situaciones raras o pendientes (las 3 más importantes a la vista) #}
-{% if alertas %}
-<div class="alertas">
-  <div class="alertas-tit">⚠ Alertas ({{ alertas|length }}){{ info('alertas') }}</div>
-  {% for a in alertas[:3] %}
+{# ### CAMBIO AQUÍ ### alertas: situaciones raras o pendientes (las 3 más importantes a la vista).
+   Se apagan solas cuando se soluciona el problema; con "Ocultar" desaparecen 7 días. #}
+{% macro fila_alerta(a) %}
+<div class="alerta-fila">
   <a class="alerta alerta-{{ a.nivel }}" href="{{ request.script_root }}/{{ a.link }}">
     <strong>{{ a.titulo }}</strong><span>{{ a.detalle }}</span></a>
-  {% endfor %}
+  <form method="post" action="{{ url_for('alerta_ocultar') }}" class="alerta-ocultar">
+    <input type="hidden" name="clave" value="{{ a.clave }}">
+    <input type="hidden" name="volver" value="{{ request.script_root }}{{ request.full_path }}">
+    <button type="submit" title="Ocultar esta alerta 7 días" aria-label="Ocultar esta alerta 7 días">✕</button>
+  </form>
+</div>
+{% endmacro %}
+{% if alertas or alertas_ocultas %}
+<div class="alertas">
+  {% if alertas %}
+  <div class="alertas-tit">⚠ Alertas ({{ alertas|length }}){{ info('alertas') }}</div>
+  {% for a in alertas[:3] %}{{ fila_alerta(a) }}{% endfor %}
   {% if alertas|length > 3 %}
   <details class="alertas-mas"><summary>Ver {{ alertas|length - 3 }} alerta(s) más</summary>
-    {% for a in alertas[3:] %}
-    <a class="alerta alerta-{{ a.nivel }}" href="{{ request.script_root }}/{{ a.link }}">
-      <strong>{{ a.titulo }}</strong><span>{{ a.detalle }}</span></a>
-    {% endfor %}
+    {% for a in alertas[3:] %}{{ fila_alerta(a) }}{% endfor %}
   </details>
+  {% endif %}
+  {% endif %}
+  {% if alertas_ocultas %}
+  <form method="post" action="{{ url_for('alerta_mostrar') }}" class="alertas-ocultas">
+    <input type="hidden" name="volver" value="{{ request.script_root }}{{ request.full_path }}">
+    <span class="muted">{{ alertas_ocultas|length }} alerta(s) ocultada(s).</span>
+    <button type="submit" class="link-btn">Mostrar de nuevo</button>
+  </form>
   {% endif %}
 </div>
 {% endif %}

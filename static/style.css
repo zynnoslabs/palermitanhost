@@ -730,3 +730,12 @@ select, input, textarea { max-width: 100%; }
   50% { box-shadow: 0 0 0 4px rgba(224, 142, 11, .55), 0 0 18px 4px rgba(224, 142, 11, .35); background-color: #fff6df; }
 }
 @media (prefers-reduced-motion: reduce) { .resaltado { animation: none; box-shadow: 0 0 0 3px rgba(224, 142, 11, .6); } }
+
+/* ### CAMBIO AQUÍ ### botón para ocultar una alerta */
+.alerta-fila { position:relative; }
+.alerta-fila .alerta { padding-right:44px; }
+.alerta-ocultar { position:absolute; top:6px; right:6px; margin:0; }
+.alerta-ocultar button { width:30px; height:30px; border:none; border-radius:50%; background:transparent; color:#8a7f72; font-size:1rem; cursor:pointer; line-height:1; }
+.alerta-ocultar button:hover, .alerta-ocultar button:focus-visible { background:rgba(0,0,0,.08); color:#333; }
+.alertas-ocultas { display:flex; gap:8px; align-items:center; font-size:.82rem; margin:0; }
+.link-btn { background:none; border:none; padding:0; color:var(--gold-hover); text-decoration:underline; cursor:pointer; font-size:inherit; }
