@@ -19,6 +19,24 @@
   <div style="margin-top:4px"><a href="{{ url_for('competencia') }}" class="link">Ver Competencia ↗</a></div>
 </div>
 {% endif %}
+{# ### CAMBIO AQUÍ ### alertas: situaciones raras o pendientes (las 3 más importantes a la vista) #}
+{% if alertas %}
+<div class="alertas">
+  <div class="alertas-tit">⚠ Alertas ({{ alertas|length }}){{ info('alertas') }}</div>
+  {% for a in alertas[:3] %}
+  <a class="alerta alerta-{{ a.nivel }}" href="{{ request.script_root }}/{{ a.link }}">
+    <strong>{{ a.titulo }}</strong><span>{{ a.detalle }}</span></a>
+  {% endfor %}
+  {% if alertas|length > 3 %}
+  <details class="alertas-mas"><summary>Ver {{ alertas|length - 3 }} alerta(s) más</summary>
+    {% for a in alertas[3:] %}
+    <a class="alerta alerta-{{ a.nivel }}" href="{{ request.script_root }}/{{ a.link }}">
+      <strong>{{ a.titulo }}</strong><span>{{ a.detalle }}</span></a>
+    {% endfor %}
+  </details>
+  {% endif %}
+</div>
+{% endif %}
 {# ### CAMBIO AQUÍ ### avisos llamativos: quién llega o se va hoy y mañana, y novedades de la semana #}
 {% if avisos and avisos.hay_algo %}
 <div class="avisos">

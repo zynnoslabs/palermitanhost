@@ -36,7 +36,7 @@
         {% set k = dia.isoformat() %}
         {% set x = dias.get(k) %}
         {% if x %}
-        <button type="button" class="cal-dia {% if k == hoy %}es-hoy{% endif %} {% if k == seleccionado %}sel{% endif %}"
+        <button type="button" class="cal-dia {% if k == hoy %}es-hoy{% endif %} {% if k == seleccionado %}sel{% endif %} {% if x.choques %}choque{% endif %}"
                 data-dia="{{ k }}" style="--ocup: {{ x.ocupacion / 100 }}"
                 aria-label="{{ dia.day }}: {{ x.alojados|length }} alojados, {{ x.llegan|length }} llegadas, {{ x.salen|length }} salidas">
           <span class="num">{{ dia.day }}</span>
@@ -88,7 +88,9 @@ function mostrar(k, sinScroll) {
     return '<strong>' + esc(r.huesped) + '</strong> · ' + esc(r.prop) + '<br><small class="muted">' + esc(r.desde) +
            ' → ' + esc(r.hasta) + ' · ' + esc(r.noches) + ' noches · ' + esc(r.monto) + '</small>';
   };
-  var html = '<h3 style="margin-bottom:4px">' + esc(fechaLarga(k)) + '<span class="muted" style="font-size:.85rem">' + cuando + '</span></h3>' +
+  var aviso = (x.choques && x.choques.length) ? '<div class="alerta alerta-alta" style="margin:8px 0"><strong>⚠ Reservas superpuestas</strong>' +
+      '<span>Esta noche hay más de un huésped en: ' + esc(x.choques.join(', ')) + '. Revisá si un anuncio quedó asignado a la propiedad equivocada.</span></div>' : '';
+  var html = aviso + '<h3 style="margin-bottom:4px">' + esc(fechaLarga(k)) + '<span class="muted" style="font-size:.85rem">' + cuando + '</span></h3>' +
     '<p class="muted" style="margin-bottom:10px">Ocupación: ' + x.ocupacion + '%</p>' +
     bloque('Llegan', 'c-llega', x.llegan, reserva) +
     bloque('Se van', 'c-sale', x.salen, reserva) +

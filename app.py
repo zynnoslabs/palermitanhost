@@ -30,6 +30,7 @@ import ayuda   # ### CAMBIO AQUÍ ### textos del ícono 'i'
 import privacidad   # ### CAMBIO AQUÍ ### nombres de huéspedes ocultos para la IA
 import archivo_anual   # ### CAMBIO AQUÍ ### archivo anual descargable
 import novedades   # ### CAMBIO AQUÍ ### historial, calendario y avisos de hoy/mañana
+import alertas   # ### CAMBIO AQUÍ ### situaciones raras o pendientes
 
 from werkzeug.middleware.proxy_fix import ProxyFix   # ### CAMBIO AQUÍ ###
 
@@ -444,7 +445,17 @@ def dashboard():
         archivo_pendiente=archivo_anual.anio_pendiente(),   # ### CAMBIO AQUÍ ### aviso del archivo anual
         desde=desde, hasta=hasta, prop_id=prop_id, informes=informes,
         proximas=proximas, resenas_pend=resenas_pend, ocup_7=ocup_7, hay_reservas=bool(reservas),
-        avisos=novedades.avisos(prop_id))   # ### CAMBIO AQUÍ ### hoy / mañana / novedades
+        avisos=novedades.avisos(prop_id),   # ### CAMBIO AQUÍ ### hoy / mañana / novedades
+        alertas=_alertas_seguras(prop_id))
+
+
+def _alertas_seguras(prop_id):
+    """### CAMBIO AQUÍ ### si una revisión falla, el Dashboard igual se muestra."""
+    try:
+        return alertas.revisar(prop_id)
+    except Exception as e:
+        print(f"[alertas] {e}")
+        return []
 
 
 # ════════════════════════════════════════════════════════════════════════════

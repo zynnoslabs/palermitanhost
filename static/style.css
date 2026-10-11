@@ -709,3 +709,16 @@ select, input, textarea { max-width: 100%; }
 .timeline li.t-cancelada::before { background:#c0392b; } .timeline li.t-cobro::before { background:#2f6fb3; }
 .timeline li.t-reservada::before { background:#2d8a4e; } .timeline .t-fecha { font-weight:600; min-width:84px; }
 @media (max-width: 900px) { .cal-dia .chips { display:none; } }
+
+/* ### CAMBIO AQUÍ ### — ALERTAS */
+.alertas { margin-bottom:14px; display:flex; flex-direction:column; gap:6px; }
+.alertas-tit { font-weight:700; font-size:.9rem; }
+.alerta { display:flex; flex-direction:column; gap:2px; padding:10px 12px; border-radius:8px; text-decoration:none; color:inherit; border:1px solid var(--border); font-size:.88rem; }
+.alerta strong { font-size:.92rem; }
+.alerta-alta { background:#fdf0ee; border-left:5px solid #c0392b; }
+.alerta-media { background:#fdf6e8; border-left:5px solid #e08e0b; }
+.alerta-info { background:#f1f6fc; border-left:5px solid #2f6fb3; }
+.alertas-mas summary { cursor:pointer; font-size:.85rem; color:var(--gold-hover); margin:2px 0 6px; }
+.alertas-mas .alerta { margin-top:6px; }
+.cal-dia.choque { border:2px solid #c0392b; }
+.cal-dia.choque::after { content:"⚠"; position:absolute; top:3px; right:5px; font-size:.75rem; color:#c0392b; }

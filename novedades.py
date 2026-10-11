@@ -205,4 +205,9 @@ def mes(anio, mes_n, propiedad_id=None):
                                   "prop": nombres.get(e["propiedad_id"], ""), "tipo": e["tipo"]})
     for k, v in dias.items():
         v["ocupacion"] = round(min(len(v["alojados"]) / unidades, 1) * 100)
+        # ### CAMBIO AQUÍ ### dos huéspedes en la misma propiedad la misma noche
+        cuenta = {}
+        for a in v["alojados"]:
+            cuenta[a["prop"]] = cuenta.get(a["prop"], 0) + 1
+        v["choques"] = [p for p, n in cuenta.items() if n > 1]
     return dias, unidades
