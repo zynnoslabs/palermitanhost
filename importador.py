@@ -427,6 +427,7 @@ def procesar_csv(contenido_bytes, mapa_columnas, propiedad_map):
             "limpieza":            limpieza,
             "ingreso_neto":        ingreso_neto,
             "anticipacion_dias":   anticipacion,
+            "fecha_reserva":       fecha_res,   # ### CAMBIO AQUÍ ### cuándo se hizo la reserva (historial)
             "huesped_nombre":      col("huesped_nombre")[:120],
             "moneda":              moneda,   # ### CAMBIO AQUÍ ### vacío = moneda de la propiedad
             "estado":              estado,

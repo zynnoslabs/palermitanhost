@@ -19,6 +19,45 @@
   <div style="margin-top:4px"><a href="{{ url_for('competencia') }}" class="link">Ver Competencia ↗</a></div>
 </div>
 {% endif %}
+{# ### CAMBIO AQUÍ ### avisos llamativos: quién llega o se va hoy y mañana, y novedades de la semana #}
+{% if avisos and avisos.hay_algo %}
+<div class="avisos">
+  {% for r in avisos.hoy_llegan %}
+  <a class="aviso aviso-hoy" href="{{ url_for('calendario') }}">
+    <span class="aviso-cuando"><i class="latido"></i>HOY</span>
+    <span class="aviso-txt">🛬 Llega <strong>{{ r.huesped_nombre or 'un huésped' }}</strong> a {{ r.prop_nombre }} · {{ r.noches or '?' }} noches</span>
+  </a>
+  {% endfor %}
+  {% for r in avisos.hoy_salen %}
+  <a class="aviso aviso-hoy" href="{{ url_for('calendario') }}">
+    <span class="aviso-cuando"><i class="latido"></i>HOY</span>
+    <span class="aviso-txt">🧳 Se va <strong>{{ r.huesped_nombre or 'un huésped' }}</strong> de {{ r.prop_nombre }} · hay que preparar la limpieza</span>
+  </a>
+  {% endfor %}
+  {% for r in avisos.manana_llegan %}
+  <a class="aviso aviso-manana" href="{{ url_for('calendario', dia=(r.fecha_inicio|string)[:10]) }}">
+    <span class="aviso-cuando">MAÑANA</span>
+    <span class="aviso-txt">🛬 Llega <strong>{{ r.huesped_nombre or 'un huésped' }}</strong> a {{ r.prop_nombre }} · {{ r.noches or '?' }} noches</span>
+  </a>
+  {% endfor %}
+  {% for r in avisos.manana_salen %}
+  <a class="aviso aviso-manana" href="{{ url_for('calendario') }}">
+    <span class="aviso-cuando">MAÑANA</span>
+    <span class="aviso-txt">🧳 Se va <strong>{{ r.huesped_nombre or 'un huésped' }}</strong> de {{ r.prop_nombre }}</span>
+  </a>
+  {% endfor %}
+  {% for e in avisos.recientes[:4] %}
+  <a class="aviso {{ 'aviso-alerta' if e.tipo == 'cancelada' else 'aviso-info' }}" href="{{ url_for('calendario', dia=e.fecha) }}">
+    <span class="aviso-cuando">{{ {'cancelada': 'CANCELÓ', 'fechas': 'CAMBIO', 'monto': 'CAMBIO', 'reservada': 'NUEVA'}.get(e.tipo, 'NOVEDAD') }}</span>
+    <span class="aviso-txt">{{ e.detalle }} <small class="muted">· {{ e.prop_nombre }}</small></span>
+  </a>
+  {% endfor %}
+  {% if avisos.recientes|length > 4 %}<a class="link" href="{{ url_for('calendario') }}" style="font-size:.85rem">Ver todas las novedades en el Calendario →</a>{% endif %}
+</div>
+{% elif avisos and avisos.alojados %}
+<div class="avisos"><div class="aviso aviso-info"><span class="aviso-cuando">HOY</span>
+  <span class="aviso-txt">🏠 {{ avisos.alojados|length }} huésped(es) alojado(s), sin llegadas ni salidas.</span></div></div>
+{% endif %}
 <div class="page-header">
   <h2>Dashboard{{ info('dashboard') }}</h2>
   <form method="get" class="filter-form">

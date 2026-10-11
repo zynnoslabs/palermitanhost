@@ -649,3 +649,63 @@ select, input, textarea { max-width: 100%; }
 .informe-texto h4 { margin: .9rem 0 .3rem; font-size: .95rem; }
 .informe-texto p { margin: .35rem 0; line-height: 1.6; }
 .informe-texto ul { margin: .35rem 0 .35rem 1.2rem; line-height: 1.6; }
+
+/* ### CAMBIO AQUÍ ### — CALENDARIO */
+.nav-badge { margin-left:auto; background:#c0392b; color:#fff; border-radius:10px; font-size:.7rem; font-weight:700; padding:1px 7px; }
+.cal-wrap { display:grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap:16px; align-items:start; }
+.cal-nav { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+.cal-nav h3 { flex:1; text-align:center; margin:0; font-size:1.15rem; }
+.cal-leyenda { display:flex; flex-wrap:wrap; gap:12px; font-size:.78rem; color:var(--text-muted, #777); margin-bottom:10px; }
+.cal-leyenda span { display:inline-flex; align-items:center; gap:5px; }
+.cal-leyenda .cuadro { width:12px; height:12px; border-radius:3px; background:rgba(184,154,90,.55); display:inline-block; }
+.cal-grid { display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); gap:4px; }
+.cal-dow { text-align:center; font-size:.72rem; font-weight:600; color:var(--text-muted, #777); padding:4px 0; text-transform:uppercase; }
+.cal-dia { position:relative; min-height:78px; border:1px solid var(--border); border-radius:8px; padding:5px 6px; text-align:left;
+  background: linear-gradient(rgba(184,154,90, calc(var(--ocup, 0) * .45)), rgba(184,154,90, calc(var(--ocup, 0) * .45))), var(--surface);
+  cursor:pointer; display:flex; flex-direction:column; gap:3px; font:inherit; color:inherit; transition:transform .1s, box-shadow .1s; }
+.cal-dia:hover { box-shadow:0 2px 8px rgba(0,0,0,.08); }
+.cal-dia.fuera { opacity:.35; cursor:default; background:transparent; }
+.cal-dia .num { font-weight:600; font-size:.85rem; }
+.cal-dia.es-hoy { border:2px solid var(--gold); }
+.cal-dia.es-hoy .num { background:var(--gold); color:#fff; border-radius:10px; padding:0 6px; align-self:flex-start; }
+.cal-dia.sel { outline:3px solid #2a2a1e; outline-offset:1px; }
+.pts { display:flex; gap:3px; flex-wrap:wrap; }
+.pt { width:8px; height:8px; border-radius:50%; display:inline-block; }
+.pt-llega { background:#2d8a4e; } .pt-sale { background:#c0392b; } .pt-cobro { background:#2f6fb3; } .pt-nov { background:#e08e0b; }
+.chips { display:flex; flex-direction:column; gap:2px; }
+.chip { font-size:.68rem; border-radius:4px; padding:1px 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.chip-llega { background:#e3f3e8; color:#1e5c35; } .chip-sale { background:#fbe7e5; color:#7b1d1d; }
+.cal-detalle { position:sticky; top:12px; }
+.det-tit { font-size:.9rem; margin:12px 0 4px; padding-left:8px; border-left:4px solid var(--border); }
+.det-tit.c-llega { border-color:#2d8a4e; } .det-tit.c-sale { border-color:#c0392b; } .det-tit.c-cobro { border-color:#2f6fb3; } .det-tit.c-nov { border-color:#e08e0b; }
+.det-lista { list-style:none; margin:0; padding:0; } .det-lista li { padding:6px 0; border-bottom:1px solid var(--border); font-size:.88rem; }
+@media (max-width: 900px) {
+  .cal-wrap { grid-template-columns:1fr; }
+  .cal-dia { min-height:48px; padding:4px; }
+  .cal-detalle { position:static; }
+}
+
+/* ### CAMBIO AQUÍ ### — AVISOS (hoy / mañana / novedades) */
+.avisos { display:flex; flex-direction:column; gap:8px; margin-bottom:16px; }
+.aviso { display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:10px; text-decoration:none; color:inherit;
+  border:1px solid var(--border); background:var(--surface); box-shadow:0 1px 3px rgba(0,0,0,.05); }
+.aviso:hover { box-shadow:0 3px 10px rgba(0,0,0,.08); }
+.aviso-cuando { font-weight:800; font-size:.72rem; letter-spacing:.06em; padding:4px 9px; border-radius:20px; white-space:nowrap;
+  display:inline-flex; align-items:center; gap:6px; }
+.aviso-txt { font-size:.95rem; line-height:1.4; }
+.aviso-hoy { border-left:5px solid #2d8a4e; background:#f1faf4; } .aviso-hoy .aviso-cuando { background:#2d8a4e; color:#fff; }
+.aviso-manana { border-left:5px solid var(--gold); background:#fdf8ee; } .aviso-manana .aviso-cuando { background:var(--gold); color:#fff; }
+.aviso-alerta { border-left:5px solid #c0392b; background:#fdf1ef; } .aviso-alerta .aviso-cuando { background:#c0392b; color:#fff; }
+.aviso-info { border-left:5px solid #2f6fb3; background:#f1f6fc; } .aviso-info .aviso-cuando { background:#2f6fb3; color:#fff; }
+.latido { width:7px; height:7px; border-radius:50%; background:#fff; display:inline-block; animation:latido 1.4s infinite; }
+@keyframes latido { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.35; transform:scale(.7); } }
+@media (prefers-reduced-motion: reduce) { .latido { animation:none; } }
+
+/* ### CAMBIO AQUÍ ### — historial de una reserva */
+.fila-historial td { background:var(--surface-2); }
+.timeline { list-style:none; margin:4px 0; padding:0 0 0 14px; border-left:2px solid var(--border); }
+.timeline li { position:relative; padding:4px 0 4px 10px; font-size:.85rem; display:flex; gap:10px; flex-wrap:wrap; }
+.timeline li::before { content:""; position:absolute; left:-20px; top:10px; width:10px; height:10px; border-radius:50%; background:var(--gold); }
+.timeline li.t-cancelada::before { background:#c0392b; } .timeline li.t-cobro::before { background:#2f6fb3; }
+.timeline li.t-reservada::before { background:#2d8a4e; } .timeline .t-fecha { font-weight:600; min-width:84px; }
+@media (max-width: 900px) { .cal-dia .chips { display:none; } }

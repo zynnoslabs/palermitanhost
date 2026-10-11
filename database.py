@@ -215,6 +215,22 @@ def init_db():
                 cur.execute(f'ALTER TABLE "{t}" ALTER COLUMN "{c}" TYPE DOUBLE PRECISION')
         if any(t == "reservas" and c == "ingreso_neto" for t, c in reales):
             cur.execute("ALTER TABLE reservas ADD COLUMN precio_total DOUBLE PRECISION GENERATED ALWAYS AS (ingreso_neto) STORED")
+        # ### CAMBIO AQUÍ ### historial de cada reserva (novedades, calendario)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS reservas_historial (
+                id           SERIAL PRIMARY KEY,
+                codigo       TEXT NOT NULL,
+                propiedad_id INTEGER,
+                fecha        TEXT,
+                tipo         TEXT,
+                detalle      TEXT,
+                fecha_real   BOOLEAN DEFAULT FALSE,
+                creado_en    TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_historial_codigo ON reservas_historial (codigo)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_historial_fecha ON reservas_historial (fecha)")
+        cur.execute("ALTER TABLE reservas ADD COLUMN IF NOT EXISTS fecha_reserva TEXT")
         # ### CAMBIO AQUÍ ### ubicación completa y características de la propiedad
         for col_sql in ("pais TEXT DEFAULT 'Argentina'", "pais_codigo TEXT DEFAULT 'AR'", "provincia TEXT DEFAULT ''",
                         "piso_depto TEXT DEFAULT ''", "m2 INTEGER", "cochera INTEGER DEFAULT 0"):

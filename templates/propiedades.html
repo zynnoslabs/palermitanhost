@@ -50,7 +50,7 @@
   {% if huespedes %}
   <div class="table-wrap">
   <table class="tabla">
-    <thead><tr><th>Huésped</th><th>Check-in</th><th>Check-out</th><th>Plataforma</th><th>Monto</th><th>Estado</th></tr></thead>
+    <thead><tr><th>Huésped</th><th>Check-in</th><th>Check-out</th><th>Plataforma</th><th>Monto</th><th>Estado</th><th>Historial</th></tr></thead>
     <tbody>
     {% for r in huespedes %}
     <tr>
@@ -60,7 +60,21 @@
       <td>{{ (r.canal or 'airbnb')|capitalize }}</td>
       <td>{{ r.ingreso_bruto|dinero(r.moneda) }}</td>
       <td><span class="badge {{ 'badge-warn' if r.estado in ('pendiente','cancelada') else 'badge-ok' }}">{{ (r.estado or 'completada')|capitalize }}</span></td>
+      {# ### CAMBIO AQUÍ ### historial de la reserva #}
+      <td>{% set h = historial.get(r.codigo_confirmacion, []) %}
+        {% if h %}<button type="button" class="btn btn-sm" onclick="var f=document.getElementById('hist-{{ loop.index }}');f.hidden=!f.hidden">Ver ({{ h|length }})</button>
+        {% else %}<span class="muted">—</span>{% endif %}</td>
     </tr>
+    {% if h %}
+    <tr id="hist-{{ loop.index }}" hidden class="fila-historial"><td colspan="7">
+      <ul class="timeline">
+        {% for e in h %}
+        <li class="t-{{ e.tipo }}"><span class="t-fecha">{{ e.fecha|fecha }}</span>
+          <span>{{ e.detalle }}{% if not e.fecha_real %} <small class="muted">(detectado al subir el archivo)</small>{% endif %}</span></li>
+        {% endfor %}
+      </ul>
+    </td></tr>
+    {% endif %}
     {% endfor %}
     </tbody>
   </table>

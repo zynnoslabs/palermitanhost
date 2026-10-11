@@ -29,6 +29,7 @@ import hmac
 import ayuda   # ### CAMBIO AQUÍ ### textos del ícono 'i'
 import privacidad   # ### CAMBIO AQUÍ ### nombres de huéspedes ocultos para la IA
 import archivo_anual   # ### CAMBIO AQUÍ ### archivo anual descargable
+import novedades   # ### CAMBIO AQUÍ ### historial, calendario y avisos de hoy/mañana
 
 from werkzeug.middleware.proxy_fix import ProxyFix   # ### CAMBIO AQUÍ ###
 
@@ -203,6 +204,14 @@ def inyectar_monedas():
     except Exception:
         tc = None
     return {"vista": moneda_vista(), "tc_info": tc, "tipos_dolar": monedas.TIPOS_DOLAR}
+
+
+@app.context_processor
+def inyectar_hoy():
+    """### CAMBIO AQUÍ ### número de llegadas + salidas de hoy, para el menú (Calendario)."""
+    if not session.get("logged_in"):
+        return {}
+    return {"movimientos_hoy": novedades.cantidad_hoy()}
 
 
 @app.template_filter("dinero")
@@ -434,7 +443,39 @@ def dashboard():
         alerta_comp=competencia_auto.alerta_sin_datos(),   # ### CAMBIO AQUÍ ### aviso si la competencia no se actualiza
         archivo_pendiente=archivo_anual.anio_pendiente(),   # ### CAMBIO AQUÍ ### aviso del archivo anual
         desde=desde, hasta=hasta, prop_id=prop_id, informes=informes,
-        proximas=proximas, resenas_pend=resenas_pend, ocup_7=ocup_7, hay_reservas=bool(reservas))
+        proximas=proximas, resenas_pend=resenas_pend, ocup_7=ocup_7, hay_reservas=bool(reservas),
+        avisos=novedades.avisos(prop_id))   # ### CAMBIO AQUÍ ### hoy / mañana / novedades
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# ### CAMBIO AQUÍ ### CALENDARIO
+# ════════════════════════════════════════════════════════════════════════════
+MESES_LARGOS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto",
+                "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+
+
+@app.route("/calendario")
+@login_required
+def calendario():
+    import calendar as cal
+    hoy = date.today()
+    txt = request.args.get("mes") or ""
+    try:
+        anio, mes_n = int(txt[:4]), int(txt[5:7])
+        if not (2000 <= anio <= 2100 and 1 <= mes_n <= 12):
+            raise ValueError
+    except ValueError:
+        anio, mes_n = hoy.year, hoy.month
+    prop_id = request.args.get("propiedad_id", type=int)
+    dias, unidades = novedades.mes(anio, mes_n, prop_id)
+    semanas = cal.Calendar(firstweekday=0).monthdatescalendar(anio, mes_n)   # semanas de lunes a domingo
+    ant = date(anio, mes_n, 1) - timedelta(days=1)
+    sig = date(anio, mes_n, cal.monthrange(anio, mes_n)[1]) + timedelta(days=1)
+    return render_template("calendario.html", dias=dias, semanas=semanas, anio=anio, mes_n=mes_n,
+                           titulo=f"{MESES_LARGOS[mes_n - 1]} {anio}", hoy=hoy.isoformat(), unidades=unidades,
+                           ant=f"{ant.year}-{ant.month:02d}", sig=f"{sig.year}-{sig.month:02d}",
+                           propiedades=db.query("SELECT id, nombre FROM propiedades ORDER BY nombre"), prop_id=prop_id,
+                           seleccionado=request.args.get("dia") or (hoy.isoformat() if (hoy.year, hoy.month) == (anio, mes_n) else ""))
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -451,7 +492,8 @@ def propiedades():
         SELECT * FROM reservas WHERE propiedad_id=%s
         ORDER BY fecha_inicio DESC LIMIT 30
     """, (ver,)) if ver else []
-    return render_template("propiedades.html", propiedades=props, ver=ver, huespedes=huespedes)
+    hist = novedades.historial([h["codigo_confirmacion"] for h in huespedes])   # ### CAMBIO AQUÍ ###
+    return render_template("propiedades.html", propiedades=props, ver=ver, huespedes=huespedes, historial=hist)
 
 
 # ### CAMBIO AQUÍ ### — lectura segura del formulario de propiedad.
@@ -795,6 +837,7 @@ def importar_asignar():
                       ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor""", (json.dumps(recordados, ensure_ascii=False),))
 
         filas_ok, omitidas, movimientos = importador.procesar_csv(pend["texto"], mapa, propiedad_map)
+        foto_antes, movs_antes = novedades.antes_de_importar({f["codigo_confirmacion"] for f in filas_ok})   # ### CAMBIO AQUÍ ###
         mon_prop = {p["id"]: (p.get("moneda") or "ARS") for p in propiedades}
         for fila in filas_ok:   # si el CSV no trae moneda, se usa la de la propiedad
             fila["moneda"] = fila.get("moneda") or mon_prop.get(fila["propiedad_id"], "ARS")
@@ -808,8 +851,8 @@ def importar_asignar():
                     INSERT INTO reservas
                     (propiedad_id,codigo_confirmacion,fecha_inicio,fecha_fin,noches,
                      ingreso_bruto,comision_airbnb,limpieza,ingreso_neto,anticipacion_dias,
-                     huesped_nombre,estado,moneda)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                     huesped_nombre,estado,moneda,fecha_reserva)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     ON CONFLICT (codigo_confirmacion) DO UPDATE SET
                       huesped_nombre = COALESCE(NULLIF(EXCLUDED.huesped_nombre,''), reservas.huesped_nombre),
                       estado = CASE WHEN EXCLUDED.estado = 'completada' AND reservas.estado = 'cancelada'
@@ -829,6 +872,7 @@ def importar_asignar():
                                              THEN reservas.ingreso_neto ELSE EXCLUDED.ingreso_neto END)
                                              WHEN EXCLUDED.ingreso_neto <> 0 THEN EXCLUDED.ingreso_neto ELSE reservas.ingreso_neto END,
                       anticipacion_dias = COALESCE(EXCLUDED.anticipacion_dias, reservas.anticipacion_dias),
+                      fecha_reserva = COALESCE(EXCLUDED.fecha_reserva, reservas.fecha_reserva),
                       propiedad_id = EXCLUDED.propiedad_id,
                       fecha_inicio = EXCLUDED.fecha_inicio,
                       fecha_fin    = COALESCE(EXCLUDED.fecha_fin, reservas.fecha_fin),
@@ -841,6 +885,7 @@ def importar_asignar():
                     fila["ingreso_bruto"], fila["comision_airbnb"],
                     fila["limpieza"], fila["ingreso_neto"], fila["anticipacion_dias"],
                     fila.get("huesped_nombre", ""), fila.get("estado", "completada"), fila["moneda"],
+                    fila.get("fecha_reserva"),
                     solo_completar, solo_completar, solo_completar, solo_completar
                 ))
                 if nueva:
@@ -868,6 +913,10 @@ def importar_asignar():
                 WHERE r.codigo_confirmacion = m.codigo
             """, (list({m["codigo"] for m in movimientos}),))
 
+        try:   # ### CAMBIO AQUÍ ### anota las novedades (si falla, la importación igual quedó hecha)
+            novedades.despues_de_importar(foto_antes, movs_antes, filas_ok, movimientos)
+        except Exception as e:
+            print(f"[novedades] {e}")
         _borrar_pendiente(token)
         if importadas or actualizadas:   # ### CAMBIO AQUÍ ### se anota la fecha para el aviso de la próxima carga
             db.execute("""INSERT INTO config (clave, valor) VALUES (%s, %s)

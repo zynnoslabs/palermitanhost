@@ -25,6 +25,11 @@
          class="{% if request.endpoint=='dashboard' %}active{% endif %}">
         <span class="nav-icon">▦</span> Dashboard
       </a>
+      <a href="{{ url_for('calendario') }}"
+         class="{% if request.endpoint=='calendario' %}active{% endif %}">{# ### CAMBIO AQUÍ ### #}
+        <span class="nav-icon">▤</span> Calendario
+        {% if movimientos_hoy %}<span class="nav-badge" title="Llegadas y salidas de hoy">{{ movimientos_hoy }}</span>{% endif %}
+      </a>
       <a href="{{ url_for('propiedades') }}"
          class="{% if 'propiedad' in request.endpoint %}active{% endif %}">
         <span class="nav-icon">⌂</span> Propiedades
