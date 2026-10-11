@@ -9,7 +9,7 @@
 <div class="form-card">
   <!-- ### CAMBIO AQUÍ ### — instrucciones para los DOS archivos de Airbnb -->
   {% if not propiedades %}
-  <div class="alert alert-warn">Antes de importar, creá tus propiedades en <a class="link" href="{{ url_for('nueva_propiedad') }}">Propiedades</a>.</div>
+  <div class="alert alert-warn">Todavía no cargaste propiedades: al importar, el sistema las crea con el nombre que tienen en Airbnb. Después completás su barrio, precio y costos.</div>
   {% endif %}
   <p>Subí los archivos que te da Airbnb (desde la computadora, en modo anfitrión):</p>
   <ol class="muted" style="margin:8px 0 14px 20px;line-height:1.7">
@@ -23,7 +23,7 @@
       <label>Archivo CSV de Airbnb</label>
       <input type="file" name="csv_file" accept=".csv,text/csv" required>
     </div>
-    <button type="submit" class="btn btn-primary" {% if not propiedades %}disabled{% endif %}>Analizar CSV</button>
+    <button type="submit" class="btn btn-primary">Analizar CSV</button>
   </form>
 </div>
 
@@ -53,7 +53,7 @@
 <div class="form-card">
   <h3>Asignar anuncios a propiedades{{ info('asignar_anuncios') }}</h3>
   <p>Archivo de <strong>{{ 'Ganancias' if tipo_archivo == 'ganancias' else 'Reservas' }}</strong>.
-     Indicá a qué propiedad del sistema corresponde cada anuncio. Queda guardado para la próxima vez.</p>
+     Indicá a qué propiedad del sistema corresponde cada anuncio, o elegí <strong>Crear propiedad nueva</strong>. Queda guardado para la próxima vez.</p>
   <form method="post" action="{{ url_for('importar_asignar') }}">
     <input type="hidden" name="asignar" value="1">
     <input type="hidden" name="t" value="{{ token }}">
@@ -62,6 +62,7 @@
       <label>{{ anuncio }}</label>
       <select name="prop_{{ loop.index0 }}">
         <option value="">— No importar —</option>
+        <option value="nueva" {% if not sugerida and not propiedades %}selected{% endif %}>➕ Crear propiedad nueva con este nombre</option>
         {% for p in propiedades %}
           <option value="{{ p.id }}" {% if sugerida == p.id %}selected{% endif %}>{{ p.nombre }}</option>
         {% endfor %}

@@ -155,7 +155,9 @@ def filtro_num(valor, decimales=1):
         v = float(valor)
     except (TypeError, ValueError):
         return str(valor)
-    if round(v, decimales) == 0:
+    from decimal import Decimal, ROUND_HALF_UP
+    v = float(Decimal(str(v)).quantize(Decimal(1).scaleb(-decimales), rounding=ROUND_HALF_UP))   # 12,5 → 13
+    if v == 0:
         v = 0.0   # ### CAMBIO AQUÍ ### evita "-0"
     txt = f"{v:,.{decimales}f}".replace(",", "X").replace(".", ",").replace("X", ".")
     if decimales and txt.endswith("," + "0" * decimales):
@@ -692,9 +694,6 @@ def importar():
         return redirect(url_for("importar"))
 
     if request.method == "POST":
-        if not propiedades:
-            flash("Primero creá tus propiedades (sección Propiedades). Después importá el archivo.", "error")
-            return redirect(url_for("importar"))
         archivo = request.files.get("csv_file")
         if not archivo or archivo.filename == "":
             flash("Seleccioná un archivo CSV.", "error")
@@ -728,9 +727,6 @@ def importar_asignar():
         # se abrió directo, se tocó dos veces o venció: no hay nada para importar
         flash("No hay ninguna importación en curso. Subí el archivo de nuevo.", "warn")
         return redirect(url_for("importar"))
-    if not propiedades:
-        flash("Primero creá tus propiedades (sección Propiedades).", "error")
-        return redirect(url_for("importar"))
     encabezados, mapa = pend["encabezados"], {k: int(v) for k, v in pend["mapa"].items()}
 
     # paso 2: columnas elegidas a mano
@@ -757,9 +753,23 @@ def importar_asignar():
 
     if request.method == "POST" and "asignar" in request.form:
         ids_validos = {p["id"] for p in propiedades}
-        propiedad_map = {}
+        propiedad_map, creadas = {}, []
+        idx_mon = mapa.get("moneda")
         for i, anuncio in enumerate(anuncios):   # por número: nombres raros ya no se pierden
-            pid = request.form.get(f"prop_{i}", type=int)
+            valor = request.form.get(f"prop_{i}") or ""
+            if valor == "nueva":
+                # ### CAMBIO AQUÍ ### crea la propiedad con el nombre del anuncio de Airbnb
+                mon = next((importador._moneda(f[idx_mon]) for f in filas[1:]
+                            if idx_mon is not None and idx_mon < len(f) and idx_anuncio < len(f)
+                            and f[idx_anuncio].strip() == anuncio), "") if idx_mon is not None else ""
+                pid = db.execute("""INSERT INTO propiedades (nombre, barrio, ciudad, provincia, pais, pais_codigo, tipo, estado, moneda)
+                                    VALUES (%s, '', 'Buenos Aires', 'Ciudad Autónoma de Buenos Aires', 'Argentina', 'AR',
+                                            'depto', 'activa', %s) RETURNING id""",
+                                 (anuncio[:120], mon if mon in ("ARS", "USD") else "ARS"))
+                propiedad_map[anuncio] = pid
+                creadas.append(anuncio)
+                continue
+            pid = int(valor) if valor.isdigit() else None
             if pid in ids_validos:
                 propiedad_map[anuncio] = pid
         if not propiedad_map:
@@ -841,6 +851,9 @@ def importar_asignar():
         _borrar_pendiente(token)
         errores = [o for o in omitidas if o.get("clase") == "error"]
         ignoradas = [o for o in omitidas if o.get("clase") != "error"]
+        if creadas:
+            flash(f"Se crearon {len(creadas)} propiedad(es) con el nombre de Airbnb: {', '.join(creadas)}. "
+                  f"Entrá a Propiedades y completá barrio, precio y costos (sin barrio no se busca la competencia).", "warn")
         flash(f"Importación completa: {importadas} reservas nuevas y {actualizadas} actualizadas"
               + (f", {len(ignoradas)} filas que no son reservas" if ignoradas else "")
               + (f", {len(errores)} filas con errores" if errores else "") + ".",

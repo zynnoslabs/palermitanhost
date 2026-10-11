@@ -203,6 +203,18 @@ def init_db():
             cur.execute(f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS moneda TEXT DEFAULT 'ARS'")
         # ### CAMBIO AQUÍ ### — ciudad de cada propiedad (se usa para buscar la competencia)
         cur.execute("ALTER TABLE propiedades ADD COLUMN IF NOT EXISTS ciudad TEXT DEFAULT 'Buenos Aires'")
+        # ### CAMBIO AQUÍ ### montos con precisión completa: REAL guarda solo 7 cifras
+        # (208.560,13 quedaba 208.560,12 y montos de millones perdían los últimos pesos)
+        cur.execute("""SELECT table_name, column_name FROM information_schema.columns
+                       WHERE table_schema = current_schema() AND data_type = 'real'""")
+        reales = cur.fetchall()
+        if any(t == "reservas" and c == "ingreso_neto" for t, c in reales):
+            cur.execute("ALTER TABLE reservas DROP COLUMN IF EXISTS precio_total")
+        for t, c in reales:
+            if (t, c) != ("reservas", "precio_total"):   # esa se vuelve a crear abajo
+                cur.execute(f'ALTER TABLE "{t}" ALTER COLUMN "{c}" TYPE DOUBLE PRECISION')
+        if any(t == "reservas" and c == "ingreso_neto" for t, c in reales):
+            cur.execute("ALTER TABLE reservas ADD COLUMN precio_total DOUBLE PRECISION GENERATED ALWAYS AS (ingreso_neto) STORED")
         # ### CAMBIO AQUÍ ### ubicación completa y características de la propiedad
         for col_sql in ("pais TEXT DEFAULT 'Argentina'", "pais_codigo TEXT DEFAULT 'AR'", "provincia TEXT DEFAULT ''",
                         "piso_depto TEXT DEFAULT ''", "m2 INTEGER", "cochera INTEGER DEFAULT 0"):
