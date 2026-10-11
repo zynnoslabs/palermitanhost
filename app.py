@@ -814,13 +814,19 @@ def importar_asignar():
                       huesped_nombre = COALESCE(NULLIF(EXCLUDED.huesped_nombre,''), reservas.huesped_nombre),
                       estado = CASE WHEN EXCLUDED.estado = 'completada' AND reservas.estado = 'cancelada'
                                     THEN reservas.estado ELSE EXCLUDED.estado END,
-                      ingreso_bruto   = CASE WHEN %s AND reservas.ingreso_bruto <> 0 THEN reservas.ingreso_bruto
+                      -- ### CAMBIO AQUÍ ### archivo de Reservas: si la reserva ya tiene cobros reales (Ganancias) no se tocan;
+                      -- si no, se actualiza con lo último de Airbnb (cambio de fechas/precio, o 0 si se canceló)
+                      ingreso_bruto = CASE WHEN %s THEN (CASE WHEN EXISTS (SELECT 1 FROM movimientos_airbnb m WHERE m.codigo = reservas.codigo_confirmacion)
+                                             THEN reservas.ingreso_bruto ELSE EXCLUDED.ingreso_bruto END)
                                              WHEN EXCLUDED.ingreso_bruto <> 0 THEN EXCLUDED.ingreso_bruto ELSE reservas.ingreso_bruto END,
-                      comision_airbnb = CASE WHEN %s AND reservas.comision_airbnb <> 0 THEN reservas.comision_airbnb
+                      comision_airbnb = CASE WHEN %s THEN (CASE WHEN EXISTS (SELECT 1 FROM movimientos_airbnb m WHERE m.codigo = reservas.codigo_confirmacion)
+                                             THEN reservas.comision_airbnb ELSE EXCLUDED.comision_airbnb END)
                                              WHEN EXCLUDED.comision_airbnb <> 0 THEN EXCLUDED.comision_airbnb ELSE reservas.comision_airbnb END,
-                      limpieza        = CASE WHEN %s AND reservas.limpieza <> 0 THEN reservas.limpieza
+                      limpieza = CASE WHEN %s THEN (CASE WHEN EXISTS (SELECT 1 FROM movimientos_airbnb m WHERE m.codigo = reservas.codigo_confirmacion)
+                                             THEN reservas.limpieza ELSE EXCLUDED.limpieza END)
                                              WHEN EXCLUDED.limpieza <> 0 THEN EXCLUDED.limpieza ELSE reservas.limpieza END,
-                      ingreso_neto    = CASE WHEN %s AND reservas.ingreso_neto <> 0 THEN reservas.ingreso_neto
+                      ingreso_neto = CASE WHEN %s THEN (CASE WHEN EXISTS (SELECT 1 FROM movimientos_airbnb m WHERE m.codigo = reservas.codigo_confirmacion)
+                                             THEN reservas.ingreso_neto ELSE EXCLUDED.ingreso_neto END)
                                              WHEN EXCLUDED.ingreso_neto <> 0 THEN EXCLUDED.ingreso_neto ELSE reservas.ingreso_neto END,
                       anticipacion_dias = COALESCE(EXCLUDED.anticipacion_dias, reservas.anticipacion_dias),
                       propiedad_id = EXCLUDED.propiedad_id,
