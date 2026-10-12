@@ -1047,7 +1047,8 @@ def importar():
     if request.method == "GET" and request.args.get("resultado"):
         res = session.pop("import_resultado", None)
         if res:
-            return render_template("importar.html", propiedades=propiedades, paso=4, **res)
+            return render_template("importar.html", propiedades=propiedades, paso=4,
+                                   sin_costos=_propiedades_sin_costos(), **res)   # ### CAMBIO AQUÍ ###
         return redirect(url_for("importar"))
 
     if request.method == "POST":
@@ -1063,6 +1064,14 @@ def importar():
             return redirect(url_for("importar"))
 
         encabezados = [h.strip() for h in filas[0]]
+        # ### CAMBIO AQUÍ ### cada archivo se sube en su renglón: si no coincide, se avisa dónde va
+        esperado = request.form.get("tipo")
+        real = importador.tipo_de_archivo(encabezados)
+        if esperado in ("reservas", "ganancias") and esperado != real:
+            nombres = {"reservas": "Reservas", "ganancias": "Ganancias"}
+            flash(f"Ese archivo es de {nombres[real]}, no de {nombres[esperado]}. "
+                  f"Subilo en el renglón \"{nombres[real]}\" (está marcado abajo).", "error")
+            return redirect(url_for("importar", resaltar=f"subir-{real}"))
         mapa, no_detectadas = importador.detectar_columnas(encabezados)
         token = _guardar_pendiente({"texto": texto, "encabezados": encabezados, "mapa": mapa})
 
@@ -1072,7 +1081,36 @@ def importar():
                                    etiquetas=importador.ETIQUETAS, campos=list(importador.ETIQUETAS))
         return redirect(url_for("importar_asignar", t=token))
 
-    return render_template("importar.html", propiedades=propiedades, paso=1, frecuencia=_frecuencia_importacion())
+    return render_template("importar.html", propiedades=propiedades, paso=1, frecuencia=_frecuencia_importacion(),
+                           sin_costos=_propiedades_sin_costos(), calendarios=_estado_calendarios())
+
+
+def _propiedades_sin_costos():
+    """### CAMBIO AQUÍ ### propiedades activas sin costos cargados (Airbnb nunca los manda en los archivos)."""
+    out = []
+    for p in db.query("SELECT * FROM propiedades WHERE COALESCE(estado,'activa') <> 'inactiva' ORDER BY nombre"):
+        falta = []
+        if not any(p.get(k) for k in ("costo_expensas", "costo_servicios", "costo_limpieza", "costo_comision")):
+            falta.append("costos mensuales")
+        if not any(p.get(k) for k in ("recambio_limpieza", "recambio_lavanderia", "recambio_insumos")):
+            falta.append("costos de recambio")
+        if not p.get("barrio"):
+            falta.append("barrio")
+        if not p.get("precio_base"):
+            falta.append("precio base")
+        if falta:
+            out.append({"id": p["id"], "nombre": p["nombre"], "falta": falta,
+                        "campo": "costo_expensas" if "costos mensuales" in falta else
+                                 ("recambio_limpieza" if "costos de recambio" in falta else
+                                  ("barrio" if "barrio" in falta else "precio_base"))})
+    return out
+
+
+def _estado_calendarios():
+    """### CAMBIO AQUÍ ### cuántas propiedades activas tienen el calendario de Airbnb conectado."""
+    props = db.query("SELECT id, nombre, ical_url FROM propiedades WHERE COALESCE(estado,'activa') = 'activa' ORDER BY nombre")
+    con = [p for p in props if (p.get("ical_url") or "").strip()]
+    return {"total": len(props), "con": len(con), "sin": [p for p in props if not (p.get("ical_url") or "").strip()]}
 
 
 # ### CAMBIO AQUÍ ### cada cuánto conviene subir cada archivo y cuándo fue la última vez

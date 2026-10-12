@@ -805,3 +805,16 @@ tr.fila-limite td:last-child { color:#a86a00; }
 .est-desc-lbl { font-size:.85rem; margin-bottom:6px; }
 .est-form { margin:6px 0 12px; }
 .hoy-mas > summary { cursor:pointer; color:var(--gold-hover); font-size:.85rem; margin-bottom:8px; }
+
+/* ### CAMBIO AQUÍ ### Importar: un renglón por archivo */
+.subir-fila { margin-bottom:14px; }
+.subir-cab { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:4px 12px; }
+.subir-cab h3 { margin:0 0 4px; }
+.subir-estado { font-size:.82rem; font-weight:600; padding:2px 10px; border-radius:12px; }
+.subir-estado.ok { background:#eaf5ee; color:#2e7d4f; }
+.subir-estado.vencida { background:#fbeceb; color:#9b4a4a; }
+.subir-que { margin:4px 0; font-size:.92rem; }
+.subir-como { font-size:.85rem; margin:0 0 10px; }
+.subir-form { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+.subir-form input[type=file] { flex:1; min-width:0; max-width:100%; }
+.subir-costos ul { margin:6px 0 0 18px; }

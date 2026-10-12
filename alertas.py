@@ -95,7 +95,7 @@ def revisar(propiedad_id=None, hoy=None):
             ej = ", ".join((r.get("huesped_nombre") or "?") for r in sin_cobro[:3])
             add("media", "Estadías terminadas sin el cobro cargado",
                 f"{len(sin_cobro)} reserva(s) ya terminaron hace más de una semana y no figuran en el archivo de Ganancias "
-                f"({ej}{'…' if len(sin_cobro) > 3 else ''}). Subí el archivo de Ganancias actualizado.", "importar?resaltar=frecuencia")
+                f"({ej}{'…' if len(sin_cobro) > 3 else ''}). Subí el archivo de Ganancias actualizado.", "importar?resaltar=subir-ganancias")
 
     # 5) Archivos de Airbnb viejos
     if reservas:
@@ -105,11 +105,11 @@ def revisar(propiedad_id=None, hoy=None):
             if not ultima:
                 add("media", f"Nunca se subió el archivo de {nombre}",
                     f"Subilo en Importar CSV para que {'aparezcan las reservas futuras y cancelaciones' if tipo == 'reservas' else 'los montos sean exactos'}.",
-                    "importar?resaltar=frecuencia")
+                    f"importar?resaltar=subir-{tipo}")   # ### CAMBIO AQUÍ ### se ilumina su renglón
             elif (hoy - ultima).days > dias:
                 add("media", f"El archivo de {nombre} tiene {(hoy - ultima).days} días",
                     f"Lo ideal es subirlo {'una vez por semana' if tipo == 'reservas' else 'una vez por mes'}. "
-                    f"Hasta entonces pueden faltar reservas nuevas o cancelaciones.", "importar?resaltar=frecuencia")
+                    f"Hasta entonces pueden faltar reservas nuevas o cancelaciones.", f"importar?resaltar=subir-{tipo}")
 
     # 6) Propiedades con datos incompletos
     for p in props:

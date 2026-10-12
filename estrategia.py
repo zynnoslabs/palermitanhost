@@ -345,7 +345,7 @@ def acciones(a):
     if not h["validas"]:
         add("cfg:sin_reservas", "hoy", "Subí el archivo de Reservas de Airbnb",
             "Importar CSV → elegí el archivo de Reservas que exportás de Airbnb.",
-            ["Sin reservas cargadas no hay historial para calcular precios ni ritmo de ventas."], "importar")
+            ["Sin reservas cargadas no hay historial para calcular precios ni ritmo de ventas."], "importar?resaltar=subir-reservas")
     if not rc["cargado"]:
         add("cfg:recambio", "semana", "Completá cuánto te cuesta cada recambio",
             "Propiedades → Editar → sección 'Costos por cada salida de huésped'.",
@@ -372,9 +372,9 @@ def acciones(a):
         f_imp = metricas._parse((db.query_one("SELECT valor FROM config WHERE clave='ultima_importacion_reservas'") or {}).get("valor"))
         if h["validas"] and (not f_imp or (hoy - f_imp).days > 7):
             add(f"cfg:archivo:{hoy.isocalendar()[1]}", "hoy", "Subí el archivo de Reservas actualizado",
-                "Exportá las reservas de Airbnb y subilas en Importar CSV.",
+                "Exportá las reservas de Airbnb y subilas en Importar CSV, renglón Reservas.",
                 [("El último archivo de Reservas es del " + f_imp.strftime("%d/%m") if f_imp else "Nunca se subió el archivo de Reservas")
-                 + ". Sin calendario conectado, las sugerencias de hoy pueden estar viejas."], "importar")
+                 + ". Sin calendario conectado, las sugerencias de hoy pueden estar viejas."], "importar?resaltar=subir-reservas")
 
     # 2) noches libres de los próximos 7 días → precio de último momento
     huecos_hechos = set()
