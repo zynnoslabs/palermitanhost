@@ -1,0 +1,115 @@
+{# ### CAMBIO AQUÍ ### — el detalle de cómo se calculó todo (antes era la página Estrategia), plegado dentro de "Qué hacer hoy" #}
+{% from "_comentarios.html" import caja, origen %}
+{% macro detalle(a, coment, volver, dia) %}
+{% set mp = a.h.mon %}
+{% set prop = a.prop %}
+{% set pid = prop.id %}
+<details class="detalle-prop" id="detalle-{{ pid }}">
+  <summary>Ver cómo se calculó todo (datos, estadías, precios por noche, pruebas)</summary>
+
+  <div class="det-bloque" id="recambio-{{ pid }}">
+    <h4>Con qué datos se calcula</h4>
+    <ul class="est-lista">
+      <li><strong>Reservas:</strong>
+        {% if a.h.n %}{{ a.h.n }} con precio del último año ({{ a.h.desde|fecha }} al {{ a.h.hasta|fecha }}), de los archivos de Airbnb.
+        {% else %}ninguna con precio todavía. <a class="link" href="{{ url_for('importar') }}?resaltar=subir-reservas">Subí el archivo de Reservas</a>.{% endif %}</li>
+      <li><strong>Precio de partida:</strong>
+        {% if a.cx.base %}{{ a.cx.base|dinero(mp) }} — {{ a.cx.base_txt }}.{% else %}falta: cargá el precio base de la propiedad.{% endif %}</li>
+      <li><strong>Costo de cada recambio:</strong>
+        {% if a.em.recambio.cargado %}{{ a.em.recambio.total|dinero(mp) }}
+          ({% for k, v in a.em.recambio.partes.items() %}{{ k }} {{ v|dinero(mp) }}{{ ', ' if not loop.last }}{% endfor %}).
+        {% else %}<span class="txt-alerta">sin cargar</span>.{% endif %}
+        <a class="link" href="{{ url_for('editar_propiedad', pid=pid) }}?resaltar=recambio_limpieza">Editar</a></li>
+      <li><strong>Estadía mínima en Airbnb:</strong> {{ (prop.estadia_minima ~ ' noches') if prop.estadia_minima else 'sin cargar' }}.
+        <a class="link" href="{{ url_for('editar_propiedad', pid=pid) }}?resaltar=estadia_minima">Editar</a></li>
+      <li><strong>Noches ocupadas:</strong> según {{ a.fuente }}.
+        {% if not prop.ical_url %}<a class="link" href="{{ url_for('editar_propiedad', pid=pid) }}?resaltar=ical_url">Conectá el calendario de Airbnb</a> para que esté siempre al día.{% endif %}</li>
+    </ul>
+    {{ caja(pid ~ ':recambio', coment.get(pid ~ ':recambio'), volver) }}
+  </div>
+
+  <div class="det-bloque" id="estadia-{{ pid }}">
+    <h4>¿Estadías cortas o largas?{{ info('recambio') }}</h4>
+    {% if not a.em.filas %}
+      <p class="muted">Todavía no hay al menos 2 reservas de una misma duración para comparar.</p>
+    {% else %}
+    <div class="table-wrap"><table class="tabla tabla-est">
+      <thead><tr><th>Duración</th><th>Reservas</th><th>Precio por noche</th><th>+ Limpieza cobrada</th><th>− Recambio</th><th>Te queda por noche</th><th></th></tr></thead>
+      <tbody>
+      {% for f in a.em.filas %}
+      <tr>
+        <td><strong>{{ f.nombre }}</strong><br><small class="muted">{{ f.noches_prom|num(1) }} noches prom.</small></td>
+        <td>{{ f.reservas }}</td>
+        <td>{{ f.precio|dinero(mp) }}</td>
+        <td>{{ (f.limpieza / f.noches_prom)|dinero(mp) if f.limpieza else '—' }}</td>
+        <td>{{ f.recambio_noche|dinero(mp) if f.recambio_noche is not none else '—' }}</td>
+        <td><strong>{{ f.neto|dinero(mp) if f.neto is not none else '—' }}</strong></td>
+        <td>{{ origen(f.explica) }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% if not a.em.recambio.cargado %}
+      <p class="alert alert-warn" style="margin-top:8px">Para saber cuánto te queda en cada caso, <a class="link" href="{{ url_for('editar_propiedad', pid=pid) }}?resaltar=recambio_limpieza">cargá el costo de cada recambio</a>.</p>
+    {% elif a.em.conclusion %}
+      <div class="respuesta-texto" style="margin-top:10px">{{ a.em.conclusion }}</div>
+    {% else %}
+      <p class="muted" style="font-size:.85rem;margin-top:8px">Todavía no saco una conclusión: hacen falta al menos 3 reservas en cada una de las duraciones que se comparan.</p>
+    {% endif %}
+    {% if a.em.sin_datos %}<p class="muted" style="font-size:.8rem;margin-top:6px">Sin datos suficientes (menos de 2 reservas): {{ a.em.sin_datos|join(', ') }}.</p>{% endif %}
+    {% endif %}
+    {{ caja(pid ~ ':estadia', coment.get(pid ~ ':estadia'), volver) }}
+  </div>
+
+  <div class="det-bloque" id="precios-{{ pid }}">
+    <h4>Precio sugerido para cada noche libre (próximos 30 días)</h4>
+    {% if not a.precios %}
+      <p class="muted">No hay noches libres en los próximos 30 días. 🎉</p>
+    {% else %}
+    <ul class="est-precios">
+      {% for g in a.precios %}
+      <li><span class="est-fechas">{{ g.txt }}</span>
+        <span class="est-precio">{{ g.precio|dinero(mp) if g.precio else '—' }}</span>
+        {{ origen(g.motivos) }}</li>
+      {% endfor %}
+    </ul>
+    <p class="muted" style="font-size:.8rem;margin-top:6px">No distingue días de semana de fines de semana (los archivos de Airbnb no traen el precio de cada noche por separado).</p>
+    {% endif %}
+    {{ caja(pid ~ ':precios', coment.get(pid ~ ':precios'), volver) }}
+  </div>
+
+  <div class="det-bloque" id="pruebas-{{ pid }}">
+    <h4>Pruebas que hiciste en Airbnb</h4>
+    <p class="muted" style="font-size:.85rem">Cuando cambies un descuento, una promoción, el precio o la estadía mínima, anotalo acá. A los 14 días el sistema te muestra cuántas reservas entraron antes y después.</p>
+    <form method="post" action="{{ url_for('prueba_nueva') }}" class="form-grid est-form">
+      <input type="hidden" name="propiedad_id" value="{{ pid }}"><input type="hidden" name="volver" value="{{ volver }}">
+      <div class="form-group"><label>Fecha</label><input type="date" name="fecha" value="{{ dia.isoformat() }}" max="{{ dia.isoformat() }}" required></div>
+      <div class="form-group"><label>Qué cambiaste</label>
+        <select name="tipo">{% for k, v in TIPOS_PRUEBA.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+      <div class="form-group"><label>% (si aplica)</label><input type="text" inputmode="decimal" name="porcentaje" placeholder="Ej: 10"></div>
+      <div class="form-group"><label>Nota</label><input type="text" name="nota" maxlength="300" placeholder="Ej: Airbnb sugirió 15% para noviembre"></div>
+      <div class="form-group" style="align-self:end"><button type="submit" class="btn btn-primary">Anotar</button></div>
+    </form>
+    {% if a.pruebas %}
+    <div class="table-wrap"><table class="tabla">
+      <thead><tr><th>Fecha</th><th>Qué</th><th>14 días antes</th><th>14 días después</th><th></th></tr></thead>
+      <tbody>
+      {% for p in a.pruebas %}
+      <tr>
+        <td>{{ p.fecha|fecha }}</td>
+        <td>{{ TIPOS_PRUEBA.get(p.tipo, p.tipo) }}{% if p.porcentaje %} {{ p.porcentaje|num(0) }}%{% endif %}{% if p.nota %}<br><small class="muted">{{ p.nota }}</small>{% endif %}</td>
+        <td>{{ p.antes.reservas }} reservas · {{ p.antes.noches }} noches{% if p.antes.precio %}<br><small>{{ p.antes.precio|dinero(mp) }}/noche</small>{% endif %}</td>
+        <td>{{ p.despues.reservas }} reservas · {{ p.despues.noches }} noches{% if p.despues.precio %}<br><small>{{ p.despues.precio|dinero(mp) }}/noche</small>{% endif %}
+          {% if p.faltan %}<br><small class="muted">faltan {{ p.faltan }} días para completar</small>{% endif %}</td>
+        <td><form method="post" action="{{ url_for('prueba_eliminar', prid=p.id) }}" onsubmit="return confirm('¿Borrar esta prueba?')">
+          <input type="hidden" name="volver" value="{{ volver }}"><button type="submit" class="link-btn">Borrar</button></form></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    <p class="muted" style="font-size:.8rem;margin-top:6px">Cuenta las reservas que se <strong>hicieron</strong> (fecha "Reservada" del archivo de Reservas). Si cambiaste varias cosas juntas, no se puede saber cuál funcionó.</p>
+    {% endif %}
+    {{ caja(pid ~ ':pruebas', coment.get(pid ~ ':pruebas'), volver) }}
+  </div>
+</details>
+{% endmacro %}

@@ -94,6 +94,10 @@ window.addEventListener('pageshow', function () {
       });
     });
     if (!els.length) return;
+    // ### CAMBIO AQUÍ ### si está dentro de algo plegado ("Ver cómo se calculó"), se abre
+    els.forEach(function (e) {
+      for (var d = e; d; d = d.parentElement) { if (d.tagName === 'DETAILS') d.open = true; }
+    });
     els[0].scrollIntoView({behavior: 'smooth', block: 'center'});
     els.forEach(function (e) { e.classList.add('resaltado'); });
     setTimeout(function () { els.forEach(function (e) { e.classList.remove('resaltado'); }); }, 3500);

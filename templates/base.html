@@ -21,12 +21,9 @@
     </div>
 
     <nav class="sidebar-nav">
-      {# ### CAMBIO AQUÍ ### primero: qué hacer hoy, y la estrategia #}
+      {# ### CAMBIO AQUÍ ### primero: qué hacer hoy (incluye la estrategia) #}
       <a href="{{ url_for('hoy') }}" class="{% if request.endpoint=='hoy' %}active{% endif %}">
         <span class="nav-icon">✓</span> Qué hacer hoy
-      </a>
-      <a href="{{ url_for('estrategia_pagina') }}" class="{% if request.endpoint=='estrategia_pagina' %}active{% endif %}">
-        <span class="nav-icon">◎</span> Estrategia
       </a>
       <a href="{{ url_for('dashboard') }}"
          class="{% if request.endpoint=='dashboard' %}active{% endif %}">

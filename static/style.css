@@ -818,3 +818,20 @@ tr.fila-limite td:last-child { color:#a86a00; }
 .subir-form { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
 .subir-form input[type=file] { flex:1; min-width:0; max-width:100%; }
 .subir-costos ul { margin:6px 0 0 18px; }
+
+/* ### CAMBIO AQUÍ ### Qué hacer hoy unificado: tarjetas de situación y detalle plegado */
+.sit-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:12px; margin-bottom:16px; }
+.sit-card { border:1px solid var(--border); border-radius:10px; padding:12px 14px; background:#fffdf8; border-top:4px solid var(--gold); }
+.sit-descuentos { border-top-color:#2f6fb3; }
+.sit-disponibilidad { border-top-color:#2e8b57; }
+.sit-tit { font-size:.78rem; text-transform:uppercase; letter-spacing:.06em; font-weight:700; color:#6b6157; }
+.sit-ico { display:inline-block; width:18px; text-align:center; }
+.sit-num { font-size:1.7rem; font-weight:700; line-height:1.2; margin-top:4px; }
+.sit-sub { font-size:.8rem; color:#8a7f72; margin-bottom:8px; }
+.sit-txt { font-size:.9rem; line-height:1.4; margin-bottom:6px; }
+.sit-extra { font-size:.8rem; color:#6b6157; margin-bottom:3px; }
+.detalle-prop { margin-top:14px; }
+.detalle-prop > summary { cursor:pointer; font-weight:600; color:var(--gold-hover); padding:6px 0; }
+.det-bloque { border-top:1px solid var(--border); padding:12px 0 4px; }
+.det-bloque h4 { margin:0 0 8px; }
+details.card.detalle-prop { padding:14px 18px; margin-bottom:16px; }

@@ -403,7 +403,7 @@ def acciones(a):
                  f"{monedas.formatear(neto, mon)} por noche."] if neto is not None else [])
         add(f"libre:{ini}:{fin7}:{p}", "hoy", f"Libre {_rango_txt(ini, fin7)}: poné {monedas.formatear(p, mon)} por noche",
             f"Airbnb → Calendario → seleccioná {_rango_txt(ini, fin7)} → precio por noche {monedas.formatear(p, mon)}{extra}.",
-            mot + [f"Noches ocupadas según {a['fuente']}."], f"estrategia?propiedad_id={pid}&resaltar=precios")
+            mot + [f"Noches ocupadas según {a['fuente']}."], f"hoy?resaltar=precios-{pid}")
 
     # 3) huecos más cortos que la estadía mínima (más adelante)
     if minima:
@@ -478,7 +478,7 @@ def acciones(a):
         add(f"minima:{em['sugerido']}:{hoy.strftime('%Y-%m')}", "mes", f"Probá estadía mínima de {em['sugerido']} noches",
             f"Airbnb → Calendario → Configuración → Duración del viaje → estadía mínima {em['sugerido']} noches. "
             f"Volvé a mirar la ocupación en 3 o 4 semanas.",
-            [em["conclusion"]], f"estrategia?propiedad_id={pid}&resaltar=estadia")
+            [em["conclusion"]], f"hoy?resaltar=estadia-{pid}")
 
     hechas = {f["clave"] for f in db.query("SELECT clave FROM acciones_estado WHERE clave = ANY(%s)",
                                            ([x["clave"] for x in out],))} if out else set()
@@ -557,3 +557,96 @@ def resumen_ia(hoy=None, tc=None):
         bloques.append("### Comentarios y correcciones de Adriano (tenelos en cuenta: corrigen al sistema)\n" + "\n".join(
             f"- {c['creado_en'].strftime('%d/%m') if c['creado_en'] else ''} [{c['clave']}]: {c['texto'][:200]}" for c in com))
     return "\n\n".join(bloques)
+
+
+# ═══════════════ ### CAMBIO AQUÍ ### LAS 3 TARJETAS: TECHO, DESCUENTOS Y DISPONIBILIDAD ═══════════════
+def situacion(a):
+    prop, h, hoy = a["prop"], a["h"], a["hoy"]
+    mon = h["mon"]
+    fmt = lambda v: monedas.formatear(v, mon)
+    filas = (a["dp"] or {}).get("ritmo", {}) or {}
+    filas = filas.get("filas", []) if isinstance(filas, dict) else []
+    cerca = []
+    for (a0, b0, _), f in list(zip(dp.VENTANAS, filas))[:2]:
+        cerca.append((hoy + timedelta(days=a0), hoy + timedelta(days=b0), f))
+    ritmo_txt = [f"Ritmo de ventas {_rango_txt(d1, d2)}: vendiste {f['real']}% de las noches; lo normal a esta altura es "
+                 f"{f['esperado']}%." for d1, d2, f in cerca]
+    rapido = [(d1, d2, f) for d1, d2, f in cerca if f["tipo"] == "subir" and f["vendidas"] < f["noches"]]
+    lento = [(d1, d2, f) for d1, d2, f in cerca if f["tipo"] == "bajar"]
+
+    # ── Techo ──
+    t = (a["dp"] or {}).get("techo")
+    if t:
+        libre_rapido = None
+        for d1, d2, _ in rapido:
+            libre_rapido = next((d1 + timedelta(days=k) for k in range((d2 - d1).days + 1)
+                                 if d1 + timedelta(days=k) not in a["ocup"]), None)
+            if libre_rapido:
+                break
+        if libre_rapido:
+            # el mismo precio que dan las tareas y la lista de noches (una sola cuenta, nunca dos números distintos)
+            p, _ = precio_noche(libre_rapido, a["cx"])
+            sobre = f", {round((p / t['p90'] - 1) * 100)}% arriba de tu techo" if p and p > t["p90"] else ""
+            txt = (f"Se está vendiendo más rápido que lo normal: para las noches libres desde {_f(libre_rapido)} poné "
+                   f"{fmt(p)}{sobre}. Si también se vende antes de lo normal, seguí subiendo de a 5%.")
+        elif lento:
+            txt = f"No subas por encima de {fmt(t['p90'])}: las próximas semanas vienen más flojas que lo normal."
+        else:
+            txt = (f"Mantenete cerca de {fmt(t['p90'])}. Para encontrar tu máximo, subí 5% cada vez que una fecha "
+                   f"se venda antes de lo normal.")
+        techo = {"numero": fmt(t["p90"]), "sub": "precio techo por noche", "texto": txt, "origen": [
+            f"Sale de lo que te pagaron por noche (sin limpieza) en {t['cantidad']} reservas del último año.",
+            f"El 90% de esas reservas pagó {fmt(t['p90'])} o menos: es lo más alto que la gente ya pagó varias veces.",
+            f"Lo más alto que te pagaron alguna vez: {fmt(t['maximo'])}. Lo normal (la mitad pagó más, la mitad menos): "
+            f"{fmt(t['mediana'])}."] + ritmo_txt}
+    else:
+        techo = {"numero": "—", "sub": "precio techo por noche",
+                 "texto": "Faltan datos: se necesitan al menos 3 reservas con precio del último año (archivo de Reservas).",
+                 "origen": ["El techo sale de lo que ya te pagaron; sin reservas cargadas no hay de dónde sacarlo."]}
+
+    # ── Descuentos ──
+    vac, men = a["desc"]["vacia"], a["desc"]["mensual"]
+    extra = ([f"Máximo sin perder plata en una noche que quedaría vacía: {vac['pct']}%."] if vac else []) + \
+            ([f"Descuento mensual (28+ noches) que te deja lo mismo por noche que las estadías cortas: {men['pct']}%."] if men else [])
+    if not cerca:
+        numero, txt = "—", "Todavía no hay historial suficiente para saber si conviene (se necesitan 5 reservas con fecha de reserva)."
+    elif rapido and lento:
+        r1, r2, _ = rapido[0]
+        d1, d2, _ = lento[0]
+        pct = min(10, vac["pct"]) if vac else 10
+        numero = "0%"
+        txt = (f"{_rango_txt(r1, r2)}: sin descuento, se está vendiendo más rápido que lo normal. "
+               f"{_rango_txt(d1, d2)}: viene más flojo; si en una semana sigue igual, probá {pct}% para esas fechas.")
+    elif rapido:
+        numero, txt = "0%", "Hoy no des descuentos: se está vendiendo más rápido que lo normal."
+    elif lento:
+        d1, d2, _ = lento[0]
+        pct = min(10, vac["pct"]) if vac else 10
+        numero, txt = f"{pct}%", (f"Probá {pct}% de descuento (o una promoción de Airbnb) para {_rango_txt(d1, d2)}: "
+                                  f"viene más flojo que lo normal. Anotalo en 'Pruebas' para ver si funcionó.")
+    else:
+        numero, txt = "0%", "No hace falta descuento ahora: venís vendiendo al ritmo normal."
+    descuentos = {"numero": numero, "sub": "descuento recomendado", "texto": txt, "extra": extra,
+                  "origen": ritmo_txt + (vac["explica"] if vac else []) + (men["explica"] if men else [])}
+
+    # ── Disponibilidad ──
+    proximos = {hoy + timedelta(days=k) for k in range(30)}
+    libres = len(proximos - a["ocup"])
+    minima = prop.get("estadia_minima")
+    huecos = [x for x in a["libres"] if x[2] and minima and (x[1] - x[0]).days + 1 < minima and x[0] <= hoy + timedelta(days=60)]
+    em = a["em"]
+    if not em["recambio"]["cargado"]:
+        rec = "Cargá el costo de cada recambio para saber si te conviene un mínimo más corto o más largo."
+    elif em["sugerido"] and minima and em["sugerido"] != minima and em["conclusion"]:
+        rec = f"Tus números dicen que conviene probar estadía mínima de {em['sugerido']} noches (hoy tenés {minima})."
+    elif minima:
+        rec = f"Mantené tu estadía mínima de {minima} noches."
+    else:
+        rec = "Anotá en la propiedad la estadía mínima que tenés en Airbnb."
+    if huecos:
+        rec += f" Hay {len(huecos)} hueco{'s' if len(huecos) > 1 else ''} entre reservas que nadie puede reservar con tu mínimo: están en la lista de tareas."
+    disponibilidad = {"numero": f"{libres} de 30", "sub": "noches libres en los próximos 30 días", "texto": rec,
+                      "origen": [f"Noches ocupadas según {a['fuente']}.",
+                                 f"Ocupadas en los próximos 30 días: {30 - libres}. Libres: {libres}."]
+                                + ([em["conclusion"]] if em["conclusion"] else [])}
+    return {"techo": techo, "descuentos": descuentos, "disponibilidad": disponibilidad}

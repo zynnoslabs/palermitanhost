@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% from "_comentarios.html" import caja, origen %}
+{% from "_detalle.html" import detalle %}
 {% block title %}Qué hacer hoy – PalermitanHost{% endblock %}
-{# ### CAMBIO AQUÍ ### — página nueva: lo primero que se ve al entrar #}
+{# ### CAMBIO AQUÍ ### — una sola pantalla: situación (techo, descuentos, disponibilidad), tareas y el detalle plegado #}
 {% set volver = request.script_root ~ request.full_path %}
 {% set DIAS_L = ['lunes','martes','miércoles','jueves','viernes','sábado','domingo'] %}
 {% set MESES_L = ['','enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'] %}
@@ -21,15 +22,12 @@
 
 <p class="muted hoy-datos">
   Datos: {% if ultima_reservas %}archivo de Reservas del {{ ultima_reservas|fecha }}{% else %}todavía no se subió el archivo de Reservas{% endif %}.
-  {% if total %}{{ total }} cosa{{ 's' if total != 1 }} para hacer.{% endif %}
+  {% if total %}{{ total }} cosa{{ 's' if total != 1 }} para hacer.{% else %}✅ Nada para cambiar en Airbnb hoy.{% endif %}
 </p>
 
-{% if not total %}
-<div class="card hoy-ok"><strong>✅ Todo en orden.</strong> No hay nada para cambiar en Airbnb hoy.</div>
-{% endif %}
-
 {% for b in bloques %}
-<section class="card hoy-prop">
+{% set pid = b.prop.id %}
+<section class="card hoy-prop" id="prop-{{ pid }}">
   <div class="hoy-prop-cab">
     <h3>🏠 {{ b.prop.nombre }}</h3>
     <span class="muted hoy-cal">
@@ -38,24 +36,41 @@
       {% elif b.prop.ical_url %}Calendario de Airbnb: todavía sin leer
       {% else %}Sin calendario de Airbnb conectado{% endif %}
       {% if b.prop.ical_url %}
-      <form method="post" action="{{ url_for('ical_leer', pid=b.prop.id) }}" style="display:inline">
+      <form method="post" action="{{ url_for('ical_leer', pid=pid) }}" style="display:inline">
         <input type="hidden" name="volver" value="{{ volver }}">
         <button type="submit" class="link-btn">Leer ahora</button>
       </form>{% endif %}
-      · <a class="link" href="{{ url_for('estrategia_pagina', propiedad_id=b.prop.id) }}">Ver estrategia</a>
     </span>
   </div>
-  {% if not b.acciones %}
-  <p class="muted">Nada para hacer con esta propiedad. ✅</p>
+
+  {# ── Situación: las 3 tarjetas ── #}
+  {% if b.sit %}
+  <div class="sit-grid">
+    {% for k, titulo, icono in [('techo', 'Techo de precio', '⬆'), ('descuentos', 'Descuentos', '%'), ('disponibilidad', 'Disponibilidad', '▦')] %}
+    {% set s = b.sit[k] %}
+    <div class="sit-card sit-{{ k }}" id="{{ k }}-{{ pid }}">
+      <div class="sit-tit"><span class="sit-ico">{{ icono }}</span> {{ titulo }}</div>
+      <div class="sit-num">{{ s.numero }}</div>
+      <div class="sit-sub">{{ s.sub }}</div>
+      <div class="sit-txt">{{ s.texto }}</div>
+      {% for e in s.extra or [] %}<div class="sit-extra">{{ e }}</div>{% endfor %}
+      {{ origen(s.origen) }}
+      {{ caja(pid ~ ':' ~ k, coment.get(pid ~ ':' ~ k), volver) }}
+    </div>
+    {% endfor %}
+  </div>
   {% endif %}
+
+  {# ── Tareas ── #}
+  {% if b.acciones %}
   <div class="hoy-cols">
-    {% for c, titulo in [('hoy', 'Hoy'), ('semana', 'Esta semana'), ('mes', 'Este mes')] %}
+    {% for c, titulo in [('hoy', 'Hacer hoy'), ('semana', 'Esta semana'), ('mes', 'Más adelante')] %}
     {% if b.por[c] %}
     <div class="hoy-col hoy-col-{{ c }}">
       <h4>{{ titulo }}</h4>
       {% for x in b.por[c] %}
       {% if loop.index == 4 %}<details class="hoy-mas"><summary>Ver {{ b.por[c]|length - 3 }} más</summary>{% endif %}
-      <article class="accion" id="acc-{{ loop.index }}-{{ c }}">
+      <article class="accion">
         <div class="accion-tit">{{ x.titulo }}</div>
         <div class="accion-hacer"><span class="muted">Qué hacer:</span> {{ x.hacer }}</div>
         {{ origen(x.origen) }}
@@ -80,7 +95,38 @@
     {% endif %}
     {% endfor %}
   </div>
+  {% else %}
+  <p class="muted" style="margin-top:10px">Nada para hacer con esta propiedad. ✅</p>
+  {% endif %}
+
+  {% if b.a %}{{ detalle(b.a, coment, volver, dia) }}{% endif %}
 </section>
 {% endfor %}
+
+{# ── Feriados y eventos (para todas las propiedades) ── #}
+<details class="card detalle-prop" id="eventos">
+  <summary>Feriados y eventos de los próximos 90 días ({{ esp|length }})</summary>
+  {% if esp %}
+  <ul class="est-lista">
+    {% for x in esp %}
+    <li><strong>{{ x.desde|fecha }}{% if x.hasta != x.desde %} al {{ x.hasta|fecha }}{% endif %}</strong> · {{ x.nombre }}
+      <span class="muted">· {{ 'feriado' if x.tipo == 'feriado' else 'evento' }} · {{ ('+' if x.impacto > 0 else '') ~ x.impacto }}% en el precio</span>
+      {% if x.id %}<form method="post" action="{{ url_for('evento_eliminar', eid=x.id) }}" style="display:inline">
+        <input type="hidden" name="volver" value="{{ volver }}"><button type="submit" class="link-btn">Borrar</button></form>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">No hay feriados ni eventos en los próximos 90 días.</p>{% endif %}
+  <p class="muted" style="font-size:.8rem">Feriados: {{ 'fuente oficial (argentinadatos.com)' if origen_fer == 'oficial' else 'calculados por el sistema porque no hubo conexión con la fuente oficial (no incluye días puente)' }}.
+    En un feriado se sube la noche anterior y la del feriado (o todo el fin de semana largo).</p>
+  <form method="post" action="{{ url_for('evento_nuevo') }}" class="form-grid est-form">
+    <input type="hidden" name="volver" value="{{ volver }}">
+    <div class="form-group"><label>Desde</label><input type="date" name="desde" required></div>
+    <div class="form-group"><label>Hasta</label><input type="date" name="hasta"></div>
+    <div class="form-group"><label>Evento</label><input type="text" name="nombre" maxlength="80" placeholder="Ej: Lollapalooza" required></div>
+    <div class="form-group"><label>Cambio de precio (%)</label><input type="number" name="impacto" value="15" min="-50" max="100"></div>
+    <div class="form-group" style="align-self:end"><button type="submit" class="btn btn-primary">Agregar evento</button></div>
+  </form>
+  {{ caja('eventos', coment.get('eventos'), volver) }}
+</details>
 {% endif %}
 {% endblock %}

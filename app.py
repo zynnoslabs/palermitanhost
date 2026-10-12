@@ -570,41 +570,39 @@ def hoy():
     _refrescar_calendarios(props)
     props = db.query("SELECT * FROM propiedades WHERE COALESCE(estado,'activa') = 'activa' ORDER BY nombre")
     analisis, lista_esp, origen_fer = _analisis_estrategia(props, dia)
-    bloques, claves = [], []
+    bloques, claves = [], ["eventos"]
     for a in analisis:
+        pid = a["prop"]["id"]
         try:
             acc = estrategia.acciones(a)
         except Exception as e:
-            print(f"[estrategia] acciones {a['prop']['id']}: {e}")
+            print(f"[estrategia] acciones {pid}: {e}")
             acc = []
-        cal_cuando, cal_error = ical.ultimo(a["prop"]["id"]) if (a["prop"].get("ical_url") or "").strip() else (None, "")
-        bloques.append({"prop": a["prop"], "acciones": acc, "cal_cuando": cal_cuando, "cal_error": cal_error,
+        try:
+            sit = estrategia.situacion(a)   # ### CAMBIO AQUÍ ### techo, descuentos y disponibilidad
+        except Exception as e:
+            print(f"[estrategia] situación {pid}: {e}")
+            sit = None
+        cal_cuando, cal_error = ical.ultimo(pid) if (a["prop"].get("ical_url") or "").strip() else (None, "")
+        bloques.append({"prop": a["prop"], "a": a, "sit": sit, "acciones": acc, "cal_cuando": cal_cuando, "cal_error": cal_error,
                         "por": {c: [x for x in acc if x["cuando"] == c] for c in ("hoy", "semana", "mes")}})
-        claves += [x["clave"] for x in acc]
+        claves += [x["clave"] for x in acc] + [f"{pid}:{k}" for k in ("techo", "descuentos", "disponibilidad",
+                                                                       "recambio", "estadia", "precios", "pruebas")]
     f_imp = db.query_one("SELECT valor FROM config WHERE clave='ultima_importacion_reservas'")
     return render_template("hoy.html", bloques=bloques, dia=dia, coment=estrategia.comentarios(claves),
-                           ultima_reservas=(f_imp or {}).get("valor"), hay_props=bool(props),
-                           total=sum(len(b["acciones"]) for b in bloques))
+                           ultima_reservas=(f_imp or {}).get("valor"), hay_props=bool(props), esp=lista_esp,
+                           origen_fer=origen_fer, total=sum(len(b["acciones"]) for b in bloques))
 
 
 @app.route("/estrategia")
 @login_required
 def estrategia_pagina():
-    dia = date.today()
-    props = db.query("SELECT * FROM propiedades ORDER BY nombre")
-    pid = request.args.get("propiedad_id", type=int) or next((p["id"] for p in props if (p.get("estado") or "activa") == "activa"),
-                                                            props[0]["id"] if props else None)
-    prop = next((p for p in props if p["id"] == pid), None)
-    a, lista_esp, origen_fer = None, [], ""
-    if prop:
-        _refrescar_calendarios([prop])
-        prop = db.query_one("SELECT * FROM propiedades WHERE id=%s", (pid,))
-        res, lista_esp, origen_fer = _analisis_estrategia([prop], dia)
-        a = res[0] if res else None
-    claves = [f"{pid}:{k}" for k in ("estadia", "precios", "descuentos", "pruebas", "recambio")] + ["eventos"]
-    cal_cuando, cal_error = ical.ultimo(pid) if prop and (prop.get("ical_url") or "").strip() else (None, "")
-    return render_template("estrategia.html", propiedades=props, prop=prop, a=a, esp=lista_esp, origen_fer=origen_fer,
-                           coment=estrategia.comentarios(claves), dia=dia, cal_cuando=cal_cuando, cal_error=cal_error)
+    """### CAMBIO AQUÍ ### la página Estrategia se unificó con "Qué hacer hoy": los links viejos siguen andando."""
+    pid = request.args.get("propiedad_id", type=int)
+    viejo = request.args.get("resaltar") or ""
+    if pid and viejo in ("precios", "estadia", "pruebas", "descuentos", "recambio"):
+        return redirect(url_for("hoy", resaltar=f"{viejo}-{pid}"))
+    return redirect(url_for("hoy", resaltar=f"prop-{pid}") if pid else url_for("hoy"))
 
 
 @app.route("/acciones/estado", methods=["POST"])
@@ -655,14 +653,14 @@ def prueba_nueva():
         db.execute("INSERT INTO pruebas_descuento (propiedad_id, fecha, tipo, porcentaje, nota) VALUES (%s,%s,%s,%s,%s)",
                    (pid, f.isoformat(), tipo, pct, (request.form.get("nota") or "").strip()[:300]))
         flash("Prueba anotada. En 14 días vas a ver qué pasó con las reservas.", "success")
-    return _volver(url_for("estrategia_pagina", propiedad_id=pid))
+    return _volver(url_for("hoy", resaltar=f"pruebas-{pid}"))
 
 
 @app.route("/pruebas/<int:prid>/eliminar", methods=["POST"])
 @login_required
 def prueba_eliminar(prid):
     db.execute("DELETE FROM pruebas_descuento WHERE id=%s", (prid,))
-    return _volver(url_for("estrategia_pagina"))
+    return _volver(url_for("hoy"))
 
 
 @app.route("/eventos", methods=["POST"])
@@ -681,14 +679,14 @@ def evento_nuevo():
         db.execute("INSERT INTO eventos (desde, hasta, nombre, impacto) VALUES (%s,%s,%s,%s)",
                    (d1.isoformat(), d2.isoformat(), nombre, impacto))
         flash("Evento guardado: ya se usa en los precios sugeridos.", "success")
-    return _volver(url_for("estrategia_pagina"))
+    return _volver(url_for("hoy"))
 
 
 @app.route("/eventos/<int:eid>/eliminar", methods=["POST"])
 @login_required
 def evento_eliminar(eid):
     db.execute("DELETE FROM eventos WHERE id=%s", (eid,))
-    return _volver(url_for("estrategia_pagina"))
+    return _volver(url_for("hoy"))
 
 
 @app.route("/calendario-airbnb/<int:pid>/leer", methods=["POST"])
