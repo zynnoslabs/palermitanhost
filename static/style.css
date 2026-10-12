@@ -910,3 +910,24 @@ details.card.detalle-prop { padding:14px 18px; margin-bottom:16px; }
 .pp-calc label { margin:0; font-weight:600; }
 .pp-calc input[type=date] { width:auto; max-width:180px; flex:none; }
 .pp-nombre { min-width:140px; }
+
+/* ### CAMBIO AQUÍ ### Pruebas */
+.pr-aprendido { margin-bottom:14px; }
+.pr-aprendido-prop { padding:8px 0; border-top:1px solid #f0ebe1; }
+.pr-aprendido-prop:first-of-type { border-top:none; }
+.pr-linea { font-size:.9rem; margin-top:4px; line-height:1.4; }
+.pr-form { margin-bottom:14px; }
+.pr-form > summary { cursor:pointer; font-weight:600; color:var(--gold-hover); }
+.pr-form[open] > summary { margin-bottom:10px; }
+.pr-fila { display:flex; gap:10px; align-items:flex-start; padding:10px 0; border-top:1px solid #f0ebe1; }
+.pr-fila:first-of-type { border-top:none; }
+.pr-color { font-size:1.2rem; line-height:1.2; }
+.pr-cuerpo { flex:1; min-width:0; }
+.pr-texto { font-weight:600; font-size:.92rem; }
+.pr-meta { font-size:.8rem; color:#8a7f72; margin-top:2px; }
+.pr-borrar { margin:0; }
+.pr-borrar button { border:none; background:none; color:#8a7f72; cursor:pointer; }
+.ical-fila { margin-top:8px; }
+.ical-nombre { font-weight:600; min-width:120px; font-size:.9rem; }
+.ical-fila input[type=url] { flex:1; min-width:200px; }
+.ical-estado { font-size:.8rem; } .ical-estado .ok { color:#2e7d4f; }

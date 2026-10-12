@@ -37,18 +37,22 @@
 {% endfor %}
 </div>
 
-<div class="form-card subir-fila">
+<div class="form-card subir-fila" id="subir-calendario">{# ### CAMBIO AQUÍ ### se pega acá el link de cada propiedad #}
   <div class="subir-cab">
     <h3>3. Calendario de Airbnb <span class="muted" style="font-weight:400;font-size:.85rem">(automático)</span></h3>
     <span class="subir-estado {{ 'ok' if calendarios.total and not calendarios.sin else 'vencida' }}">
-      {{ calendarios.con }} de {{ calendarios.total }} propiedades conectadas</span>
+      {{ calendarios.con }} de {{ calendarios.total }} conectadas</span>
   </div>
-  <p class="subir-que">Noches ocupadas al día. Se pega una vez el link de cada anuncio.</p>
-  {% if calendarios.sin %}
-  <p class="muted subir-como">Falta en:
-    {% for p in calendarios.sin %}<a class="link" href="{{ url_for('editar_propiedad', pid=p.id) }}?resaltar=ical_url">{{ p.nombre }}</a>{{ ', ' if not loop.last }}{% endfor %}.
-</p>
-  {% endif %}
+  <p class="subir-que">Pegá una vez el link de cada anuncio y queda al día solo. <span class="muted subir-como">· Airbnb → Calendario → Disponibilidad → Conectar calendarios → Exportar calendario</span></p>
+  {% for p in calendarios.props %}
+  <form method="post" action="{{ url_for('ical_link', pid=p.id) }}" class="subir-form ical-fila" id="ical-{{ p.id }}">
+    <span class="ical-nombre">{{ p.nombre }}</span>
+    <input type="url" name="ical_url" value="{{ p.ical_url or '' }}" placeholder="https://www.airbnb.com.ar/calendar/ical/….ics" autocomplete="off" aria-label="Link del calendario de {{ p.nombre }}">
+    <button type="submit" class="btn btn-sm">{{ 'Guardar' if not p.ical_url else 'Actualizar' }}</button>
+    <span class="ical-estado">{% if p.error %}<span class="txt-alerta">✕ no se pudo leer</span>
+      {% elif p.cuando %}<span class="ok">✓ leído {{ p.cuando|hace }}</span>{% elif p.ical_url %}<span class="muted">sin leer</span>{% endif %}</span>
+  </form>
+  {% else %}<p class="muted">Primero cargá o importá una propiedad.</p>{% endfor %}
 </div>
 
 {% if sin_costos %}

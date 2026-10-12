@@ -33,6 +33,7 @@ import disposicion_pago   # ### CAMBIO AQUÍ ### cuánto más podrías cobrar
 import estrategia   # ### CAMBIO AQUÍ ### qué hacer hoy
 import feriados   # ### CAMBIO AQUÍ ###
 import ical   # ### CAMBIO AQUÍ ### calendario de Airbnb
+import pruebas   # ### CAMBIO AQUÍ ### pruebas y aprendizaje
 import novedades   # ### CAMBIO AQUÍ ### historial, calendario y avisos de hoy/mañana
 import alertas   # ### CAMBIO AQUÍ ### situaciones raras o pendientes
 
@@ -515,10 +516,9 @@ def _volver_al_dashboard():
 # ════════════════════════════════════════════════════════════════════════════
 # ### CAMBIO AQUÍ ### QUÉ HACER HOY y ESTRATEGIA
 # ════════════════════════════════════════════════════════════════════════════
-TIPOS_PRUEBA = {"promo": "Promoción personalizada", "semanal": "Descuento semanal", "mensual": "Descuento mensual",
-                "anticipada": "Descuento por reserva anticipada", "ultimo_momento": "Descuento de último momento",
-                "precio": "Cambio de precio", "minima": "Cambio de estadía mínima", "otro": "Otro"}
+TIPOS_PRUEBA = {k: v[0] for k, v in pruebas.TIPOS.items()}   # ### CAMBIO AQUÍ ### tipos nuevos (pruebas.py)
 app.jinja_env.globals["TIPOS_PRUEBA"] = TIPOS_PRUEBA
+app.jinja_env.globals["UNIDAD_PRUEBA"] = {k: v[1] for k, v in pruebas.TIPOS.items()}
 
 
 def _volver(defecto):
@@ -553,10 +553,15 @@ def _analisis_estrategia(props, hoy):
     except Exception as e:
         print(f"[feriados] {e}")
         lista_esp, origen_fer = [], "sin datos"
+    try:
+        evaluadas = pruebas.evaluar_todas(hoy, tc)   # ### CAMBIO AQUÍ ### una sola vez para todas las propiedades
+    except Exception as e:
+        print(f"[pruebas] {e}")
+        evaluadas = []
     out = []
     for p in props:
         try:
-            out.append(estrategia.analizar(p, reservas, hoy, tc, lista_esp))
+            out.append(estrategia.analizar(p, reservas, hoy, tc, lista_esp, evaluadas))
         except Exception as e:
             print(f"[estrategia] {p.get('id')}: {e}")
     return out, lista_esp, origen_fer
@@ -587,7 +592,7 @@ def hoy():
         bloques.append({"prop": a["prop"], "a": a, "sit": sit, "acciones": acc, "cal_cuando": cal_cuando, "cal_error": cal_error,
                         "por": {c: [x for x in acc if x["cuando"] == c] for c in ("hoy", "semana", "mes")}})
         claves += [x["clave"] for x in acc] + [f"{pid}:{k}" for k in ("techo", "descuentos", "disponibilidad",
-                                                                       "recambio", "estadia", "precios", "pruebas")]
+                                                                       "recambio", "estadia", "precios")]
     f_imp = db.query_one("SELECT valor FROM config WHERE clave='ultima_importacion_reservas'")
     return render_template("hoy.html", bloques=bloques, dia=dia, coment=estrategia.comentarios(claves),
                            ultima_reservas=(f_imp or {}).get("valor"), hay_props=bool(props), esp=lista_esp,
@@ -600,7 +605,9 @@ def estrategia_pagina():
     """### CAMBIO AQUÍ ### la página Estrategia se unificó con "Qué hacer hoy": los links viejos siguen andando."""
     pid = request.args.get("propiedad_id", type=int)
     viejo = request.args.get("resaltar") or ""
-    if pid and viejo in ("precios", "estadia", "pruebas", "descuentos", "recambio"):
+    if viejo == "pruebas":
+        return redirect(url_for("pruebas_pagina"))
+    if pid and viejo in ("precios", "estadia", "descuentos", "recambio"):
         return redirect(url_for("hoy", resaltar=f"{viejo}-{pid}"))
     return redirect(url_for("hoy", resaltar=f"prop-{pid}") if pid else url_for("hoy"))
 
@@ -614,7 +621,19 @@ def accion_estado():
         db.execute("""INSERT INTO acciones_estado (clave, estado, fecha) VALUES (%s, %s, %s)
                       ON CONFLICT (clave) DO UPDATE SET estado = EXCLUDED.estado, fecha = EXCLUDED.fecha""",
                    (clave, estado, date.today().isoformat()))
-        flash("Marcado como hecho." if estado == "hecho" else "Sugerencia descartada.", "success")
+        msg = "Marcado como hecho." if estado == "hecho" else "Sugerencia descartada."
+        # ### CAMBIO AQUÍ ### lo hecho se anota solo como prueba (para ver si funcionó y aprender)
+        if estado == "hecho" and request.form.get("p_tipo"):
+            try:
+                ok, m = _guardar_prueba(request.form.get("p_pid", type=int), request.form.get("p_tipo"), date.today(),
+                                        request.form.get("p_valor", type=float), met.fecha_valida(request.form.get("p_desde")),
+                                        met.fecha_valida(request.form.get("p_hasta")), "", "hecho", clave,
+                                        request.form.get("p_sugerido", type=float))
+                if ok:
+                    msg += " Quedó anotado en Pruebas."
+            except Exception as e:
+                print(f"[pruebas] desde hecho: {e}")
+        flash(msg, "success")
     return _volver(url_for("hoy"))
 
 
@@ -638,29 +657,102 @@ def comentario_eliminar(cid):
     return _volver(url_for("hoy"))
 
 
-@app.route("/pruebas", methods=["POST"])
+# ### CAMBIO AQUÍ ### PRUEBAS: sección propia (anotar, ver si funcionó y lo que aprendió el sistema)
+@app.route("/pruebas")
+@login_required
+def pruebas_pagina():
+    tc = monedas.tc_valor()
+    props = db.query("SELECT * FROM propiedades ORDER BY (COALESCE(estado,'activa') = 'inactiva'), nombre")
+    evaluadas = pruebas.evaluar_todas(date.today(), tc)
+    aprendido = []
+    for p in props:
+        a = pruebas.aprendizaje(p["id"], evaluadas)
+        lec = pruebas.lecciones(p["id"], evaluadas)
+        if a or lec:
+            aprendido.append({"prop": p, "a": a, "lecciones": lec})
+    return render_template("pruebas.html", propiedades=props, evaluadas=evaluadas, aprendido=aprendido,
+                           esperando=[x for x in evaluadas if x["color"] == "⚪"],
+                           resultados=[x for x in evaluadas if x["color"] != "⚪"],
+                           hoy_iso=date.today().isoformat(), pid_sel=request.args.get("propiedad_id", type=int))
+
+
+def _guardar_prueba(pid, tipo, fecha, valor, desde, hasta, nota="", origen="manual", clave=None, sugerido=None):
+    """Valida y guarda una prueba. Devuelve (ok, mensaje)."""
+    prop = db.query_one("SELECT * FROM propiedades WHERE id=%s", (pid,)) if pid else None
+    if not prop:
+        return False, "Elegí la propiedad."
+    if tipo not in pruebas.TIPOS:
+        return False, "Elegí qué cambiaste."
+    if not fecha or fecha > date.today():
+        return False, "La fecha del cambio no puede ser futura."
+    unidad = pruebas.TIPOS[tipo][1]
+    if unidad == "$" and not (valor and valor > 0):
+        return False, "Poné el precio por noche que pusiste en Airbnb."
+    if unidad == "%" and valor is not None and not (0 <= valor <= 90):
+        return False, "El porcentaje tiene que estar entre 0 y 90."
+    if unidad == "noches" and not (valor and 1 <= valor <= 365 and valor == int(valor)):
+        return False, "La estadía mínima tiene que ser un número de noches entre 1 y 365."
+    if tipo == "precio" and not desde:
+        return False, "Para un precio, poné para qué fechas (desde y hasta)."
+    if desde and hasta and hasta < desde:
+        return False, "La fecha 'hasta' no puede ser anterior a 'desde'."
+    if desde and (hasta or desde) - desde > timedelta(days=120):
+        return False, "Una prueba puede abarcar como mucho 120 noches."
+    if clave and db.query_one("SELECT id FROM pruebas_descuento WHERE clave=%s", (clave,)):
+        return True, "ya estaba anotada"
+    if tipo == "precio" and sugerido is None:
+        try:   # cuánto sugería el sistema ese día para esa fecha (sin el ajuste aprendido)
+            a = estrategia.analizar(prop, db.query("SELECT * FROM reservas WHERE propiedad_id=%s", (pid,)), date.today(),
+                                    monedas.tc_valor(), None, [])
+            sugerido, _ = estrategia.precio_noche(desde, a["cx"], aprender=False)
+        except Exception as e:
+            print(f"[pruebas] sugerido: {e}")
+            sugerido = None
+    otra = pruebas.superpuesta(pid, tipo, fecha, desde, hasta or desde)
+    db.execute("""INSERT INTO pruebas_descuento (propiedad_id, fecha, tipo, porcentaje, nota, desde, hasta, valor, sugerido, origen, clave)
+                  VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+               (pid, fecha.isoformat(), tipo, valor if unidad == "%" else 0, (nota or "")[:300],
+                desde.isoformat() if desde else None, (hasta or desde).isoformat() if desde else None,
+                valor, sugerido, origen, clave))
+    if otra:
+        return True, (f"Anotada. Ojo: ya hay otra prueba en {prop['nombre']} cerca de esas fechas "
+                      f"({pruebas.nombre_tipo(otra['tipo'])}); los resultados se pueden mezclar.")
+    return True, "Prueba anotada. Cuando pasen las fechas (o se reserven) vas a ver si funcionó."
+
+
+@app.route("/pruebas/nueva", methods=["POST"])
 @login_required
 def prueba_nueva():
-    pid = request.form.get("propiedad_id", type=int)
-    f = met.fecha_valida(request.form.get("fecha"))
-    tipo = request.form.get("tipo")
-    txt = (request.form.get("porcentaje") or "").strip()
-    pct = importador.parsear_monto(txt) if txt else 0
-    prop = db.query_one("SELECT id FROM propiedades WHERE id=%s", (pid,)) if pid else None
-    if not prop or not f or tipo not in TIPOS_PRUEBA or not (0 <= pct <= 90) or f > date.today():
-        flash("No se guardó: revisá la fecha (no puede ser futura), el tipo y el porcentaje (de 0 a 90).", "error")
-    else:
-        db.execute("INSERT INTO pruebas_descuento (propiedad_id, fecha, tipo, porcentaje, nota) VALUES (%s,%s,%s,%s,%s)",
-                   (pid, f.isoformat(), tipo, pct, (request.form.get("nota") or "").strip()[:300]))
-        flash("Prueba anotada. En 14 días vas a ver qué pasó con las reservas.", "success")
-    return _volver(url_for("hoy", resaltar=f"pruebas-{pid}"))
+    txt = (request.form.get("valor") or "").strip()
+    valor = importador.parsear_monto(txt) if txt else None
+    ok, msg = _guardar_prueba(request.form.get("propiedad_id", type=int), request.form.get("tipo"),
+                              met.fecha_valida(request.form.get("fecha")), valor,
+                              met.fecha_valida(request.form.get("desde")), met.fecha_valida(request.form.get("hasta")),
+                              (request.form.get("nota") or "").strip())
+    flash(msg, ("warn" if "Ojo" in msg else "success") if ok else "error")
+    return redirect(url_for("pruebas_pagina"))
 
 
 @app.route("/pruebas/<int:prid>/eliminar", methods=["POST"])
 @login_required
 def prueba_eliminar(prid):
     db.execute("DELETE FROM pruebas_descuento WHERE id=%s", (prid,))
-    return _volver(url_for("hoy"))
+    flash("Prueba borrada.", "success")
+    return redirect(url_for("pruebas_pagina"))
+
+
+@app.route("/pruebas/aprendizaje/<int:pid>", methods=["POST"])
+@login_required
+def prueba_aprendizaje(pid):
+    """Prender o apagar el ajuste aprendido de una propiedad."""
+    if request.form.get("activar") == "1":
+        db.execute("DELETE FROM config WHERE clave=%s", (f"aprendizaje_off_{pid}",))
+        flash("Listo: el ajuste aprendido vuelve a usarse en los precios sugeridos.", "success")
+    else:
+        db.execute("""INSERT INTO config (clave, valor) VALUES (%s, '1')
+                      ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor""", (f"aprendizaje_off_{pid}",))
+        flash("Listo: los precios sugeridos ya no usan el ajuste aprendido.", "success")
+    return redirect(url_for("pruebas_pagina"))
 
 
 @app.route("/eventos", methods=["POST"])
@@ -687,6 +779,35 @@ def evento_nuevo():
 def evento_eliminar(eid):
     db.execute("DELETE FROM eventos WHERE id=%s", (eid,))
     return _volver(url_for("hoy"))
+
+
+@app.route("/calendario-airbnb/<int:pid>/link", methods=["POST"])
+@login_required
+def ical_link(pid):
+    """### CAMBIO AQUÍ ### pegar el link del calendario desde Importar (y leerlo en el momento)."""
+    prop = db.query_one("SELECT * FROM propiedades WHERE id=%s", (pid,))
+    url = (request.form.get("ical_url") or "").strip()[:500]
+    if not prop:
+        return redirect(url_for("importar"))
+    ok, msg = ical.url_valida(url)
+    if not ok:
+        flash(msg, "error")
+        return redirect(url_for("importar", resaltar=f"ical-{pid}"))
+    db.execute("UPDATE propiedades SET ical_url=%s WHERE id=%s", (url, pid))
+    if not url:
+        db.execute("DELETE FROM ical_bloqueos WHERE propiedad_id=%s", (pid,))
+        db.execute("DELETE FROM config WHERE clave=%s", (f"ical_leido_{pid}",))
+        flash(f"Se desconectó el calendario de {prop['nombre']}.", "success")
+        return redirect(url_for("importar", resaltar="subir-calendario"))
+    try:
+        leido, info_ = ical.actualizar({**prop, "ical_url": url}, forzar=True)
+    except Exception as e:
+        leido, info_ = False, str(e)[:150]
+    if leido:
+        flash(f"Calendario de {prop['nombre']} conectado y leído ({info_}).", "success")
+    else:
+        flash(f"Se guardó el link de {prop['nombre']}, pero no se pudo leer: {info_}. Revisá que sea el de 'Exportar calendario'.", "error")
+    return redirect(url_for("importar", resaltar=f"ical-{pid}"))
 
 
 @app.route("/calendario-airbnb/<int:pid>/leer", methods=["POST"])
@@ -1105,10 +1226,12 @@ def _propiedades_sin_costos():
 
 
 def _estado_calendarios():
-    """### CAMBIO AQUÍ ### cuántas propiedades activas tienen el calendario de Airbnb conectado."""
+    """### CAMBIO AQUÍ ### calendario de Airbnb de cada propiedad activa: link, última lectura y error."""
     props = db.query("SELECT id, nombre, ical_url FROM propiedades WHERE COALESCE(estado,'activa') = 'activa' ORDER BY nombre")
+    for p in props:
+        p["cuando"], p["error"] = ical.ultimo(p["id"]) if (p.get("ical_url") or "").strip() else (None, "")
     con = [p for p in props if (p.get("ical_url") or "").strip()]
-    return {"total": len(props), "con": len(con), "sin": [p for p in props if not (p.get("ical_url") or "").strip()]}
+    return {"total": len(props), "con": len(con), "props": props, "sin": [p for p in props if p not in con]}
 
 
 # ### CAMBIO AQUÍ ### cada cuánto conviene subir cada archivo y cuándo fue la última vez

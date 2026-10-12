@@ -6,6 +6,7 @@
 from markupsafe import Markup, escape
 
 AYUDA = {
+    "pruebas": "Cada cambio que hacés en Airbnb (precio, descuento, promoción, estadía mínima) es una prueba. El sistema mira qué pasó con las reservas y te dice si funcionó. Con las pruebas de precio ajusta solo sus sugerencias (y lo podés apagar).",
     # ── ### CAMBIO AQUÍ ### Estrategia / Qué hacer hoy ──
     "recambio": "Cada vez que se va un huésped pagás limpieza, lavandería y reponés cosas. Con estadías cortas eso pasa muchas veces al mes; con largas, pocas. Con estos números el sistema compara qué te deja más plata.",
     "recambio_insumos": "Un promedio: lo que gastás por mes en toallas, sábanas, jabón, papel, etc., dividido por la cantidad de huéspedes que tuviste ese mes.",

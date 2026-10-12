@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% from "_comentarios.html" import origen %}
+{% block title %}Pruebas – PalermitanHost{% endblock %}
+{# ### CAMBIO AQUÍ ### — página nueva: anotar cambios en Airbnb, ver si funcionaron y lo que aprendió el sistema #}
+{% block content %}
+<div class="page-header"><h2>Pruebas{{ info('pruebas') }}</h2></div>
+<p class="muted" style="margin:-6px 0 14px">Anotá lo que cambiás en Airbnb y el sistema te dice si funcionó. Lo que marcás ✓ Hecho en "Qué hacer hoy" se anota solo.</p>
+
+{# ── Lo aprendido ── #}
+<div class="card pr-aprendido">
+  <div class="card-title">Lo que aprendió el sistema</div>
+  {% if not aprendido %}
+  <p class="muted">Todavía nada. Cuando las pruebas tengan resultado, acá vas a ver qué funcionó y qué no.</p>
+  {% endif %}
+  {% for x in aprendido %}
+  <div class="pr-aprendido-prop">
+    <strong>{{ x.prop.nombre }}</strong>
+    {% if x.a %}
+    <div class="pr-linea">{{ '💡' if x.a.activo or x.a.factor == 1 else '⏸' }} {{ x.a.texto }}
+      {% if x.a.factor != 1 %}
+      <form method="post" action="{{ url_for('prueba_aprendizaje', pid=x.prop.id) }}" style="display:inline">
+        {% if x.a.activo %}<button type="submit" class="link-btn">No usar</button>
+        {% else %}<input type="hidden" name="activar" value="1"><span class="muted">(apagado)</span> <button type="submit" class="link-btn">Volver a usar</button>{% endif %}
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% for l in x.lecciones %}<div class="pr-linea">{{ l }}</div>{% endfor %}
+  </div>
+  {% endfor %}
+</div>
+
+{# ── Anotar ── #}
+<details class="card pr-form" {% if not evaluadas %}open{% endif %}>
+  <summary>+ Anotar una prueba</summary>
+  {% if propiedades %}
+  <form method="post" action="{{ url_for('prueba_nueva') }}" class="form-grid">
+    <div class="form-group"><label>Propiedad</label>
+      <select name="propiedad_id" required>{% for p in propiedades %}<option value="{{ p.id }}" {% if pid_sel == p.id %}selected{% endif %}>{{ p.nombre }}</option>{% endfor %}</select></div>
+    <div class="form-group"><label>Qué hiciste en Airbnb</label>
+      <select name="tipo" id="pr-tipo">{% for k, v in TIPOS_PRUEBA.items() %}<option value="{{ k }}" data-unidad="{{ UNIDAD_PRUEBA[k] }}">{{ v }}</option>{% endfor %}</select></div>
+    <div class="form-group" id="pr-valor-g"><label id="pr-valor-l">Precio por noche</label>
+      <input type="text" inputmode="decimal" name="valor" id="pr-valor" placeholder="Ej: 62.000"></div>
+    <div class="form-group"><label>Para qué fechas: desde <span class="muted" id="pr-opc">(opcional)</span></label><input type="date" name="desde"></div>
+    <div class="form-group"><label>hasta</label><input type="date" name="hasta"></div>
+    <div class="form-group"><label>Cuándo lo cambiaste</label><input type="date" name="fecha" value="{{ hoy_iso }}" max="{{ hoy_iso }}" required></div>
+    <div class="form-group"><label>Nota <span class="muted">(opcional)</span></label><input type="text" name="nota" maxlength="300" placeholder="Ej: Airbnb sugería 15%"></div>
+    <div class="form-group" style="align-self:end"><button type="submit" class="btn btn-primary">Anotar</button></div>
+  </form>
+  <p class="muted" style="font-size:.8rem">Una prueba por vez en cada propiedad y fechas: si cambiás dos cosas juntas, no se sabe cuál funcionó.</p>
+  {% else %}<p class="muted">Primero cargá una propiedad.</p>{% endif %}
+</details>
+
+{# ── Resultados ── #}
+{% macro fila(x) %}
+<div class="pr-fila">
+  <span class="pr-color">{{ x.color }}</span>
+  <div class="pr-cuerpo">
+    <div class="pr-texto">{{ x.texto }}</div>
+    <div class="pr-meta">{{ x.prop }} · {{ x.que }}{% if x.valor_txt %} {{ x.valor_txt }}{% endif %}{% if x.fechas %} · {{ x.fechas }}{% endif %}
+      · el {{ x.fecha|fecha }}{% if x.origen == 'hecho' %} · desde Qué hacer hoy{% endif %}{% if x.nota %} · {{ x.nota }}{% endif %}</div>
+    {% if x.detalle %}{{ origen(x.detalle) }}{% endif %}
+  </div>
+  <form method="post" action="{{ url_for('prueba_eliminar', prid=x.id) }}" class="pr-borrar" onsubmit="return confirm('¿Borrar esta prueba?')">
+    <button type="submit" title="Borrar prueba" aria-label="Borrar prueba">✕</button>
+  </form>
+</div>
+{% endmacro %}
+
+{% if resultados %}
+<div class="card"><div class="card-title">Resultados ({{ resultados|length }})</div>
+  {% for x in resultados %}{{ fila(x) }}{% endfor %}
+</div>
+{% endif %}
+{% if esperando %}
+<div class="card"><div class="card-title">Esperando resultado ({{ esperando|length }})</div>
+  {% for x in esperando %}{{ fila(x) }}{% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ### CAMBIO AQUÍ ### el campo "valor" cambia según lo que se eligió
+(function () {
+  var sel = document.getElementById('pr-tipo'); if (!sel) return;
+  var lbl = document.getElementById('pr-valor-l'), inp = document.getElementById('pr-valor'),
+      g = document.getElementById('pr-valor-g'), opc = document.getElementById('pr-opc');
+  function act() {
+    var u = sel.options[sel.selectedIndex].getAttribute('data-unidad');
+    g.style.display = u ? '' : 'none';
+    lbl.textContent = u === '$' ? 'Precio por noche' : (u === '%' ? 'Porcentaje' : 'Noches mínimas');
+    inp.placeholder = u === '$' ? 'Ej: 62.000' : (u === '%' ? 'Ej: 10' : 'Ej: 3');
+    inp.required = (u === '$' || u === 'noches');
+    opc.textContent = sel.value === 'precio' ? '(obligatorio)' : '(opcional)';
+  }
+  sel.addEventListener('change', act); act();
+})();
+</script>
+{% endblock %}

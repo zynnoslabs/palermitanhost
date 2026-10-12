@@ -5,7 +5,7 @@
 {% set prop = a.prop %}
 {% set pid = prop.id %}
 <details class="detalle-prop" id="detalle-{{ pid }}">
-  <summary>Ver cómo se calculó (estadías, precio por noche, pruebas)</summary>
+  <summary>Ver cómo se calculó (estadías y precio por noche)</summary>
 
   <div class="det-bloque" id="recambio-{{ pid }}">
     <h4>Con qué datos se calcula</h4>
@@ -77,37 +77,5 @@
     {{ caja(pid ~ ':precios', coment.get(pid ~ ':precios'), volver) }}
   </div>
 
-  <div class="det-bloque" id="pruebas-{{ pid }}">
-    <h4>Pruebas que hiciste en Airbnb</h4>
-    <p class="muted" style="font-size:.85rem">Anotá cada cambio que hagas en Airbnb: a los 14 días ves si entraron más reservas.</p>
-    <form method="post" action="{{ url_for('prueba_nueva') }}" class="form-grid est-form">
-      <input type="hidden" name="propiedad_id" value="{{ pid }}"><input type="hidden" name="volver" value="{{ volver }}">
-      <div class="form-group"><label>Fecha</label><input type="date" name="fecha" value="{{ dia.isoformat() }}" max="{{ dia.isoformat() }}" required></div>
-      <div class="form-group"><label>Qué cambiaste</label>
-        <select name="tipo">{% for k, v in TIPOS_PRUEBA.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
-      <div class="form-group"><label>% (si aplica)</label><input type="text" inputmode="decimal" name="porcentaje" placeholder="Ej: 10"></div>
-      <div class="form-group"><label>Nota</label><input type="text" name="nota" maxlength="300" placeholder="Ej: Airbnb sugirió 15% para noviembre"></div>
-      <div class="form-group" style="align-self:end"><button type="submit" class="btn btn-primary">Anotar</button></div>
-    </form>
-    {% if a.pruebas %}
-    <div class="table-wrap"><table class="tabla">
-      <thead><tr><th>Fecha</th><th>Qué</th><th>14 días antes</th><th>14 días después</th><th></th></tr></thead>
-      <tbody>
-      {% for p in a.pruebas %}
-      <tr>
-        <td>{{ p.fecha|fecha }}</td>
-        <td>{{ TIPOS_PRUEBA.get(p.tipo, p.tipo) }}{% if p.porcentaje %} {{ p.porcentaje|num(0) }}%{% endif %}{% if p.nota %}<br><small class="muted">{{ p.nota }}</small>{% endif %}</td>
-        <td>{{ p.antes.reservas }} reservas · {{ p.antes.noches }} noches{% if p.antes.precio %}<br><small>{{ p.antes.precio|dinero(mp) }}/noche</small>{% endif %}</td>
-        <td>{{ p.despues.reservas }} reservas · {{ p.despues.noches }} noches{% if p.despues.precio %}<br><small>{{ p.despues.precio|dinero(mp) }}/noche</small>{% endif %}
-          {% if p.faltan %}<br><small class="muted">faltan {{ p.faltan }} días para completar</small>{% endif %}</td>
-        <td><form method="post" action="{{ url_for('prueba_eliminar', prid=p.id) }}" onsubmit="return confirm('¿Borrar esta prueba?')">
-          <input type="hidden" name="volver" value="{{ volver }}"><button type="submit" class="link-btn">Borrar</button></form></td>
-      </tr>
-      {% endfor %}
-      </tbody>
-    </table></div>
-    {% endif %}
-    {{ caja(pid ~ ':pruebas', coment.get(pid ~ ':pruebas'), volver) }}
-  </div>
 </details>
 {% endmacro %}

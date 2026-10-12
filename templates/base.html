@@ -25,6 +25,9 @@
       <a href="{{ url_for('hoy') }}" class="{% if request.endpoint=='hoy' %}active{% endif %}">
         <span class="nav-icon">✓</span> Qué hacer hoy
       </a>
+      <a href="{{ url_for('pruebas_pagina') }}" class="{% if request.endpoint=='pruebas_pagina' %}active{% endif %}">{# ### CAMBIO AQUÍ ### #}
+        <span class="nav-icon">⚗</span> Pruebas
+      </a>
       <a href="{{ url_for('dashboard') }}"
          class="{% if request.endpoint=='dashboard' %}active{% endif %}">
         <span class="nav-icon">▦</span> Dashboard

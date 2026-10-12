@@ -83,8 +83,13 @@
         <div class="accion-botones">
           <form method="post" action="{{ url_for('accion_estado') }}">
             <input type="hidden" name="clave" value="{{ x.clave }}"><input type="hidden" name="estado" value="hecho">
+            {% if x.prueba %}{# ### CAMBIO AQUÍ ### se anota solo en Pruebas #}
+            <input type="hidden" name="p_pid" value="{{ x.prop_id }}"><input type="hidden" name="p_tipo" value="{{ x.prueba.tipo }}">
+            <input type="hidden" name="p_desde" value="{{ x.prueba.desde }}"><input type="hidden" name="p_hasta" value="{{ x.prueba.hasta }}">
+            <input type="hidden" name="p_valor" value="{{ x.prueba.valor }}"><input type="hidden" name="p_sugerido" value="{{ x.prueba.sugerido or '' }}">
+            {% endif %}
             <input type="hidden" name="volver" value="{{ volver }}">
-            <button type="submit" class="btn btn-xs btn-primary" title="Ya lo hice en Airbnb">✓ Hecho</button>
+            <button type="submit" class="btn btn-xs btn-primary" title="Ya lo hice en Airbnb{{ ' (se anota en Pruebas)' if x.prueba }}">✓ Hecho</button>
           </form>
           <form method="post" action="{{ url_for('accion_estado') }}">
             <input type="hidden" name="clave" value="{{ x.clave }}"><input type="hidden" name="estado" value="descartado">

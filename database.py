@@ -279,6 +279,10 @@ def init_db():
                 creado_en    TIMESTAMPTZ DEFAULT NOW()
             )
         """)
+        # ### CAMBIO AQUÍ ### pruebas con fechas, valor (precio/%/noches) y lo que sugería el sistema en ese momento
+        for col_sql in ("desde TEXT", "hasta TEXT", "valor DOUBLE PRECISION", "sugerido DOUBLE PRECISION",
+                        "origen TEXT DEFAULT 'manual'", "clave TEXT"):
+            cur.execute(f"ALTER TABLE pruebas_descuento ADD COLUMN IF NOT EXISTS {col_sql}")
         # eventos que mueven la demanda (recitales, congresos...). Los feriados se traen solos.
         cur.execute("""
             CREATE TABLE IF NOT EXISTS eventos (

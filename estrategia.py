@@ -20,6 +20,7 @@ import feriados as fer
 import ical
 import metricas
 import monedas
+import pruebas as prb   # ### CAMBIO AQUÍ ### lo aprendido de las pruebas
 
 DIAS_ADELANTE = 90
 MESES = ["", "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
@@ -190,8 +191,9 @@ def _contexto_precio(prop, h, hoy, especiales, ritmo):
             "ritmo": ritmo, "hoy": hoy, "base": h["base"], "base_txt": h["base_txt"], "leads": h["leads"], "mediana": h["mediana"]}
 
 
-def precio_noche(d, cx):
-    """(precio, [motivos]) o (None, [motivo]) si no hay base."""
+def precio_noche(d, cx, aprender=True):
+    """(precio, [motivos]) o (None, [motivo]) si no hay base.
+    ### CAMBIO AQUÍ ### aprender=False da el precio sin el ajuste aprendido (se guarda en cada prueba para comparar)."""
     mon = cx["mon"]
     if not cx["base"]:
         return None, ["Falta un precio de partida: cargá el precio base de la propiedad o subí el archivo de Reservas."]
@@ -229,6 +231,10 @@ def precio_noche(d, cx):
     if esp and esp[1]:
         p *= 1 + esp[1] / 100
         motivos.append(f"+{esp[1]}%: {esp[0]}.")
+    ap = cx.get("aprendido")
+    if aprender and ap and ap.get("activo") and abs(ap["factor"] - 1) >= 0.02:
+        p *= ap["factor"]
+        motivos.append(f"{'+' if ap['pct'] > 0 else ''}{ap['pct']}%: aprendido de tus pruebas ({ap['n']}). {ap['texto']}")
     if p < cx["piso"]:
         p = cx["piso"]
         motivos.append(f"Se subió al mínimo: {cx['piso_txt']}.")
@@ -294,28 +300,8 @@ def descuentos(prop, h, cx, em):
     return out
 
 
-def pruebas(prop, h, hoy):
-    """Qué pasó después de cada prueba de descuento: reservas hechas 14 días antes vs 14 días después."""
-    out = []
-    for p in db.query("SELECT * FROM pruebas_descuento WHERE propiedad_id=%s ORDER BY fecha DESC, id DESC LIMIT 20", (prop["id"],)):
-        f = metricas._parse(p["fecha"])
-        if not f:
-            continue
-
-        def resumen(a, b):
-            g = [v for v in h["validas"] if v["fr"] and a <= v["fr"] < b]
-            precios = [v["precio"] for v in g if v["precio"]]
-            return {"reservas": len(g), "noches": sum(v["n"] for v in g),
-                    "precio": round(statistics.mean(precios)) if precios else None}
-        antes = resumen(f - timedelta(days=14), f)
-        despues = resumen(f, min(f + timedelta(days=14), hoy + timedelta(days=1)))
-        faltan = max(0, (f + timedelta(days=14) - hoy).days)
-        out.append({**p, "antes": antes, "despues": despues, "faltan": faltan})
-    return out
-
-
 # ═══════════════ ARMADO COMPLETO DE UNA PROPIEDAD ═══════════════
-def analizar(prop, reservas, hoy=None, tc=None, lista_esp=None):
+def analizar(prop, reservas, hoy=None, tc=None, lista_esp=None, evaluadas=None):
     hoy = hoy or date.today()
     h = historia(prop, reservas, hoy, tc)
     if lista_esp is None:
@@ -326,11 +312,19 @@ def analizar(prop, reservas, hoy=None, tc=None, lista_esp=None):
     except Exception:
         a_dp = None
     cx = _contexto_precio(prop, h, hoy, especiales, ritmo_por_dia(a_dp))
+    if evaluadas is None:
+        try:
+            evaluadas = prb.evaluar_todas(hoy, tc)
+        except Exception as e:
+            print(f"[pruebas] {e}")
+            evaluadas = []
+    _, cx["aprendido"] = prb.factor_precio(prop["id"], tc, evaluadas)   # ### CAMBIO AQUÍ ###
     ocup, fuente = ocupadas(prop, h, hoy)
     em = estadia_minima(prop, h)
     return {"prop": prop, "h": h, "cx": cx, "ocup": ocup, "fuente": fuente, "em": em, "dp": a_dp,
             "precios": precios_libres(prop, h, ocup, cx, hoy), "desc": descuentos(prop, h, cx, em),
-            "pruebas": pruebas(prop, h, hoy), "libres": tramos_libres(ocup, hoy), "esp": lista_esp, "hoy": hoy}
+            "libres": tramos_libres(ocup, hoy), "esp": lista_esp, "hoy": hoy,
+            "lecciones": prb.lecciones(prop["id"], evaluadas), "aprendido": cx["aprendido"]}
 
 
 # ═══════════════ ACCIONES DE "QUÉ HACER HOY" ═══════════════
@@ -341,9 +335,10 @@ def acciones(a):
     rc = a["em"]["recambio"]
     out = []
 
-    def add(clave, cuando, titulo, hacer, origen, link=None):
+    def add(clave, cuando, titulo, hacer, origen, link=None, prueba=None):
+        # ### CAMBIO AQUÍ ### prueba: lo que se anota solo en "Pruebas" al tocar ✓ Hecho
         out.append({"clave": f"{pid}:{clave}", "cuando": cuando, "titulo": titulo, "hacer": hacer,
-                    "origen": origen, "link": link, "prop_id": pid, "prop": prop["nombre"]})
+                    "origen": origen, "link": link, "prop_id": pid, "prop": prop["nombre"], "prueba": prueba})
 
     # 1) datos que faltan (sin ellos los cálculos quedan cortos)
     if not h["validas"]:
@@ -412,9 +407,11 @@ def acciones(a):
                          f"si no la bajás, nadie las puede reservar."] + (
                 [f"Aun pagando el recambio ({monedas.formatear(rc['total'], mon)}) te quedan "
                  f"{monedas.formatear(neto, mon)} por noche."] if neto is not None else [])
+        p_base, _ = precio_noche(ini, cx, aprender=False)
         add(f"libre:{ini}:{fin7}:{p}", "hoy", f"Libre {_rango_txt(ini, fin7)}: poné {monedas.formatear(p, mon)} por noche",
             f"Airbnb → Calendario → seleccioná {_rango_txt(ini, fin7)} → precio por noche {monedas.formatear(p, mon)}{extra}.",
-            mot + [f"Noches ocupadas según {a['fuente']}."], f"hoy?resaltar=precios-{pid}")
+            mot + [f"Noches ocupadas según {a['fuente']}."], f"hoy?resaltar=precios-{pid}",
+            prueba={"tipo": "precio", "desde": ini.isoformat(), "hasta": fin7.isoformat(), "valor": p, "sugerido": p_base})
 
     # 3) huecos más cortos que la estadía mínima (más adelante)
     if minima:
@@ -439,7 +436,8 @@ def acciones(a):
                 [f"Quedan {largo} noches libres entre dos reservas y tu estadía mínima es {minima}.",
                  f"Noches ocupadas según {a['fuente']}."]
                 + ([f"Aun con el recambio ({monedas.formatear(rc['total'], mon)}) te quedan "
-                    f"{monedas.formatear(neto, mon)} por noche."] if neto is not None else []))
+                    f"{monedas.formatear(neto, mon)} por noche."] if neto is not None else []),
+                prueba={"tipo": "minima", "desde": ini.isoformat(), "hasta": fin.isoformat(), "valor": largo})
 
     # 4) ritmo de ventas más adelante
     if a["dp"] and a["dp"].get("ritmo"):
@@ -473,6 +471,7 @@ def acciones(a):
         vistos.add((x["nombre"], x["desde"]))
         cuando = "semana" if libres_x[0] <= hoy + timedelta(days=14) else "mes"
         p, _ = precio_noche(libres_x[0], cx)
+        p_base, _ = precio_noche(libres_x[0], cx, aprender=False)
         add(f"esp:{x['nombre']}:{x['desde']}", cuando,
             f"{x['nombre']} ({_rango_txt(x['desde'], x['hasta'])}): subí {x['impacto']}%",
             f"Airbnb → Calendario → seleccioná {_rango_txt(libres_x[0], libres_x[-1])} → subí el precio {x['impacto']}%"
@@ -480,7 +479,9 @@ def acciones(a):
             [("Feriado nacional" + (" (fuente oficial)." if x["origen"] == "oficial" else " (calculado: no hubo conexión con la fuente oficial).")
               if x["tipo"] == "feriado" else f"Evento cargado por vos, con impacto de +{x['impacto']}%."),
              "Cuando hay feriado, la gente viaja la noche anterior y la del feriado (o todo el fin de semana largo).",
-             f"{len(libres_x)} de esas noches siguen libres."])
+             f"{len(libres_x)} de esas noches siguen libres."],
+            prueba={"tipo": "precio", "desde": libres_x[0].isoformat(), "hasta": libres_x[-1].isoformat(),
+                    "valor": p, "sugerido": p_base} if p else None)
 
     # 6) estadía mínima: probar otra si los números lo justifican
     em = a["em"]
@@ -524,10 +525,14 @@ def resumen_ia(hoy=None, tc=None):
         lista_esp, _ = fer.proximos(hoy, DIAS_ADELANTE)
     except Exception:
         lista_esp = []
+    try:
+        evaluadas = prb.evaluar_todas(hoy, tc)
+    except Exception:
+        evaluadas = []
     bloques = []
     for p in props:
         try:
-            a = analizar(p, reservas, hoy, tc, lista_esp)
+            a = analizar(p, reservas, hoy, tc, lista_esp, evaluadas)
             acc = acciones(a)
         except Exception as e:
             bloques.append(f"### {p['nombre']}: no se pudo calcular ({e})")
@@ -555,9 +560,11 @@ def resumen_ia(hoy=None, tc=None):
         if a["precios"]:
             L.append("- Precio sugerido noches libres (próx. 30 días): " + "; ".join(
                 f"{g['txt']}: {monedas.formatear(g['precio'], mon) if g['precio'] else 'sin base'}" for g in a["precios"][:10]))
-        for pr in a["pruebas"][:5]:
-            L.append(f"- Prueba {pr['fecha']} {pr['tipo']} {pr['porcentaje'] or ''}%: 14 días antes {pr['antes']['reservas']} reservas, "
-                     f"después {pr['despues']['reservas']}" + (f" (faltan {pr['faltan']} días)" if pr["faltan"] else ""))
+        if a.get("aprendido"):
+            L.append(f"- Aprendido de las pruebas: {a['aprendido']['texto']}"
+                     + ("" if a["aprendido"]["activo"] else " (Adriano lo apagó: no se aplica)"))
+        for x in a.get("lecciones") or []:
+            L.append(f"- {x}")
         if acc:
             L.append("- Acciones pendientes: " + " | ".join(f"[{x['cuando']}] {x['titulo']} → {x['hacer']}" for x in acc))
         bloques.append("\n".join(L))
@@ -565,6 +572,10 @@ def resumen_ia(hoy=None, tc=None):
         bloques.append("### Feriados y eventos próximos\n" + "\n".join(
             f"- {x['desde'].strftime('%d/%m')}" + (f" al {x['hasta'].strftime('%d/%m')}" if x["hasta"] != x["desde"] else "")
             + f": {x['nombre']} ({x['tipo']}, {x['impacto']:+d}%)" for x in lista_esp[:15]))
+    if evaluadas:   # ### CAMBIO AQUÍ ### pruebas recientes y su resultado
+        bloques.append("### Pruebas que hizo Adriano en Airbnb (más recientes)\n" + "\n".join(
+            f"- {x['fecha']} · {x['prop']} · {x['que']} {x['valor_txt']} {x['fechas']} → {x['color']} {x['texto']}"
+            for x in evaluadas[:12]))
     com = comentarios_recientes(20)
     if com:
         bloques.append("### Comentarios y correcciones de Adriano (tenelos en cuenta: corrigen al sistema)\n" + "\n".join(
