@@ -1,7 +1,7 @@
 {# ### CAMBIO AQUÍ ### — barra para que Adriano comente, cuestione o corrija una sugerencia #}
 {% macro caja(clave, lista, volver, texto_boton='Comentar') %}
-<details class="coment" {% if lista %}open{% endif %}>
-  <summary>💬 {{ 'Comentarios (' ~ lista|length ~ ')' if lista else '¿Algo no cierra? Comentá o corregí' }}</summary>
+<details class="coment">
+  <summary title="Comentá o corregí">💬{{ ' ' ~ lista|length if lista else '' }}</summary>
   {% for c in lista or [] %}
   <div class="coment-item">
     <span class="coment-fecha">{{ c.creado_en.strftime('%d/%m %H:%M') if c.creado_en else '' }}</span>
@@ -23,7 +23,7 @@
 
 {# lista "¿De dónde sale?" #}
 {% macro origen(lineas) %}
-<details class="origen"><summary>¿De dónde sale?</summary>
+<details class="origen"><summary title="¿De dónde sale?">ⓘ Por qué</summary>
   <ul>{% for l in lineas %}<li>{{ l }}</li>{% endfor %}</ul>
 </details>
 {% endmacro %}

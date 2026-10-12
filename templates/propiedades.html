@@ -10,17 +10,14 @@
 <div class="table-wrap">
 <table class="tabla">
   <thead><tr>
-    <th>Nombre</th><th>Ubicación</th><th>Tipo</th><th>Amb.</th><th>Cap.</th>
-    <th>Precio base</th><th>Costos/mes</th><th>Estado</th><th>Acciones</th>
+    <th>Nombre</th><th>Ubicación</th><th>Precio base</th><th>Costos/mes</th><th>Estado</th><th></th>
   </tr></thead>
   <tbody>
   {% for p in propiedades %}
   <tr>
-    <td><strong>{{ p.nombre }}</strong><br><small class="muted">{{ p.direccion or '' }}{% if p.piso_depto %} · {{ p.piso_depto }}{% endif %}</small></td>
+    <td><strong>{{ p.nombre }}</strong><br><small class="muted">{# ### CAMBIO AQUÍ ### tipo, ambientes y capacidad en una línea #}
+      {{ TIPOS.get(p.tipo, p.tipo or '') }}{% if p.ambientes %} · {{ p.ambientes }} amb.{% endif %}{% if p.capacidad %} · {{ p.capacidad }} pers.{% endif %}{% if p.m2 %} · {{ p.m2 }} m²{% endif %}{% if p.cochera %} · cochera{% endif %}</small></td>
     <td>{{ p.barrio or '—' }}<br><small class="muted">{{ p.ciudad or '' }}{% if p.pais and p.pais != 'Argentina' %}, {{ p.pais }}{% endif %}</small></td>
-    <td>{{ TIPOS.get(p.tipo, p.tipo or '—') }}{% if p.m2 %}<br><small class="muted">{{ p.m2 }} m²{% if p.cochera %} · cochera{% endif %}</small>{% elif p.cochera %}<br><small class="muted">cochera</small>{% endif %}</td>
-    <td>{{ p.ambientes or '—' }}</td>{# ### CAMBIO AQUÍ ### antes mostraba "None" #}
-    <td>{{ (p.capacidad ~ ' pers.') if p.capacidad else '—' }}</td>
     <td>{{ p.precio_base|dinero(p.moneda) }}</td>{# ### CAMBIO AQUÍ ### #}
     <td>{{ ((p.costo_expensas or 0)+(p.costo_servicios or 0)+(p.costo_limpieza or 0)+(p.costo_comision or 0))|dinero(p.moneda) }}/mes</td>
     <td><span class="badge {{ 'badge-ok' if (p.estado or 'activa') == 'activa' else 'badge-warn' }}">{{ (p.estado or 'activa')|capitalize }}</span></td>{# ### CAMBIO AQUÍ ### #}
@@ -28,7 +25,7 @@
       <a href="{{ url_for('editar_propiedad', pid=p.id) }}" class="btn btn-sm">Editar</a>
       <form method="post" action="{{ url_for('eliminar_propiedad', pid=p.id) }}" style="display:inline"
             onsubmit='return confirm({{ ("¿Eliminar " ~ p.nombre ~ "?")|tojson }})'>{# ### CAMBIO AQUÍ ### nombres con apóstrofo (D'Angelo) salteaban la confirmación #}
-        <button class="btn btn-sm btn-danger">Eliminar</button>
+        <button class="btn btn-sm btn-borrar" title="Eliminar">✕</button>
       </form>
     </td>
   </tr>
@@ -50,23 +47,23 @@
   {% if huespedes %}
   <div class="table-wrap">
   <table class="tabla">
-    <thead><tr><th>Huésped</th><th>Check-in</th><th>Check-out</th><th>Plataforma</th><th>Monto</th><th>Estado</th><th>Historial</th></tr></thead>
+    <thead><tr><th>Huésped</th><th>Llega</th><th>Se va</th><th>Monto</th><th>Estado</th><th></th></tr></thead>
     <tbody>
     {% for r in huespedes %}
+    {% if loop.index == 13 %}</tbody><tbody class="mas-filas" hidden>{% endif %}{# ### CAMBIO AQUÍ ### solo las 12 últimas a la vista #}
     <tr>
       <td>{{ r.huesped_nombre or '—' }}</td>
       <td>{{ r.fecha_inicio|fecha }}</td>
       <td>{{ r.fecha_fin|fecha or '—' }}</td>
-      <td>{{ (r.canal or 'airbnb')|capitalize }}</td>
       <td>{{ r.ingreso_bruto|dinero(r.moneda) }}</td>
       <td><span class="badge {{ 'badge-warn' if r.estado in ('pendiente','cancelada') else 'badge-ok' }}">{{ (r.estado or 'completada')|capitalize }}</span></td>
       {# ### CAMBIO AQUÍ ### historial de la reserva #}
       <td>{% set h = historial.get(r.codigo_confirmacion, []) %}
-        {% if h %}<button type="button" class="btn btn-sm" onclick="var f=document.getElementById('hist-{{ loop.index }}');f.hidden=!f.hidden">Ver ({{ h|length }})</button>
+        {% if h %}<button type="button" class="link-btn" title="Historial de la reserva" onclick="var f=document.getElementById('hist-{{ loop.index }}');f.hidden=!f.hidden">Historial ({{ h|length }})</button>
         {% else %}<span class="muted">—</span>{% endif %}</td>
     </tr>
     {% if h %}
-    <tr id="hist-{{ loop.index }}" hidden class="fila-historial"><td colspan="7">
+    <tr id="hist-{{ loop.index }}" hidden class="fila-historial"><td colspan="6">
       <ul class="timeline">
         {% for e in h %}
         <li class="t-{{ e.tipo }}"><span class="t-fecha">{{ e.fecha|fecha }}</span>
@@ -79,6 +76,9 @@
     </tbody>
   </table>
   </div>
+  {% if huespedes|length > 12 %}
+  <button type="button" class="link-btn" style="margin-top:8px" onclick="document.querySelector('.mas-filas').hidden=false;this.remove()">Ver todas ({{ huespedes|length }})</button>
+  {% endif %}
   {% else %}
   <p class="muted">Todavía no hay reservas importadas para esta propiedad.</p>
   {% endif %}

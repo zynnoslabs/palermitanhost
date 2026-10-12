@@ -672,7 +672,7 @@ select, input, textarea { max-width: 100%; }
 .pts { display:flex; gap:3px; flex-wrap:wrap; }
 .pt { width:8px; height:8px; border-radius:50%; display:inline-block; }
 .pt-llega { background:#2d8a4e; } .pt-sale { background:#c0392b; } .pt-cobro { background:#2f6fb3; } .pt-nov { background:#e08e0b; }
-.chips { display:flex; flex-direction:column; gap:2px; }
+.cal-dia .chips { display:flex; flex-direction:column; gap:2px; }   /* ### CAMBIO AQUÍ ### solo en el calendario (pisaba los botones del Asistente) */
 .chip { font-size:.68rem; border-radius:4px; padding:1px 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .chip-llega { background:#e3f3e8; color:#1e5c35; } .chip-sale { background:#fbe7e5; color:#7b1d1d; }
 .cal-detalle { position:sticky; top:12px; }
@@ -835,3 +835,78 @@ tr.fila-limite td:last-child { color:#a86a00; }
 .det-bloque { border-top:1px solid var(--border); padding:12px 0 4px; }
 .det-bloque h4 { margin:0 0 8px; }
 details.card.detalle-prop { padding:14px 18px; margin-bottom:16px; }
+
+/* ### CAMBIO AQUÍ ### menos ruido visual: alertas sutiles, avisos chicos, dashboard simple */
+.aviso-chico { font-size:.85rem; color:#7a5a12; background:#fdf6e8; border:1px solid #f0dfb8; border-radius:8px; padding:6px 12px; margin-bottom:10px; }
+.alertas { gap:4px; margin-bottom:12px; }
+.alertas-tit { font-size:.78rem; font-weight:600; color:#8a7f72; text-transform:uppercase; letter-spacing:.05em; }
+.alertas .alerta { flex-direction:row; align-items:center; gap:8px; padding:6px 36px 6px 10px; font-size:.84rem; background:#fff; border:1px solid var(--border); border-left-width:3px; min-width:0; }
+.alertas .alerta strong { font-size:.84rem; font-weight:600; white-space:nowrap; }
+.alerta-det { color:#8a7f72; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1; }
+.alerta-punto { width:7px; height:7px; border-radius:50%; flex:none; background:#9aa0a6; }
+.alertas .alerta-alta { border-left-color:#c0392b; } .alertas .alerta-alta .alerta-punto { background:#c0392b; }
+.alertas .alerta-media { border-left-color:#e08e0b; } .alertas .alerta-media .alerta-punto { background:#e08e0b; }
+.alertas .alerta-info { border-left-color:#2f6fb3; } .alertas .alerta-info .alerta-punto { background:#2f6fb3; }
+.alertas .alerta-ocultar { top:50%; transform:translateY(-50%); right:4px; }
+.alertas .alerta-ocultar button { width:24px; height:24px; font-size:.8rem; }
+.alertas-mas summary { font-size:.8rem; margin:2px 0 4px; }
+.alertas-mas .alerta-fila { margin-top:4px; }
+@media (max-width: 600px) { .alerta-det { display:none; } .alertas .alerta strong { white-space:normal; } }
+.stats-4 { grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); }
+.mas-metricas { margin:-4px 0 16px; }
+.mas-metricas > summary { cursor:pointer; font-size:.85rem; color:var(--gold-hover); margin-bottom:8px; }
+.stats-chicos .stat-card { padding:10px 12px; }
+.stats-chicos .stat-num { font-size:1.15rem; }
+.informe-chico { display:flex; align-items:center; gap:6px; margin:6px 0 12px; }
+
+/* ### CAMBIO AQUÍ ### Qué hacer hoy más liviano */
+.sit-txt { font-size:.88rem; }
+.sit-pie { display:flex; flex-wrap:wrap; gap:4px 14px; align-items:flex-start; }
+.sit-pie .coment, .sit-pie .origen { margin:0; }
+.accion { padding:8px 10px; margin-bottom:8px; }
+.accion-tit { margin-bottom:6px; font-size:.92rem; }
+.accion-tit a { color:inherit; text-decoration:none; } .accion-tit a:hover { text-decoration:underline; }
+.accion-botones { margin:0; gap:6px 10px; align-items:flex-start; }
+.accion-botones .origen, .accion-botones .coment { margin:0; flex-basis:auto; }
+.accion-botones details[open] { flex-basis:100%; order:5; }
+.btn-xs { padding:2px 9px; font-size:.78rem; line-height:1.5; border-radius:6px; }
+.origen summary, .coment summary { font-size:.8rem; list-style:none; }
+.origen summary::-webkit-details-marker, .coment summary::-webkit-details-marker { display:none; }
+.coment summary { color:#8a7f72; }
+.cfg-linea { display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:.82rem; margin:-4px 0 12px; }
+.cfg-pill { border:1px solid var(--border); border-radius:12px; padding:2px 10px; text-decoration:none; color:#6b6157; background:#fff; }
+.cfg-pill:hover { border-color:var(--gold); color:var(--gold-hover); }
+.cfg-pill.cfg-urgente { border-color:#e5b4ae; color:#9b4a4a; background:#fdf1ef; }
+.hoy-col h4 { font-size:.72rem; }
+
+/* ### CAMBIO AQUÍ ### Precios: una sección por propiedad */
+.pp { padding:0; margin-bottom:12px; overflow:hidden; }
+.pp > summary { list-style:none; cursor:pointer; padding:14px 18px; display:flex; flex-wrap:wrap; gap:6px 16px; align-items:center; justify-content:space-between; }
+.pp > summary::-webkit-details-marker { display:none; }
+.pp > summary::before { content:"▸"; color:var(--gold-hover); margin-right:-8px; }
+.pp[open] > summary::before { content:"▾"; }
+.pp[open] > summary { border-bottom:1px solid var(--border); }
+.pp-nombre { font-weight:700; font-size:1.05rem; flex:1; }
+.pp-chips { display:flex; flex-wrap:wrap; gap:4px 14px; font-size:.85rem; color:#6b6157; }
+.pp-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:18px; padding:14px 18px 4px; }
+.pp-col h4 { margin:0 0 6px; font-size:.8rem; text-transform:uppercase; letter-spacing:.05em; color:#8a7f72; }
+.pp-tabla { width:100%; border-collapse:collapse; font-size:.9rem; }
+.pp-tabla td { padding:5px 0; border-bottom:1px solid #f0ebe1; }
+.pp-tabla td:last-child { text-align:right; white-space:nowrap; padding-left:10px; }
+.pp-total td { font-weight:700; }
+.pp-editar { font-size:.82rem; display:inline-block; margin-top:6px; }
+.pp-calc { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:10px 18px; font-size:.88rem; }
+.pp-calc input[type=date] { padding:4px 8px; }
+.pp-resultado { display:flex; flex-wrap:wrap; gap:10px; padding:0 18px 4px; }
+.pp-resultado div { border:1px solid var(--border); border-radius:8px; padding:8px 14px; display:flex; flex-direction:column; min-width:120px; }
+.pp-resultado strong { font-size:1.2rem; }
+.pp-resultado .pp-sug { border-color:var(--gold); }
+.pp > .origen { padding:0 18px 6px; }
+.pp-sub { margin:6px 18px 14px; }
+.pp-sub > summary { cursor:pointer; color:var(--gold-hover); font-weight:600; font-size:.9rem; margin-bottom:8px; }
+.pp-grid .origen { margin-top:6px; }
+.btn-borrar { color:#9b4a4a; border-color:#e5c4c0; background:#fff; }
+.btn-borrar:hover { background:#fbeceb; }
+.pp-calc label { margin:0; font-weight:600; }
+.pp-calc input[type=date] { width:auto; max-width:180px; flex:none; }
+.pp-nombre { min-width:140px; }

@@ -5,7 +5,7 @@
 {% set prop = a.prop %}
 {% set pid = prop.id %}
 <details class="detalle-prop" id="detalle-{{ pid }}">
-  <summary>Ver cómo se calculó todo (datos, estadías, precios por noche, pruebas)</summary>
+  <summary>Ver cómo se calculó (estadías, precio por noche, pruebas)</summary>
 
   <div class="det-bloque" id="recambio-{{ pid }}">
     <h4>Con qué datos se calcula</h4>
@@ -73,14 +73,13 @@
         {{ origen(g.motivos) }}</li>
       {% endfor %}
     </ul>
-    <p class="muted" style="font-size:.8rem;margin-top:6px">No distingue días de semana de fines de semana (los archivos de Airbnb no traen el precio de cada noche por separado).</p>
     {% endif %}
     {{ caja(pid ~ ':precios', coment.get(pid ~ ':precios'), volver) }}
   </div>
 
   <div class="det-bloque" id="pruebas-{{ pid }}">
     <h4>Pruebas que hiciste en Airbnb</h4>
-    <p class="muted" style="font-size:.85rem">Cuando cambies un descuento, una promoción, el precio o la estadía mínima, anotalo acá. A los 14 días el sistema te muestra cuántas reservas entraron antes y después.</p>
+    <p class="muted" style="font-size:.85rem">Anotá cada cambio que hagas en Airbnb: a los 14 días ves si entraron más reservas.</p>
     <form method="post" action="{{ url_for('prueba_nueva') }}" class="form-grid est-form">
       <input type="hidden" name="propiedad_id" value="{{ pid }}"><input type="hidden" name="volver" value="{{ volver }}">
       <div class="form-group"><label>Fecha</label><input type="date" name="fecha" value="{{ dia.isoformat() }}" max="{{ dia.isoformat() }}" required></div>
@@ -107,7 +106,6 @@
       {% endfor %}
       </tbody>
     </table></div>
-    <p class="muted" style="font-size:.8rem;margin-top:6px">Cuenta las reservas que se <strong>hicieron</strong> (fecha "Reservada" del archivo de Reservas). Si cambiaste varias cosas juntas, no se puede saber cuál funcionó.</p>
     {% endif %}
     {{ caja(pid ~ ':pruebas', coment.get(pid ~ ':pruebas'), volver) }}
   </div>

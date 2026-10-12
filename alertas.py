@@ -144,7 +144,7 @@ def revisar(propiedad_id=None, hoy=None):
     if hay_usd:
         f_tc = metricas.fecha_valida((tc or {}).get("fecha")) if tc else None
         if not tc:
-            add("media", "Falta el tipo de cambio", "Hay montos en dólares y no se pueden sumar con los pesos. Cargalo arriba a la derecha.", "?resaltar=tc")
+            add("media", "Falta el tipo de cambio", "Hay montos o costos en dólares que no se están sumando con los pesos. Cargalo arriba a la derecha.", "?resaltar=tc")
         elif f_tc and (hoy - f_tc).days > 7:
             add("media", f"El tipo de cambio tiene {(hoy - f_tc).days} días",
                 "Actualizalo arriba a la derecha para que las conversiones entre pesos y dólares sean correctas.", "?resaltar=tc")

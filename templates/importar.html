@@ -10,15 +10,14 @@
 {% if not propiedades %}
 <div class="alert alert-warn">Todavía no cargaste propiedades: al importar, el sistema las crea con el nombre que tienen en Airbnb. Después completás su barrio, precio y costos.</div>
 {% endif %}
-<p class="muted" style="margin-bottom:12px">Airbnb da <strong>dos archivos</strong>. Subí cada uno en su renglón, tal cual lo descargás
-  (si lo abriste y guardaste con Excel también funciona). Podés repetirlos cuando quieras: no se duplica nada.</p>
+<p class="muted" style="margin-bottom:12px">Subí cada archivo en su renglón. Se pueden repetir: no se duplica nada.</p>
 
 <div id="frecuencia">
 {% for tipo, nombre, cada, que, como in [
-  ('reservas', 'Reservas', 'Una vez por semana', 'Quién viene, fechas, cancelaciones y cuándo se hizo cada reserva.',
-   'Menú → Reservas → Todas → Exportar → CSV.'),
-  ('ganancias', 'Ganancias', 'Una vez por mes', 'Los montos exactos que te pagó Airbnb (comisión, limpieza, ajustes).',
-   'Menú → Ganancias → Historial de transacciones → elegí las fechas → Exportar CSV.')] %}
+  ('reservas', 'Reservas', 'Cada semana', 'Quién viene, fechas y cancelaciones.',
+   'Airbnb → Reservas → Todas → Exportar → CSV'),
+  ('ganancias', 'Ganancias', 'Cada mes', 'Lo que te pagó Airbnb, exacto.',
+   'Airbnb → Ganancias → Historial de transacciones → Exportar CSV')] %}
 {% set f = frecuencia[tipo] %}
 <div class="form-card subir-fila" id="subir-{{ tipo }}">
   <div class="subir-cab">
@@ -28,8 +27,7 @@
       {% else %}Nunca se subió{% endif %}
     </span>
   </div>
-  <p class="subir-que"><strong>{{ cada }}.</strong> {{ que }}</p>
-  <p class="muted subir-como">Cómo bajarlo de Airbnb (desde la computadora, en modo anfitrión): {{ como }}</p>
+  <p class="subir-que"><strong>{{ cada }}.</strong> {{ que }} <span class="muted subir-como">· {{ como }}</span></p>
   <form method="post" enctype="multipart/form-data" class="subir-form">
     <input type="hidden" name="tipo" value="{{ tipo }}">
     <input type="file" name="csv_file" accept=".csv,text/csv" required aria-label="Archivo de {{ nombre }}">
@@ -41,21 +39,21 @@
 
 <div class="form-card subir-fila">
   <div class="subir-cab">
-    <h3>3. Calendario de Airbnb <span class="muted" style="font-weight:400;font-size:.85rem">(automático, no se sube)</span></h3>
+    <h3>3. Calendario de Airbnb <span class="muted" style="font-weight:400;font-size:.85rem">(automático)</span></h3>
     <span class="subir-estado {{ 'ok' if calendarios.total and not calendarios.sin else 'vencida' }}">
       {{ calendarios.con }} de {{ calendarios.total }} propiedades conectadas</span>
   </div>
-  <p class="subir-que">Dice qué noches están ocupadas, al día y sin subir nada. Se pega una sola vez el link de cada anuncio.</p>
+  <p class="subir-que">Noches ocupadas al día. Se pega una vez el link de cada anuncio.</p>
   {% if calendarios.sin %}
   <p class="muted subir-como">Falta en:
     {% for p in calendarios.sin %}<a class="link" href="{{ url_for('editar_propiedad', pid=p.id) }}?resaltar=ical_url">{{ p.nombre }}</a>{{ ', ' if not loop.last }}{% endfor %}.
-    En Airbnb: Calendario → Disponibilidad → Conectar calendarios → Exportar calendario.</p>
+</p>
   {% endif %}
 </div>
 
 {% if sin_costos %}
 <div class="alert alert-warn subir-costos">
-  <strong>Tus costos no vienen en los archivos de Airbnb</strong> (Airbnb no sabe cuánto pagás de expensas o limpieza). Completalos a mano:
+  <strong>Completá a mano</strong> (Airbnb no manda tus costos):
   <ul>{% for p in sin_costos %}<li><a class="link" href="{{ url_for('editar_propiedad', pid=p.id) }}?resaltar={{ p.campo }}">{{ p.nombre }}</a>: falta {{ p.falta|join(', ') }}</li>{% endfor %}</ul>
 </div>
 {% endif %}

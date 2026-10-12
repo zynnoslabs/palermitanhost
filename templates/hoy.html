@@ -21,8 +21,8 @@
 {% else %}
 
 <p class="muted hoy-datos">
-  Datos: {% if ultima_reservas %}archivo de Reservas del {{ ultima_reservas|fecha }}{% else %}todavía no se subió el archivo de Reservas{% endif %}.
-  {% if total %}{{ total }} cosa{{ 's' if total != 1 }} para hacer.{% else %}✅ Nada para cambiar en Airbnb hoy.{% endif %}
+  {% if total %}{{ total }} cosa{{ 's' if total != 1 }} para hacer{% else %}✅ Nada para cambiar en Airbnb hoy{% endif %}
+  · Reservas al {% if ultima_reservas %}{{ ultima_reservas|fecha }}{% else %}— (subí el archivo){% endif %}
 </p>
 
 {% for b in bloques %}
@@ -53,41 +53,47 @@
       <div class="sit-num">{{ s.numero }}</div>
       <div class="sit-sub">{{ s.sub }}</div>
       <div class="sit-txt">{{ s.texto }}</div>
-      {% for e in s.extra or [] %}<div class="sit-extra">{{ e }}</div>{% endfor %}
-      {{ origen(s.origen) }}
-      {{ caja(pid ~ ':' ~ k, coment.get(pid ~ ':' ~ k), volver) }}
+      <div class="sit-pie">{{ origen(s.origen) }}{{ caja(pid ~ ':' ~ k, coment.get(pid ~ ':' ~ k), volver) }}</div>
     </div>
     {% endfor %}
   </div>
   {% endif %}
 
+  {# ── Lo que falta configurar: una sola línea ── #}
+  {% set cfg = b.acciones|selectattr('cfg')|list %}
+  {% set tareas = b.acciones|rejectattr('cfg')|list %}
+  {% if cfg %}
+  <div class="cfg-linea"><span class="muted">Falta:</span>
+    {% for x in cfg %}<a class="cfg-pill {{ 'cfg-urgente' if x.cuando == 'hoy' }}" href="{{ request.script_root }}/{{ x.link or 'hoy' }}" title="{{ x.hacer }}">{{ x.titulo }}</a>{% endfor %}
+  </div>
+  {% endif %}
+
   {# ── Tareas ── #}
-  {% if b.acciones %}
+  {% if tareas %}
   <div class="hoy-cols">
-    {% for c, titulo in [('hoy', 'Hacer hoy'), ('semana', 'Esta semana'), ('mes', 'Más adelante')] %}
-    {% if b.por[c] %}
+    {% for c, titulo in [('hoy', 'Hoy'), ('semana', 'Esta semana'), ('mes', 'Más adelante')] %}
+    {% set lista = tareas|selectattr('cuando', 'equalto', c)|list %}
+    {% if lista %}
     <div class="hoy-col hoy-col-{{ c }}">
       <h4>{{ titulo }}</h4>
-      {% for x in b.por[c] %}
-      {% if loop.index == 4 %}<details class="hoy-mas"><summary>Ver {{ b.por[c]|length - 3 }} más</summary>{% endif %}
+      {% for x in lista %}
+      {% if loop.index == 4 %}<details class="hoy-mas"><summary>+{{ lista|length - 3 }} más</summary>{% endif %}
       <article class="accion">
-        <div class="accion-tit">{{ x.titulo }}</div>
-        <div class="accion-hacer"><span class="muted">Qué hacer:</span> {{ x.hacer }}</div>
-        {{ origen(x.origen) }}
+        <div class="accion-tit">{% if x.link %}<a href="{{ request.script_root }}/{{ x.link }}">{{ x.titulo }}</a>{% else %}{{ x.titulo }}{% endif %}</div>
         <div class="accion-botones">
           <form method="post" action="{{ url_for('accion_estado') }}">
             <input type="hidden" name="clave" value="{{ x.clave }}"><input type="hidden" name="estado" value="hecho">
             <input type="hidden" name="volver" value="{{ volver }}">
-            <button type="submit" class="btn btn-sm btn-primary">✓ Hecho</button>
+            <button type="submit" class="btn btn-xs btn-primary" title="Ya lo hice en Airbnb">✓ Hecho</button>
           </form>
           <form method="post" action="{{ url_for('accion_estado') }}">
             <input type="hidden" name="clave" value="{{ x.clave }}"><input type="hidden" name="estado" value="descartado">
             <input type="hidden" name="volver" value="{{ volver }}">
-            <button type="submit" class="btn btn-sm">No aplica</button>
+            <button type="submit" class="btn btn-xs" title="No aplica: no volver a mostrar">✕</button>
           </form>
-          {% if x.link %}<a class="link" href="{{ request.script_root }}/{{ x.link }}">Ver detalle →</a>{% endif %}
+          {{ origen(['Cómo: ' ~ x.hacer] + x.origen) }}
+          {{ caja(x.clave, coment.get(x.clave), volver) }}
         </div>
-        {{ caja(x.clave, coment.get(x.clave), volver) }}
       </article>
       {% if loop.last and loop.length > 3 %}</details>{% endif %}
       {% endfor %}
@@ -95,8 +101,8 @@
     {% endif %}
     {% endfor %}
   </div>
-  {% else %}
-  <p class="muted" style="margin-top:10px">Nada para hacer con esta propiedad. ✅</p>
+  {% elif not cfg %}
+  <p class="muted" style="margin-top:6px">Nada para hacer con esta propiedad. ✅</p>
   {% endif %}
 
   {% if b.a %}{{ detalle(b.a, coment, volver, dia) }}{% endif %}

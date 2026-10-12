@@ -460,7 +460,7 @@ def dashboard():
         flash(f"{sin_tc} reservas están en otra moneda: cuentan en noches y ocupación, pero sus montos no se "
               f"sumaron. Cargá el tipo de cambio (arriba a la derecha).", "warn")
 
-    costos_mes, unidades = _costos_y_unidades(prop_id, vista, tc, avisar=True)
+    costos_mes, unidades = _costos_y_unidades(prop_id, vista, tc, avisar=False)   # ### CAMBIO AQUÍ ### ya lo dice la alerta "Falta el tipo de cambio"
     stats = met.calcular_metricas(reservas_filtradas, desde, hasta, costos_mes, unidades)
     # ### CAMBIO AQUÍ ### el gráfico por mes muestra al menos los últimos 12 meses
     g1, g2 = met.ventana_grafico(desde, hasta)
@@ -794,8 +794,8 @@ def propiedades():
     ver = request.args.get("ver", type=int) or (props[0]["id"] if props else None)
     huespedes = db.query("""
         SELECT * FROM reservas WHERE propiedad_id=%s
-        ORDER BY fecha_inicio DESC LIMIT 30
-    """, (ver,)) if ver else []
+        ORDER BY fecha_inicio DESC LIMIT 500
+    """, (ver,)) if ver else []   # ### CAMBIO AQUÍ ### se ven 12 y el resto con "Ver todas"
     hist = novedades.historial([h["codigo_confirmacion"] for h in huespedes])   # ### CAMBIO AQUÍ ###
     return render_template("propiedades.html", propiedades=props, ver=ver, huespedes=huespedes, historial=hist)
 
@@ -1439,71 +1439,78 @@ def eliminar_competencia(cid):
 @app.route("/precios", methods=["GET","POST"])
 @login_required
 def precios():
-    # ### CAMBIO AQUÍ ### — precio estratégico (igual que el demo): mediana de la competencia
-    # encontrada por la IA, ajustada por puntaje, reseñas, temporada, ocupación y fin de semana.
-    import statistics
+    """### CAMBIO AQUÍ ### una sección plegable por propiedad con TODOS sus precios y costos.
+    Adentro: calcular el precio de una fecha y cómo viene vendiendo."""
+    import math
     from precio_estrategico import calcular_precio_estrategico
 
-    propiedades = db.query("SELECT * FROM propiedades ORDER BY nombre")
-    pid = request.values.get("propiedad_id", type=int) or (propiedades[0]["id"] if propiedades else None)
-    prop_sel = next((p for p in propiedades if p["id"] == pid), None)
-    fecha = (met.fecha_valida(request.values.get("fecha")) or date.today()).isoformat()   # ### CAMBIO AQUÍ ###
-    resultado, mercado = None, None
-
-    if prop_sel:
-        comps = competencia_auto.comparables_vigentes(pid, prop_sel.get("barrio"))   # ### CAMBIO AQUÍ ###
-        # ### CAMBIO AQUÍ ### — todo en la moneda de la propiedad (convierte con el tipo de cambio)
-        st = competencia_ia.calcular_stats(comps, prop_sel.get("moneda") or "ARS", monedas.tc_valor()) if comps else None
+    pid_sel = request.values.get("propiedad_id", type=int)
+    viejo = request.args.get("resaltar")
+    if request.method == "GET" and pid_sel and viejo in ("ritmo", "mercado", "disposicion"):
+        return redirect(url_for("precios", propiedad_id=pid_sel, resaltar=f"{viejo}-{pid_sel}"))
+    propiedades = db.query("SELECT * FROM propiedades ORDER BY (COALESCE(estado,'activa') = 'inactiva'), nombre")
+    if not pid_sel and propiedades:
+        pid_sel = propiedades[0]["id"] if len(propiedades) == 1 else None
+    fecha = (met.fecha_valida(request.values.get("fecha")) or date.today()).isoformat()
+    hoy_d, tc = date.today(), monedas.tc_valor()
+    reservas = db.query("SELECT * FROM reservas")
+    try:
+        lista_esp, _ = feriados.proximos(hoy_d, estrategia.DIAS_ADELANTE)
+    except Exception:
+        lista_esp = []
+    fichas = []
+    for p in propiedades:
+        pid, mon = p["id"], p.get("moneda") or "ARS"
+        mercado = None
+        comps = competencia_auto.comparables_vigentes(pid, p.get("barrio"))
+        st = competencia_ia.calcular_stats(comps, mon, tc) if comps else None
         if st:
-            mercado = {
-                "mediana": st["mediana"], "min": st["minimo"], "max": st["maximo"],
-                "rating_promedio_zona": st["rating"] or 4.5,   # 4.5 solo para el cálculo
-                "rating_real": bool(st["rating"]),        # ### CAMBIO AQUÍ ### en pantalla "—" si no hay puntajes
-                "cantidad_propiedades": st["cantidad"],
-                "sin_convertir": st["sin_convertir"],
-                "simbolo": "US$" if prop_sel.get("moneda") == "USD" else "$",
-                "fecha": max((c.get("fecha") or "") for c in comps),
-            }
-
-    if request.method == "POST" and prop_sel:
-        if not mercado:
-            flash("Primero buscá la competencia de esta propiedad en la sección Competencia.", "error")
-        else:
-            desde_90 = (date.today() - timedelta(days=90)).isoformat()
-            # ### CAMBIO AQUÍ ### también estadías largas que empezaron antes y siguen en la ventana
-            reservas_hist = db.query("""
-                SELECT * FROM reservas WHERE propiedad_id=%s
-                  AND (fecha_inicio >= %s OR COALESCE(fecha_fin,'') >= %s)
-                  AND COALESCE(estado,'') <> 'cancelada'
-            """, (pid, desde_90, desde_90))
-            resultado = calcular_precio_estrategico(prop_sel, mercado, reservas_hist, fecha)
-            # Piso: nunca por debajo de los costos fijos por noche + 15%
-            costos = sum((prop_sel.get(k) or 0) for k in
-                         ["costo_expensas", "costo_servicios", "costo_limpieza", "costo_comision"])
-            import math
-            paso_piso = 500 if costos / 30.44 >= 5000 else 1   # ### CAMBIO AQUÍ ### redondeado hacia arriba como el resto
-            piso = math.ceil(costos / 30.44 * 1.15 / paso_piso) * paso_piso
-            resultado["costo_noche"] = round(costos / 30.44)
-            if piso > resultado["precio_minimo"]:
-                resultado["precio_minimo"] = piso
-                resultado["explicacion"] += (f" El mínimo se subió a {monedas.formatear(piso, prop_sel.get('moneda') or 'ARS')}"
-                                             f" para cubrir tus costos fijos.")
-                # ### CAMBIO AQUÍ ### el sugerido y el máximo nunca quedan por debajo del mínimo
-                if resultado.get("precio_sugerido", 0) < piso:
-                    resultado["precio_sugerido"] = piso
-                if resultado.get("precio_maximo", 0) <= resultado["precio_sugerido"]:
-                    resultado["precio_maximo"] = math.ceil(resultado["precio_sugerido"] * 1.2 / paso_piso) * paso_piso
-
-    # ### CAMBIO AQUÍ ### ¿cuánto más podrías cobrar? (anticipación y ritmo de ventas)
-    dispo = None
-    if prop_sel:
+            mercado = {"mediana": st["mediana"], "min": st["minimo"], "max": st["maximo"],
+                       "rating_promedio_zona": st["rating"] or 4.5, "rating_real": bool(st["rating"]),
+                       "cantidad_propiedades": st["cantidad"], "sin_convertir": st["sin_convertir"],
+                       "fecha": max((c.get("fecha") or "") for c in comps)}
         try:
-            dispo = disposicion_pago.analizar(prop_sel, db.query("SELECT * FROM reservas WHERE propiedad_id=%s", (pid,)),
-                                              mediana_mercado=mercado["mediana"] if mercado else None, tc=monedas.tc_valor())
+            a = estrategia.analizar(p, reservas, hoy_d, tc, lista_esp)
+        except Exception as e:
+            print(f"[precios] {pid}: {e}")
+            a = None
+        try:
+            dispo = disposicion_pago.analizar(p, [r for r in reservas if r["propiedad_id"] == pid],
+                                              mediana_mercado=mercado["mediana"] if mercado else None, tc=tc)
         except Exception as e:
             print(f"[disposicion] {e}")
-    return render_template("precios.html", propiedades=propiedades, prop_sel=prop_sel,
-                           resultado=resultado, mercado=mercado, fecha=fecha, dispo=dispo)
+            dispo = None
+        fijos = {"Expensas": p.get("costo_expensas") or 0, "Servicios": p.get("costo_servicios") or 0,
+                 "Limpieza (mensual)": p.get("costo_limpieza") or 0, "Comisión / otros": p.get("costo_comision") or 0}
+        recambio = estrategia.recambio(p)
+        proxima = None
+        if a and a["precios"]:
+            g = a["precios"][0]
+            proxima = {"txt": g["txt"], "precio": g["precio"], "motivos": g["motivos"]}
+        resultado = None
+        if request.method == "POST" and pid == pid_sel:
+            if not mercado:
+                flash("Para calcular por fecha, primero buscá la competencia de esta propiedad en la sección Competencia.", "error")
+            else:
+                desde_90 = (hoy_d - timedelta(days=90)).isoformat()
+                hist = [r for r in reservas if r["propiedad_id"] == pid and (r.get("estado") or "") != "cancelada"
+                        and ((r.get("fecha_inicio") or "") >= desde_90 or (r.get("fecha_fin") or "") >= desde_90)]
+                resultado = calcular_precio_estrategico(p, mercado, hist, fecha)
+                costos = sum(fijos.values())
+                paso_piso = 500 if costos / 30.44 >= 5000 else 1
+                piso = math.ceil(costos / 30.44 * 1.15 / paso_piso) * paso_piso
+                resultado["costo_noche"] = round(costos / 30.44)
+                if piso > resultado["precio_minimo"]:
+                    resultado["precio_minimo"] = piso
+                    resultado["explicacion"] += (f" El mínimo se subió a {monedas.formatear(piso, mon)} para cubrir tus costos fijos.")
+                    if resultado.get("precio_sugerido", 0) < piso:
+                        resultado["precio_sugerido"] = piso
+                    if resultado.get("precio_maximo", 0) <= resultado["precio_sugerido"]:
+                        resultado["precio_maximo"] = math.ceil(resultado["precio_sugerido"] * 1.2 / paso_piso) * paso_piso
+        fichas.append({"p": p, "mon": mon, "mercado": mercado, "a": a, "dispo": dispo, "fijos": fijos,
+                       "fijos_total": sum(fijos.values()), "recambio": recambio, "proxima": proxima, "resultado": resultado,
+                       "abierta": pid == pid_sel})
+    return render_template("precios.html", fichas=fichas, fecha=fecha, propiedades=propiedades)
 
 
 # ════════════════════════════════════════════════════════════════════════════

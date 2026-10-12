@@ -10,6 +10,7 @@
 #   - Costos por recambio que carga Adriano en cada propiedad.
 #   - Feriados (fuente oficial) y eventos que carga Adriano.
 
+import math
 import statistics
 from datetime import date, timedelta
 
@@ -174,7 +175,10 @@ def _contexto_precio(prop, h, hoy, especiales, ritmo):
     rc = recambio(prop)
     L = statistics.median([v["n"] for v in h["con_precio"]]) if h["con_precio"] else (prop.get("estadia_minima") or 3)
     piso = costos_fijos / 30.44 + (rc["total"] / L if rc["cargado"] else 0)
-    piso_txt = (f"no baja de {monedas.formatear(_redondeo(piso, mon), mon)}: tus costos fijos por noche "
+    # ### CAMBIO AQUÍ ### redondeado hacia arriba una sola vez: el mismo número en todas las pantallas
+    paso = 500 if mon == "ARS" and piso >= 5000 else (1 if mon == "USD" else 100)
+    piso = math.ceil(piso / paso) * paso if piso > 0 else 0
+    piso_txt = (f"no baja de {monedas.formatear(piso, mon)}: tus costos fijos por noche "
                 f"({monedas.formatear(costos_fijos / 30.44, mon)})"
                 + (f" + el recambio repartido en tu estadía típica de {L:g} noches ({monedas.formatear(rc['total'] / L, mon)})"
                    if rc["cargado"] else ""))
@@ -343,35 +347,42 @@ def acciones(a):
 
     # 1) datos que faltan (sin ellos los cálculos quedan cortos)
     if not h["validas"]:
-        add("cfg:sin_reservas", "hoy", "Subí el archivo de Reservas de Airbnb",
-            "Importar CSV → elegí el archivo de Reservas que exportás de Airbnb.",
-            ["Sin reservas cargadas no hay historial para calcular precios ni ritmo de ventas."], "importar?resaltar=subir-reservas")
+        hay_archivo = db.query_one("SELECT valor FROM config WHERE clave='ultima_importacion_reservas'")
+        if hay_archivo:   # ### CAMBIO AQUÍ ### ya se subió un archivo, pero no trae reservas de esta propiedad
+            add("cfg:sin_reservas", "hoy", "Sin reservas de esta propiedad",
+                "Si ya tiene reservas en Airbnb, subí el archivo de Reservas y asigná su anuncio a esta propiedad.",
+                ["El archivo de Reservas que se subió no trae ninguna reserva asignada a esta propiedad."],
+                "importar?resaltar=subir-reservas")
+        else:
+            add("cfg:sin_reservas", "hoy", "Subí el archivo de Reservas",
+                "Importar CSV → renglón Reservas.",
+                ["Sin reservas cargadas no hay historial para calcular precios ni ritmo de ventas."], "importar?resaltar=subir-reservas")
     if not rc["cargado"]:
-        add("cfg:recambio", "semana", "Completá cuánto te cuesta cada recambio",
+        add("cfg:recambio", "semana", "Costos de recambio",
             "Propiedades → Editar → sección 'Costos por cada salida de huésped'.",
             ["Con ese dato el sistema compara estadías cortas contra largas y calcula hasta cuánto descuento conviene."],
             f"propiedades/{pid}/editar?resaltar=recambio_limpieza")
     if not minima:
-        add("cfg:minima", "semana", "Anotá la estadía mínima que tenés en Airbnb",
+        add("cfg:minima", "semana", "Estadía mínima",
             "Propiedades → Editar → 'Estadía mínima actual en Airbnb'.",
             ["Sirve para detectar noches que quedan libres entre dos reservas y nadie puede reservar."],
             f"propiedades/{pid}/editar?resaltar=estadia_minima")
     url = (prop.get("ical_url") or "").strip()
     cuando_ical, error_ical = ical.ultimo(pid) if url else (None, "")
     if not url:
-        add("cfg:ical", "semana", "Conectá el calendario de Airbnb",
+        add("cfg:ical", "semana", "Calendario de Airbnb",
             "En Airbnb: Calendario → Disponibilidad → Conectar calendarios → Exportar calendario → copiá el link "
             "y pegalo en Propiedades → Editar → 'Link del calendario de Airbnb'.",
             ["Con el calendario conectado, el sistema sabe cada hora qué noches siguen libres sin esperar a que subas archivos."],
             f"propiedades/{pid}/editar?resaltar=ical_url")
     elif error_ical:
-        add(f"cfg:ical_error:{hoy}", "hoy", "No se pudo leer el calendario de Airbnb",
+        add(f"cfg:ical_error:{hoy}", "hoy", "Calendario de Airbnb: error",
             "Revisá que el link del calendario siga siendo el de Airbnb (Exportar calendario) y volvé a pegarlo.",
             [f"Último error: {error_ical}"], f"propiedades/{pid}/editar?resaltar=ical_url")
     if not url:
         f_imp = metricas._parse((db.query_one("SELECT valor FROM config WHERE clave='ultima_importacion_reservas'") or {}).get("valor"))
         if h["validas"] and (not f_imp or (hoy - f_imp).days > 7):
-            add(f"cfg:archivo:{hoy.isocalendar()[1]}", "hoy", "Subí el archivo de Reservas actualizado",
+            add(f"cfg:archivo:{hoy.isocalendar()[1]}", "hoy", "Archivo de Reservas viejo",
                 "Exportá las reservas de Airbnb y subilas en Importar CSV, renglón Reservas.",
                 [("El último archivo de Reservas es del " + f_imp.strftime("%d/%m") if f_imp else "Nunca se subió el archivo de Reservas")
                  + ". Sin calendario conectado, las sugerencias de hoy pueden estar viejas."], "importar?resaltar=subir-reservas")
@@ -482,6 +493,8 @@ def acciones(a):
 
     hechas = {f["clave"] for f in db.query("SELECT clave FROM acciones_estado WHERE clave = ANY(%s)",
                                            ([x["clave"] for x in out],))} if out else set()
+    for x in out:   # ### CAMBIO AQUÍ ### lo que falta configurar se muestra en una sola línea
+        x["cfg"] = ":cfg:" in x["clave"]
     return [x for x in out if x["clave"] not in hechas]
 
 
@@ -574,7 +587,7 @@ def situacion(a):
     rapido = [(d1, d2, f) for d1, d2, f in cerca if f["tipo"] == "subir" and f["vendidas"] < f["noches"]]
     lento = [(d1, d2, f) for d1, d2, f in cerca if f["tipo"] == "bajar"]
 
-    # ── Techo ──
+    # ── Techo ── (textos cortos; el detalle va en "Por qué")
     t = (a["dp"] or {}).get("techo")
     if t:
         libre_rapido = None
@@ -583,51 +596,49 @@ def situacion(a):
                                  if d1 + timedelta(days=k) not in a["ocup"]), None)
             if libre_rapido:
                 break
+        mas = []
         if libre_rapido:
             # el mismo precio que dan las tareas y la lista de noches (una sola cuenta, nunca dos números distintos)
             p, _ = precio_noche(libre_rapido, a["cx"])
-            sobre = f", {round((p / t['p90'] - 1) * 100)}% arriba de tu techo" if p and p > t["p90"] else ""
-            txt = (f"Se está vendiendo más rápido que lo normal: para las noches libres desde {_f(libre_rapido)} poné "
-                   f"{fmt(p)}{sobre}. Si también se vende antes de lo normal, seguí subiendo de a 5%.")
+            txt = f"Se vende rápido: poné {fmt(p)} en las noches libres desde {_f(libre_rapido)}."
+            if p and p > t["p90"]:
+                mas = [f"Eso es {round((p / t['p90'] - 1) * 100)}% arriba de tu techo. Si también se vende antes de lo normal, "
+                       f"seguí subiendo de a 5%."]
         elif lento:
-            txt = f"No subas por encima de {fmt(t['p90'])}: las próximas semanas vienen más flojas que lo normal."
+            txt = "No lo subas: vienen semanas más flojas que lo normal."
         else:
-            txt = (f"Mantenete cerca de {fmt(t['p90'])}. Para encontrar tu máximo, subí 5% cada vez que una fecha "
-                   f"se venda antes de lo normal.")
-        techo = {"numero": fmt(t["p90"]), "sub": "precio techo por noche", "texto": txt, "origen": [
+            txt = "Mantenelo. Subí 5% cuando una fecha se venda antes de lo normal."
+        techo = {"numero": fmt(t["p90"]), "sub": "techo por noche", "texto": txt, "origen": mas + [
             f"Sale de lo que te pagaron por noche (sin limpieza) en {t['cantidad']} reservas del último año.",
             f"El 90% de esas reservas pagó {fmt(t['p90'])} o menos: es lo más alto que la gente ya pagó varias veces.",
             f"Lo más alto que te pagaron alguna vez: {fmt(t['maximo'])}. Lo normal (la mitad pagó más, la mitad menos): "
             f"{fmt(t['mediana'])}."] + ritmo_txt}
     else:
-        techo = {"numero": "—", "sub": "precio techo por noche",
-                 "texto": "Faltan datos: se necesitan al menos 3 reservas con precio del último año (archivo de Reservas).",
-                 "origen": ["El techo sale de lo que ya te pagaron; sin reservas cargadas no hay de dónde sacarlo."]}
+        techo = {"numero": "—", "sub": "techo por noche", "texto": "Faltan reservas para calcularlo.",
+                 "origen": ["Sale de lo que ya te pagaron: hacen falta al menos 3 reservas con precio del último año "
+                            "(archivo de Reservas)."]}
 
     # ── Descuentos ──
     vac, men = a["desc"]["vacia"], a["desc"]["mensual"]
     extra = ([f"Máximo sin perder plata en una noche que quedaría vacía: {vac['pct']}%."] if vac else []) + \
             ([f"Descuento mensual (28+ noches) que te deja lo mismo por noche que las estadías cortas: {men['pct']}%."] if men else [])
+    pct = min(10, vac["pct"]) if vac else 10
     if not cerca:
-        numero, txt = "—", "Todavía no hay historial suficiente para saber si conviene (se necesitan 5 reservas con fecha de reserva)."
+        numero, txt = "—", "Faltan reservas para saberlo."
+        extra = extra + ["Para saber si conviene hacen falta al menos 5 reservas con fecha de reserva (archivo de Reservas)."]
     elif rapido and lento:
         r1, r2, _ = rapido[0]
         d1, d2, _ = lento[0]
-        pct = min(10, vac["pct"]) if vac else 10
-        numero = "0%"
-        txt = (f"{_rango_txt(r1, r2)}: sin descuento, se está vendiendo más rápido que lo normal. "
-               f"{_rango_txt(d1, d2)}: viene más flojo; si en una semana sigue igual, probá {pct}% para esas fechas.")
+        numero, txt = "0%", f"{_rango_txt(r1, r2)}: ninguno. {_rango_txt(d1, d2)}: probá {pct}% si sigue flojo."
     elif rapido:
-        numero, txt = "0%", "Hoy no des descuentos: se está vendiendo más rápido que lo normal."
+        numero, txt = "0%", "Ninguno: se vende rápido."
     elif lento:
         d1, d2, _ = lento[0]
-        pct = min(10, vac["pct"]) if vac else 10
-        numero, txt = f"{pct}%", (f"Probá {pct}% de descuento (o una promoción de Airbnb) para {_rango_txt(d1, d2)}: "
-                                  f"viene más flojo que lo normal. Anotalo en 'Pruebas' para ver si funcionó.")
+        numero, txt = f"{pct}%", f"Probá {pct}% para {_rango_txt(d1, d2)}: viene flojo."
     else:
-        numero, txt = "0%", "No hace falta descuento ahora: venís vendiendo al ritmo normal."
-    descuentos = {"numero": numero, "sub": "descuento recomendado", "texto": txt, "extra": extra,
-                  "origen": ritmo_txt + (vac["explica"] if vac else []) + (men["explica"] if men else [])}
+        numero, txt = "0%", "Ninguno: venís al ritmo normal."
+    descuentos = {"numero": numero, "sub": "descuento sugerido", "texto": txt,
+                  "origen": extra + ritmo_txt + (vac["explica"] if vac else []) + (men["explica"] if men else [])}
 
     # ── Disponibilidad ──
     proximos = {hoy + timedelta(days=k) for k in range(30)}
@@ -636,17 +647,17 @@ def situacion(a):
     huecos = [x for x in a["libres"] if x[2] and minima and (x[1] - x[0]).days + 1 < minima and x[0] <= hoy + timedelta(days=60)]
     em = a["em"]
     if not em["recambio"]["cargado"]:
-        rec = "Cargá el costo de cada recambio para saber si te conviene un mínimo más corto o más largo."
+        rec = "Cargá el costo de recambio para saber qué mínimo conviene."
     elif em["sugerido"] and minima and em["sugerido"] != minima and em["conclusion"]:
-        rec = f"Tus números dicen que conviene probar estadía mínima de {em['sugerido']} noches (hoy tenés {minima})."
+        rec = f"Probá estadía mínima de {em['sugerido']} noches (hoy: {minima})."
     elif minima:
-        rec = f"Mantené tu estadía mínima de {minima} noches."
+        rec = f"Estadía mínima de {minima} noches: está bien."
     else:
-        rec = "Anotá en la propiedad la estadía mínima que tenés en Airbnb."
+        rec = "Anotá tu estadía mínima de Airbnb."
     if huecos:
-        rec += f" Hay {len(huecos)} hueco{'s' if len(huecos) > 1 else ''} entre reservas que nadie puede reservar con tu mínimo: están en la lista de tareas."
-    disponibilidad = {"numero": f"{libres} de 30", "sub": "noches libres en los próximos 30 días", "texto": rec,
+        rec += f" {len(huecos)} hueco{'s' if len(huecos) > 1 else ''} que nadie puede reservar (ver tareas)."
+    disponibilidad = {"numero": f"{libres} de 30", "sub": "noches libres próximas", "texto": rec,
                       "origen": [f"Noches ocupadas según {a['fuente']}.",
-                                 f"Ocupadas en los próximos 30 días: {30 - libres}. Libres: {libres}."]
+                                 f"Próximos 30 días: {30 - libres} ocupadas, {libres} libres."]
                                 + ([em["conclusion"]] if em["conclusion"] else [])}
     return {"techo": techo, "descuentos": descuentos, "disponibilidad": disponibilidad}

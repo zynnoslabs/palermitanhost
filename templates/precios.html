@@ -1,164 +1,121 @@
 {% extends "base.html" %}
-{% block title %}Precio sugerido – PalermitanHost{% endblock %}
+{% from "_comentarios.html" import origen %}
+{% block title %}Precios – PalermitanHost{% endblock %}
+{# ### CAMBIO AQUÍ ### — una sección plegable por propiedad: sus precios, sus costos, calcular por fecha y cómo viene vendiendo #}
 {% block content %}
-{# ### CAMBIO AQUÍ ### — página rehecha igual que el demo: mercado + precio estratégico paso a paso #}
-{% set mp = (prop_sel.moneda if prop_sel and prop_sel.moneda else 'ARS') %}
-{% macro fmt(v) %}{{ v|dinero(mp) }}{% endmacro %}
-<div class="page-header"><h2>Precio sugerido{{ info('precios') }}</h2></div>
+<div class="page-header"><h2>Precios{{ info('precios') }}</h2></div>
 
-{% if not propiedades %}
+{% if not fichas %}
 <div class="form-card"><p>Primero cargá una propiedad.</p>
   <a href="{{ url_for('nueva_propiedad') }}" class="btn btn-primary">Cargar propiedad</a></div>
-{% else %}
+{% endif %}
 
-<div class="form-card">
-  <form method="post" class="form-grid">
-    <div class="form-group">
-      <label>Propiedad</label>
-      <select name="propiedad_id" onchange="window.location='{{ url_for('precios') }}?propiedad_id='+this.value">
-        {% for p in propiedades %}
-          <option value="{{ p.id }}" {% if prop_sel and prop_sel.id==p.id %}selected{% endif %}>{{ p.nombre }}</option>
-        {% endfor %}
-      </select>
+{% for f in fichas %}
+{% set p = f.p %}{% set pid = p.id %}{% set mp = f.mon %}
+<details class="card pp" id="pp-{{ pid }}" {% if f.abierta %}open{% endif %}>
+  <summary class="pp-cab">
+    <span class="pp-nombre">{{ p.nombre }}{% if (p.estado or 'activa') != 'activa' %} <small class="muted">({{ p.estado }})</small>{% endif %}</span>
+    <span class="pp-chips">
+      <span>Base <strong>{{ (p.precio_base)|dinero(mp) if p.precio_base else '—' }}</strong></span>
+      {% if f.dispo and f.dispo.techo %}<span>Techo <strong>{{ (f.dispo.techo.p90)|dinero(mp) }}</strong></span>{% endif %}
+      {% if f.mercado %}<span>Zona <strong>{{ (f.mercado.mediana)|dinero(mp) }}</strong></span>{% endif %}
+      <span>Costos <strong>{{ (f.fijos_total)|dinero(mp) }}</strong>/mes</span>
+    </span>
+  </summary>
+
+  <div class="pp-grid">
+    {# ── Precios ── #}
+    <div class="pp-col">
+      <h4>Precios por noche</h4>
+      <table class="pp-tabla">
+        <tr><td>Precio base (el tuyo)</td><td>{{ (p.precio_base)|dinero(mp) if p.precio_base else '—' }}</td></tr>
+        {% if f.proxima and f.proxima.precio %}
+        <tr><td>Sugerido próxima noche libre <small class="muted">({{ f.proxima.txt }})</small></td><td><strong>{{ (f.proxima.precio)|dinero(mp) }}</strong></td></tr>
+        {% endif %}
+        {% if f.dispo and f.dispo.techo %}
+        <tr><td>Te pagan normalmente</td><td>{{ (f.dispo.techo.mediana)|dinero(mp) }}</td></tr>
+        <tr><td>Techo probado{{ info('techo') }}</td><td>{{ (f.dispo.techo.p90)|dinero(mp) }}</td></tr>
+        <tr><td>Lo más alto que te pagaron</td><td>{{ (f.dispo.techo.maximo)|dinero(mp) }}</td></tr>
+        {% endif %}
+        {% if f.mercado %}
+        <tr id="mercado-{{ pid }}"><td>Zona (mediana de {{ f.mercado.cantidad_propiedades }} anuncios){{ info('mediana') }}</td><td>{{ (f.mercado.mediana)|dinero(mp) }}</td></tr>
+        <tr><td>Zona: más barato / más caro</td><td>{{ (f.mercado.min)|dinero(mp) }} / {{ (f.mercado.max)|dinero(mp) }}</td></tr>
+        {% else %}
+        <tr id="mercado-{{ pid }}"><td>Zona</td><td><a class="link" href="{{ url_for('competencia', pid=pid) }}">Buscar</a></td></tr>
+        {% endif %}
+        {% if f.a %}<tr><td>Mínimo (no bajar de){{ info('precio_min') }}</td><td>{{ (f.a.cx.piso)|dinero(mp) }}</td></tr>{% endif %}
+      </table>
+      {% if f.proxima %}{{ origen(f.proxima.motivos) }}{% endif %}
     </div>
-    <div class="form-group">
-      <label>Fecha a calcular</label>
-      <input type="date" name="fecha" value="{{ fecha }}" required>
+
+    {# ── Costos ── #}
+    <div class="pp-col">
+      <h4>Costos</h4>
+      <table class="pp-tabla">
+        {% for k, v in f.fijos.items() %}<tr><td>{{ k }}</td><td>{{ (v)|dinero(mp) if v else '—' }}</td></tr>{% endfor %}
+        <tr class="pp-total"><td>Total por mes</td><td>{{ (f.fijos_total)|dinero(mp) }}</td></tr>
+        <tr><td>Por noche (÷ 30,44 días)</td><td>{{ (f.fijos_total / 30.44)|dinero(mp) }}</td></tr>
+        {% for k, v in f.recambio.partes.items() %}<tr><td>Recambio: {{ k }}</td><td>{{ (v)|dinero(mp) if v else '—' }}</td></tr>{% endfor %}
+        <tr class="pp-total"><td>Cada recambio</td><td>{{ (f.recambio.total)|dinero(mp) if f.recambio.cargado else '—' }}</td></tr>
+      </table>
+      <a class="link pp-editar" href="{{ url_for('editar_propiedad', pid=pid) }}?resaltar=costo_expensas">Editar costos</a>
     </div>
-    <div class="form-group" style="align-self:flex-end">
-      <button type="submit" class="btn btn-primary">Calcular precio</button>
-    </div>
+  </div>
+
+  {# ── Calcular para una fecha ── #}
+  <form method="post" action="{{ url_for('precios') }}" class="pp-calc">
+    <input type="hidden" name="propiedad_id" value="{{ pid }}">
+    <label>Precio para una fecha:</label>
+    <input type="date" name="fecha" value="{{ fecha }}" required>
+    <button type="submit" class="btn btn-sm btn-primary">Calcular</button>
   </form>
-</div>
-
-{% if mercado %}
-<div class="card" style="margin-bottom:16px" id="mercado">
-  <div class="card-title">Mercado — {{ prop_sel.barrio or '' }}{{ info('mercado') }} <span class="muted">· en {{ mp }}, la moneda de la propiedad</span></div>
-  <div class="stats-grid">
-    <div class="stat-card"><div class="stat-num">{{ fmt(mercado.mediana) }}</div><div class="stat-lbl">Mediana zona{{ info('mediana') }}</div></div>
-    <div class="stat-card"><div class="stat-num">{{ fmt(mercado.min) }}</div><div class="stat-lbl">Precio más bajo</div></div>
-    <div class="stat-card"><div class="stat-num">{{ fmt(mercado.max) }}</div><div class="stat-lbl">Precio más alto</div></div>
-    <div class="stat-card"><div class="stat-num">{{ (mercado.rating_promedio_zona|num(2)) ~ '★' if mercado.rating_real else '—' }}</div><div class="stat-lbl">Puntaje promedio comparables</div></div>
+  {% if f.resultado %}
+  {% set r = f.resultado %}
+  <div class="pp-resultado">
+    <div><span class="muted">Mínimo</span><strong>{{ (r.precio_minimo)|dinero(mp) }}</strong></div>
+    <div class="pp-sug"><span class="muted">Sugerido</span><strong>{{ (r.precio_sugerido)|dinero(mp) }}</strong>{% if tc_info %}<small class="muted">≈ {{ r.precio_sugerido|dinero(mp, 'USD' if mp == 'ARS' else 'ARS') }}</small>{% endif %}<small class="muted">{{ r.temporada }} · {{ 'finde' if r.es_fin_de_semana else 'semana' }}</small></div>
+    <div><span class="muted">Máximo</span><strong>{{ (r.precio_maximo)|dinero(mp) }}</strong></div>
   </div>
-  <p class="muted" style="margin-top:8px">Fuente: {{ mercado.cantidad_propiedades }} comparables · búsqueda del {{ mercado.fecha|fecha }} ·
-    <a href="{{ url_for('competencia', pid=prop_sel.id) }}" class="link">Ver comparables ↗</a></p>
-</div>
-{% if mercado and mercado.sin_convertir %}<div class="alert alert-warn">{{ mercado.sin_convertir }} comparables están en otra moneda y no se usaron: cargá el tipo de cambio.</div>{% endif %}
-{% elif prop_sel %}
-<div class="card" style="margin-bottom:16px">
-  <p>Todavía no hay datos de competencia para esta propiedad.</p>
-  <a href="{{ url_for('competencia', pid=prop_sel.id) }}" class="btn btn-primary">Buscar comparables con IA</a>
-</div>
-{% endif %}
+  {{ origen([r.explicacion] + (r.pasos|map(attribute='descripcion')|list)) }}
+  {% endif %}
 
-{% if resultado %}
-<div class="precio-resultado">
-  <div class="precio-box precio-min">
-    <div class="precio-lbl">Mínimo{{ info('precio_min') }}</div>
-    <div class="precio-num">{{ fmt(resultado.precio_minimo) }}</div>
-    <div class="muted">Cubre tus costos</div>
-  </div>
-  <div class="precio-box precio-sug">
-    <div class="precio-lbl">⭐ Sugerido{{ info('precio_sug') }}</div>
-    <div class="precio-num">{{ fmt(resultado.precio_sugerido) }}</div>
-    <div class="muted">Temporada {{ resultado.temporada }} · {{ 'fin de semana' if resultado.es_fin_de_semana else 'entre semana' }}</div>
-    {% if tc_info %}<div class="muted">≈ {{ resultado.precio_sugerido|dinero(mp, 'USD' if mp == 'ARS' else 'ARS') }}</div>{% endif %}
-  </div>
-  <div class="precio-box precio-max">
-    <div class="precio-lbl">Máximo{{ info('precio_max') }}</div>
-    <div class="precio-num">{{ fmt(resultado.precio_maximo) }}</div>
-    <div class="muted">Techo recomendado</div>
-  </div>
-</div>
-
-<div class="form-card">
-  <h3>Cómo se calculó este precio{{ info('como_calculo') }}</h3>
-  <table class="tabla">
-    <thead><tr><th>Paso</th><th>Factor</th><th>Efecto</th><th>Precio parcial</th></tr></thead>
-    <tbody>
-    {% for p in resultado.pasos %}
-      <tr>
-        <td>{{ p.paso }}</td>
-        <td>{{ p.descripcion }}</td>
-        <td>{{ '—' if p.paso == 1 else '×' ~ (p.multiplicador|num(2)) }}</td>
-        <td><strong>{{ fmt(p.acumulado) }}</strong></td>
-      </tr>
-    {% endfor %}
-      <tr><td></td><td>Costo fijo por noche (piso del mínimo)</td><td>—</td><td>{{ fmt(resultado.costo_noche) }}</td></tr>
-    </tbody>
-  </table>
-  <div class="respuesta-texto" style="margin-top:12px"><strong>Resumen:</strong> {{ resultado.explicacion }}</div>
-</div>
-{% endif %}
-
-{# ### CAMBIO AQUÍ ### ¿cuánto más podrías cobrar? — anticipación y ritmo de ventas #}
-{% if prop_sel %}
-<div class="form-card" id="disposicion" style="margin-top:16px">
-  <h3>¿Cuánto más podrías cobrar?{{ info('disposicion') }}</h3>
-  {% if not dispo %}
-    <p class="muted">Todavía no hay reservas de esta propiedad. Subí el archivo de Reservas de Airbnb y acá vas a ver si te convenía cobrar más.</p>
-  {% else %}
-    {% if not dispo.suficiente %}
-    <div class="alert alert-warn">Hay {{ dispo.con_fecha }} reservas con la fecha en que se hicieron; se necesitan al menos 5 para comparar.
-      Esa fecha viene en el <strong>archivo de Reservas</strong> (columna "Reservada"): subilo en Importar CSV.</div>
-    {% else %}
-    <p class="muted" style="margin-bottom:12px">Normalmente te reservan <strong>{{ dispo.mediana_ant }} días antes</strong> de la llegada{{ info('anticipacion_res') }}.
-      Cuando una fecha se vende mucho antes que eso, a ese precio sobraba demanda.</p>
-    {% endif %}
-
-    {% if dispo.ritmo %}
-    <div id="ritmo" style="margin-bottom:16px">
-      <h4 style="margin-bottom:6px">Cómo venís vendiendo{{ info('ritmo') }}</h4>
-      <div class="ritmo-grid">
-        {% for f in dispo.ritmo.filas %}
-        <div class="ritmo-item ritmo-{{ f.tipo }}">
-          <div class="ritmo-tit">{{ f.nombre }}</div>
-          <div class="ritmo-num">{{ f.real }}% <span class="muted">vendido · lo normal: {{ f.esperado }}%</span></div>
-          <div class="ritmo-barra"><i style="width:{{ [f.real, 100]|min }}%"></i><b style="left:{{ [f.esperado, 100]|min }}%" title="Lo normal"></b></div>
-          <div class="ritmo-txt">{{ f.texto }}</div>
-        </div>
-        {% endfor %}
+  {# ── Cómo viene vendiendo ── #}
+  {% set d = f.dispo %}
+  {% if d and (d.ritmo or d.filas) %}
+  <details class="pp-sub" id="disposicion-{{ pid }}">
+    <summary>Cómo venís vendiendo{% if d.mediana_ant is not none %} · te reservan {{ d.mediana_ant }} días antes{% endif %}</summary>
+    {% if d.ritmo %}
+    <div class="ritmo-grid" id="ritmo-{{ pid }}">
+      {% for x in d.ritmo.filas %}
+      <div class="ritmo-item ritmo-{{ x.tipo }}">
+        <div class="ritmo-tit">{{ x.nombre }}</div>
+        <div class="ritmo-num">{{ x.real }}% <span class="muted">· normal {{ x.esperado }}%</span></div>
+        <div class="ritmo-barra"><i style="width:{{ [x.real, 100]|min }}%"></i><b style="left:{{ [x.esperado, 100]|min }}%"></b></div>
+        <div class="ritmo-txt">{{ x.texto }}</div>
       </div>
-      <p class="muted" style="font-size:.8rem;margin-top:6px">Lo normal sale de tus últimos {{ dispo.ritmo.dias_hist }} días (ocupación {{ dispo.ritmo.ocup_normal }}%). No distingue feriados ni eventos: usalo como guía.</p>
+      {% endfor %}
     </div>
+    {% elif not d.suficiente %}
+    <p class="muted" id="ritmo-{{ pid }}">Se necesitan al menos 5 reservas con fecha de reserva (archivo de Reservas).</p>
     {% endif %}
-
-    {% if dispo.techo %}
-    <div class="stats-grid" style="margin-bottom:6px">
-      <div class="stat-card"><div class="stat-num">{{ fmt(dispo.techo.mediana) }}</div><div class="stat-lbl">Lo que te pagan normalmente</div></div>
-      <div class="stat-card"><div class="stat-num">{{ fmt(dispo.techo.p90) }}</div><div class="stat-lbl">Techo probado{{ info('techo') }}</div></div>
-      <div class="stat-card"><div class="stat-num">{{ fmt(dispo.techo.maximo) }}</div><div class="stat-lbl">Lo más alto que te pagaron</div></div>
-      {% if dispo.techo.sobre_mercado is not none %}
-      <div class="stat-card"><div class="stat-num">{{ dispo.techo.sobre_mercado }} de {{ dispo.techo.cantidad }}</div><div class="stat-lbl">Reservas por encima de la mediana de la zona</div></div>
-      {% endif %}
-    </div>
-    <p class="muted" style="font-size:.8rem;margin-bottom:14px">Por noche, sin limpieza, en {{ mp }}. Último año.</p>
-    {% endif %}
-
-    {% if dispo.filas %}
-    <h4 style="margin-bottom:6px">Tus últimas reservas</h4>
-    <div class="table-wrap"><table class="tabla tabla-dispo">
-      <thead><tr><th>Huésped</th><th>Reservó</th><th>Llegada</th><th>Anticipación</th><th>Por noche</th>{% if mercado %}<th>vs zona</th>{% endif %}<th>Qué dice</th></tr></thead>
+    {% if d.filas %}
+    <div class="table-wrap" style="margin-top:10px"><table class="tabla tabla-dispo">
+      <thead><tr><th>Llegada</th><th>Reservó con</th><th>Por noche</th>{% if f.mercado %}<th>vs zona</th>{% endif %}<th>Qué dice</th></tr></thead>
       <tbody>
-      {% for f in dispo.filas %}
-      <tr class="fila-{{ f.tipo }}">
-        <td>{{ f.huesped }}</td>
-        <td>{{ f.reservo|fecha if f.reservo else '—' }}</td>
-        <td>{{ f.llegada|fecha }}</td>
-        <td>{{ (f.ant ~ (' día' if f.ant == 1 else ' días')) if f.ant is not none else '—' }}</td>
-        <td>{{ fmt(f.precio) if f.precio else '—' }}</td>
-        {% if mercado %}<td>{{ ('+' if f.vs_mercado > 0 else '') ~ f.vs_mercado ~ '%' if f.vs_mercado is not none else '—' }}</td>{% endif %}
-        <td class="col-dice">{{ f.texto }}</td>
+      {% for x in d.filas %}
+      <tr class="fila-{{ x.tipo }}">
+        <td>{{ x.llegada|fecha }}</td>
+        <td>{{ (x.ant ~ (' día' if x.ant == 1 else ' días')) if x.ant is not none else '—' }}</td>
+        <td>{{ (x.precio)|dinero(mp) if x.precio else '—' }}</td>
+        {% if f.mercado %}<td>{{ ('+' if x.vs_mercado > 0 else '') ~ x.vs_mercado ~ '%' if x.vs_mercado is not none else '—' }}</td>{% endif %}
+        <td class="col-dice">{{ x.texto if x.tipo != 'neutra' else '—' }}</td>
       </tr>
       {% endfor %}
       </tbody>
     </table></div>
     {% endif %}
-
-    <div class="respuesta-texto" style="margin-top:12px"><strong>Cómo encontrar tu precio máximo:</strong> subí de a 5% cada vez que una fecha se venda antes de lo normal. Si fechas cercanas pasan 2 semanas sin reservarse, bajá un paso. Así vas encontrando hasta dónde paga la gente sin quedarte con noches vacías. Ojo: Airbnb muestra más arriba en las búsquedas a los que están más baratos que la zona, así que subir mucho de golpe puede bajar las visitas.</div>
-    {% if dispo.sin_tc %}<p class="muted" style="margin-top:6px">{{ dispo.sin_tc }} reservas en otra moneda no tienen monto: cargá el tipo de cambio.</p>{% endif %}
+  </details>
   {% endif %}
-</div>
-{% endif %}
-{% endif %}
+</details>
+{% endfor %}
 {% endblock %}
