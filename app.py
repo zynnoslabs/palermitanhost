@@ -30,6 +30,9 @@ import ayuda   # ### CAMBIO AQUÍ ### textos del ícono 'i'
 import privacidad   # ### CAMBIO AQUÍ ### nombres de huéspedes ocultos para la IA
 import archivo_anual   # ### CAMBIO AQUÍ ### archivo anual descargable
 import disposicion_pago   # ### CAMBIO AQUÍ ### cuánto más podrías cobrar
+import estrategia   # ### CAMBIO AQUÍ ### qué hacer hoy
+import feriados   # ### CAMBIO AQUÍ ###
+import ical   # ### CAMBIO AQUÍ ### calendario de Airbnb
 import novedades   # ### CAMBIO AQUÍ ### historial, calendario y avisos de hoy/mañana
 import alertas   # ### CAMBIO AQUÍ ### situaciones raras o pendientes
 
@@ -99,20 +102,46 @@ def filtro_fecha(valor, largo=10):
 
 @app.template_filter("md")
 def filtro_md(texto):
-    """### CAMBIO AQUÍ ### muestra el informe de la IA con títulos, negritas y listas
+    """### CAMBIO AQUÍ ### muestra el texto de la IA con títulos, negritas, listas y TABLAS
     (antes se veían los ## y ** sueltos). Todo se escapa primero: no se puede meter código."""
     from markupsafe import Markup, escape
-    html, en_lista = [], False
+
+    def negrita(t):
+        return re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", t)
+
+    html, en_lista, tabla = [], False, []
+
+    def cerrar_tabla():
+        if not tabla:
+            return
+        filas = [[negrita(str(escape(c.strip()))) for c in f.strip().strip("|").split("|")] for f, _ in tabla]
+        con_cabecera = len(tabla) > 1 and tabla[0][1]
+        partes = ['<div class="table-wrap"><table class="tabla tabla-ia">']
+        if con_cabecera:
+            partes.append("<thead><tr>" + "".join(f"<th>{c}</th>" for c in filas[0]) + "</tr></thead>")
+            filas = filas[1:]
+        partes.append("<tbody>" + "".join("<tr>" + "".join(f"<td>{c}</td>" for c in f) + "</tr>" for f in filas) + "</tbody></table></div>")
+        html.append("".join(partes))
+        tabla.clear()
+
     for linea in str(texto or "").split("\n"):
         l = linea.strip()
-        if re.match(r"^\|?\s*:?-{3,}", l):
+        if re.match(r"^\|?\s*:?-{3,}", l):   # línea separadora de una tabla: marca que la fila anterior era cabecera
+            if tabla:
+                tabla[-1] = (tabla[-1][0], True)
             continue
+        if l.startswith("|"):
+            if en_lista:
+                html.append("</ul>")
+                en_lista = False
+            tabla.append((l, False))
+            continue
+        cerrar_tabla()
         es_item = l.startswith(("- ", "* ", "• "))
         if en_lista and not es_item:
             html.append("</ul>")
             en_lista = False
-        t = str(escape(l[2:] if es_item else l))
-        t = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", t)
+        t = negrita(str(escape(l[2:] if es_item else l)))
         if not l:
             continue
         if l.startswith("#"):
@@ -125,11 +154,9 @@ def filtro_md(texto):
                 html.append("<ul>")
                 en_lista = True
             html.append(f"<li>{t}</li>")
-        elif l.startswith("|"):
-            celdas = [c.strip() for c in t.strip("|").split("|")]
-            html.append("<p>" + " · ".join(c for c in celdas if c) + "</p>")
         else:
             html.append(f"<p>{t}</p>")
+    cerrar_tabla()
     if en_lista:
         html.append("</ul>")
     return Markup("\n".join(html))
@@ -214,6 +241,26 @@ def inyectar_hoy():
     if not session.get("logged_in"):
         return {}
     return {"movimientos_hoy": novedades.cantidad_hoy()}
+
+
+@app.template_filter("hace")
+def filtro_hace(cuando):
+    """### CAMBIO AQUÍ ### 'hace 5 minutos', 'hace 2 horas', 'hace 3 días'."""
+    from datetime import timezone as _tz
+    if not cuando or not hasattr(cuando, "tzinfo"):
+        return ""
+    ahora = datetime.now(_tz.utc) if cuando.tzinfo else datetime.now()
+    seg = max(0, int((ahora - cuando).total_seconds()))
+    if seg < 60:
+        return "recién"
+    if seg < 3600:
+        n = seg // 60
+        return f"hace {n} minuto{'s' if n > 1 else ''}"
+    if seg < 86400:
+        n = seg // 3600
+        return f"hace {n} hora{'s' if n > 1 else ''}"
+    n = seg // 86400
+    return f"hace {n} día{'s' if n > 1 else ''}"
 
 
 @app.template_filter("dinero")
@@ -378,7 +425,7 @@ def login():
             # solo rutas internas (nunca otro sitio)
             if volver.startswith("/") and not volver.startswith("//") and not volver.startswith("/login"):
                 return redirect(volver)
-            return redirect(url_for("dashboard"))
+            return redirect(url_for("hoy"))   # ### CAMBIO AQUÍ ### al entrar, primero "Qué hacer hoy"
         _registrar_fallo(ip)
         flash("Usuario o contraseña incorrectos.", "error")
     return render_template("login.html")
@@ -465,11 +512,204 @@ def _volver_al_dashboard():
     return redirect(destino if destino.startswith("/") and not destino.startswith("//") else url_for("dashboard"))
 
 
+# ════════════════════════════════════════════════════════════════════════════
+# ### CAMBIO AQUÍ ### QUÉ HACER HOY y ESTRATEGIA
+# ════════════════════════════════════════════════════════════════════════════
+TIPOS_PRUEBA = {"promo": "Promoción personalizada", "semanal": "Descuento semanal", "mensual": "Descuento mensual",
+                "anticipada": "Descuento por reserva anticipada", "ultimo_momento": "Descuento de último momento",
+                "precio": "Cambio de precio", "minima": "Cambio de estadía mínima", "otro": "Otro"}
+app.jinja_env.globals["TIPOS_PRUEBA"] = TIPOS_PRUEBA
+
+
+def _volver(defecto):
+    destino = request.form.get("volver") or ""
+    return redirect(destino if destino.startswith("/") and not destino.startswith("//") else defecto)
+
+
+def _leer_calendario(p):
+    try:
+        ical.actualizar(p)
+    except Exception as e:
+        print(f"[ical] {p.get('id')}: {e}")
+
+
+def _refrescar_calendarios(props, espera=6.0):
+    """Lee los calendarios de Airbnb que tengan más de una hora (en paralelo, sin trabar la página)."""
+    import threading
+    hilos = [threading.Thread(target=_leer_calendario, args=(p,), daemon=True)
+             for p in props if (p.get("ical_url") or "").strip()]
+    limite = time.monotonic() + espera
+    for h in hilos:
+        h.start()
+    for h in hilos:
+        h.join(max(0.0, limite - time.monotonic()))
+
+
+def _analisis_estrategia(props, hoy):
+    reservas = db.query("SELECT * FROM reservas")
+    tc = monedas.tc_valor()
+    try:
+        lista_esp, origen_fer = feriados.proximos(hoy, estrategia.DIAS_ADELANTE)
+    except Exception as e:
+        print(f"[feriados] {e}")
+        lista_esp, origen_fer = [], "sin datos"
+    out = []
+    for p in props:
+        try:
+            out.append(estrategia.analizar(p, reservas, hoy, tc, lista_esp))
+        except Exception as e:
+            print(f"[estrategia] {p.get('id')}: {e}")
+    return out, lista_esp, origen_fer
+
+
+@app.route("/hoy")
+@login_required
+def hoy():
+    dia = date.today()
+    props = db.query("SELECT * FROM propiedades WHERE COALESCE(estado,'activa') = 'activa' ORDER BY nombre")
+    _refrescar_calendarios(props)
+    props = db.query("SELECT * FROM propiedades WHERE COALESCE(estado,'activa') = 'activa' ORDER BY nombre")
+    analisis, lista_esp, origen_fer = _analisis_estrategia(props, dia)
+    bloques, claves = [], []
+    for a in analisis:
+        try:
+            acc = estrategia.acciones(a)
+        except Exception as e:
+            print(f"[estrategia] acciones {a['prop']['id']}: {e}")
+            acc = []
+        cal_cuando, cal_error = ical.ultimo(a["prop"]["id"]) if (a["prop"].get("ical_url") or "").strip() else (None, "")
+        bloques.append({"prop": a["prop"], "acciones": acc, "cal_cuando": cal_cuando, "cal_error": cal_error,
+                        "por": {c: [x for x in acc if x["cuando"] == c] for c in ("hoy", "semana", "mes")}})
+        claves += [x["clave"] for x in acc]
+    f_imp = db.query_one("SELECT valor FROM config WHERE clave='ultima_importacion_reservas'")
+    return render_template("hoy.html", bloques=bloques, dia=dia, coment=estrategia.comentarios(claves),
+                           ultima_reservas=(f_imp or {}).get("valor"), hay_props=bool(props),
+                           total=sum(len(b["acciones"]) for b in bloques))
+
+
+@app.route("/estrategia")
+@login_required
+def estrategia_pagina():
+    dia = date.today()
+    props = db.query("SELECT * FROM propiedades ORDER BY nombre")
+    pid = request.args.get("propiedad_id", type=int) or next((p["id"] for p in props if (p.get("estado") or "activa") == "activa"),
+                                                            props[0]["id"] if props else None)
+    prop = next((p for p in props if p["id"] == pid), None)
+    a, lista_esp, origen_fer = None, [], ""
+    if prop:
+        _refrescar_calendarios([prop])
+        prop = db.query_one("SELECT * FROM propiedades WHERE id=%s", (pid,))
+        res, lista_esp, origen_fer = _analisis_estrategia([prop], dia)
+        a = res[0] if res else None
+    claves = [f"{pid}:{k}" for k in ("estadia", "precios", "descuentos", "pruebas", "recambio")] + ["eventos"]
+    cal_cuando, cal_error = ical.ultimo(pid) if prop and (prop.get("ical_url") or "").strip() else (None, "")
+    return render_template("estrategia.html", propiedades=props, prop=prop, a=a, esp=lista_esp, origen_fer=origen_fer,
+                           coment=estrategia.comentarios(claves), dia=dia, cal_cuando=cal_cuando, cal_error=cal_error)
+
+
+@app.route("/acciones/estado", methods=["POST"])
+@login_required
+def accion_estado():
+    clave = (request.form.get("clave") or "").strip()[:200]
+    estado = request.form.get("estado")
+    if clave and estado in ("hecho", "descartado"):
+        db.execute("""INSERT INTO acciones_estado (clave, estado, fecha) VALUES (%s, %s, %s)
+                      ON CONFLICT (clave) DO UPDATE SET estado = EXCLUDED.estado, fecha = EXCLUDED.fecha""",
+                   (clave, estado, date.today().isoformat()))
+        flash("Marcado como hecho." if estado == "hecho" else "Sugerencia descartada.", "success")
+    return _volver(url_for("hoy"))
+
+
+@app.route("/comentarios", methods=["POST"])
+@login_required
+def comentar():
+    clave = (request.form.get("clave") or "").strip()[:200]
+    texto = (request.form.get("texto") or "").strip()[:1000]
+    if clave and texto:
+        db.execute("INSERT INTO comentarios (clave, texto) VALUES (%s, %s)", (clave, texto))
+        flash("Comentario guardado. El Asistente IA lo va a tener en cuenta.", "success")
+    elif clave:
+        flash("Escribí algo en el comentario.", "warn")
+    return _volver(url_for("hoy"))
+
+
+@app.route("/comentarios/<int:cid>/eliminar", methods=["POST"])
+@login_required
+def comentario_eliminar(cid):
+    db.execute("DELETE FROM comentarios WHERE id=%s", (cid,))
+    return _volver(url_for("hoy"))
+
+
+@app.route("/pruebas", methods=["POST"])
+@login_required
+def prueba_nueva():
+    pid = request.form.get("propiedad_id", type=int)
+    f = met.fecha_valida(request.form.get("fecha"))
+    tipo = request.form.get("tipo")
+    txt = (request.form.get("porcentaje") or "").strip()
+    pct = importador.parsear_monto(txt) if txt else 0
+    prop = db.query_one("SELECT id FROM propiedades WHERE id=%s", (pid,)) if pid else None
+    if not prop or not f or tipo not in TIPOS_PRUEBA or not (0 <= pct <= 90) or f > date.today():
+        flash("No se guardó: revisá la fecha (no puede ser futura), el tipo y el porcentaje (de 0 a 90).", "error")
+    else:
+        db.execute("INSERT INTO pruebas_descuento (propiedad_id, fecha, tipo, porcentaje, nota) VALUES (%s,%s,%s,%s,%s)",
+                   (pid, f.isoformat(), tipo, pct, (request.form.get("nota") or "").strip()[:300]))
+        flash("Prueba anotada. En 14 días vas a ver qué pasó con las reservas.", "success")
+    return _volver(url_for("estrategia_pagina", propiedad_id=pid))
+
+
+@app.route("/pruebas/<int:prid>/eliminar", methods=["POST"])
+@login_required
+def prueba_eliminar(prid):
+    db.execute("DELETE FROM pruebas_descuento WHERE id=%s", (prid,))
+    return _volver(url_for("estrategia_pagina"))
+
+
+@app.route("/eventos", methods=["POST"])
+@login_required
+def evento_nuevo():
+    d1 = met.fecha_valida(request.form.get("desde"))
+    d2 = met.fecha_valida(request.form.get("hasta")) or d1
+    nombre = (request.form.get("nombre") or "").strip()[:80]
+    try:
+        impacto = int(request.form.get("impacto") or 10)
+    except ValueError:
+        impacto = None
+    if not d1 or not d2 or d2 < d1 or (d2 - d1).days > 60 or not nombre or impacto is None or not (-50 <= impacto <= 100):
+        flash("No se guardó el evento: revisá las fechas (hasta 60 días), el nombre y el impacto (de -50 a 100).", "error")
+    else:
+        db.execute("INSERT INTO eventos (desde, hasta, nombre, impacto) VALUES (%s,%s,%s,%s)",
+                   (d1.isoformat(), d2.isoformat(), nombre, impacto))
+        flash("Evento guardado: ya se usa en los precios sugeridos.", "success")
+    return _volver(url_for("estrategia_pagina"))
+
+
+@app.route("/eventos/<int:eid>/eliminar", methods=["POST"])
+@login_required
+def evento_eliminar(eid):
+    db.execute("DELETE FROM eventos WHERE id=%s", (eid,))
+    return _volver(url_for("estrategia_pagina"))
+
+
+@app.route("/calendario-airbnb/<int:pid>/leer", methods=["POST"])
+@login_required
+def ical_leer(pid):
+    prop = db.query_one("SELECT * FROM propiedades WHERE id=%s", (pid,))
+    if prop:
+        try:
+            ok, msg = ical.actualizar(prop, forzar=True)
+        except Exception as e:
+            ok, msg = False, str(e)[:150]
+        flash("Calendario de Airbnb leído." if ok else f"No se pudo leer el calendario: {msg}", "success" if ok else "error")
+    return _volver(url_for("hoy"))
+
+
 # ### CAMBIO AQUÍ ### BORRAR TODOS LOS DATOS (solo para servicios de prueba)
 # Apagado por defecto: solo existe si en Render se agrega la variable PERMITIR_BORRAR_TODO=si.
 # En el servicio de Adriano NO se pone esa variable, así nunca puede borrar todo por error.
 TABLAS_DATOS = ["reservas_historial", "movimientos_airbnb", "reservas", "competencia_historial", "competencia",
-                "consultas_huespedes", "resenas", "informes", "temporadas", "propiedades", "config", "login_intentos"]
+                "consultas_huespedes", "resenas", "informes", "temporadas", "propiedades", "config", "login_intentos",
+                "ical_bloqueos", "comentarios", "acciones_estado", "pruebas_descuento", "eventos"]   # ### CAMBIO AQUÍ ###
 FRASE_BORRAR = "BORRAR TODO"
 
 
@@ -567,7 +807,8 @@ def propiedades():
 COLUMNAS_PROP = ("nombre", "direccion", "barrio", "tipo", "ambientes", "capacidad", "precio_base",
                  "costo_expensas", "costo_servicios", "costo_limpieza", "costo_comision", "info_huespedes",
                  "estado", "rating", "reviews_count", "moneda", "ciudad",
-                 "pais", "pais_codigo", "provincia", "piso_depto", "m2", "cochera")   # ### CAMBIO AQUÍ ###
+                 "pais", "pais_codigo", "provincia", "piso_depto", "m2", "cochera",   # ### CAMBIO AQUÍ ###
+                 "recambio_limpieza", "recambio_lavanderia", "recambio_insumos", "estadia_minima", "ical_url")   # ### CAMBIO AQUÍ ### estrategia
 
 # ### CAMBIO AQUÍ ### tipos de alojamiento (antes solo departamento o casa)
 TIPOS = {"depto": "Departamento", "monoambiente": "Monoambiente / Estudio", "loft": "Loft", "ph": "PH",
@@ -605,7 +846,7 @@ def _leer_propiedad(f):
         return v
 
     nombres = {"ambientes": "ambientes", "capacidad": "capacidad", "reviews_count": "cantidad de reseñas",
-               "m2": "superficie (m²)"}
+               "m2": "superficie (m²)", "estadia_minima": "estadía mínima (noches, de 1 a 365)"}
 
     def entero(k, maximo, minimo=1):
         txt = (f.get(k) or "").strip()
@@ -639,7 +880,15 @@ def _leer_propiedad(f):
         "piso_depto": (f.get("piso_depto") or "").strip()[:40],
         "m2": entero("m2", 100000),
         "cochera": 1 if f.get("cochera") == "1" else 0,
+        # ### CAMBIO AQUÍ ### costos de cada salida de huésped, estadía mínima y calendario de Airbnb
+        "recambio_limpieza": monto("recambio_limpieza"), "recambio_lavanderia": monto("recambio_lavanderia"),
+        "recambio_insumos": monto("recambio_insumos"),
+        "estadia_minima": entero("estadia_minima", 365),
+        "ical_url": (f.get("ical_url") or "").strip()[:500],
     }
+    ok_ical, msg_ical = ical.url_valida(datos["ical_url"])
+    if not ok_ical:
+        errores.append(msg_ical)
     pais = next((p for p in _paises() if p["c"] == datos["pais_codigo"]), None)
     if not pais:
         errores.append("Elegí el país de la propiedad.")
@@ -1118,6 +1367,9 @@ def tarea_competencia():
     if not token_ok or not hmac.compare_digest(token, token_ok):
         return jsonify({"ok": False, "error": "No autorizado"}), 403
     competencia_auto.correr_en_segundo_plano()
+    # ### CAMBIO AQUÍ ### también se leen los calendarios de Airbnb (en segundo plano)
+    import threading
+    threading.Thread(target=lambda: [_leer_calendario(p) for p in db.query("SELECT * FROM propiedades")], daemon=True).start()
     return jsonify({"ok": True, "mensaje": "Actualización de competencia iniciada."})
 
 

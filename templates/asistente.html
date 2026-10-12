@@ -10,6 +10,9 @@
   .burbuja { max-width:85%; padding:.7rem 1rem; border-radius:10px; white-space:pre-wrap; font-size:.9rem; line-height:1.6; }
   .burbuja.user { align-self:flex-end; background:var(--arena-light, #efe9d6); }
   .burbuja.ia { align-self:flex-start; background:var(--surface-2, #f7f5ef); border:1px solid var(--border); }
+  .burbuja-md { white-space:normal; max-width:100%; }
+  .burbuja-md p { margin:0 0 6px; } .burbuja-md ul { margin:0 0 6px 18px; } .burbuja-md h3, .burbuja-md h4 { margin:8px 0 4px; font-size:1rem; }
+  .burbuja-md .table-wrap { margin:6px 0; } .tabla-ia td, .tabla-ia th { padding:5px 8px; font-size:.85rem; }
   .chips { display:flex; gap:6px; flex-wrap:wrap; }
   .chips button { border:1px solid var(--border); background:#fff; border-radius:16px; padding:.3rem .8rem; cursor:pointer; font-size:.8rem; }
   .filtros a { margin-right:6px; }
@@ -33,10 +36,13 @@
     <button type="button" onclick="preguntar(this.textContent)">¿Qué propiedad rinde mejor?</button>
     <button type="button" onclick="preguntar(this.textContent)">¿Conviene subir el precio en diciembre?</button>
     <button type="button" onclick="preguntar(this.textContent)">Generame un resumen para el contador</button>
+    <button type="button" onclick="preguntar(this.textContent)">¿Qué hago hoy en Airbnb y por qué?</button>
+    <button type="button" onclick="preguntar(this.textContent)">Haceme un cuadro: ¿estadías cortas o largas?</button>
   </div>
   <div class="chat-log" id="chat-log">
     {% for m in chat_hist %}
-    <div class="burbuja {{ 'user' if m.role == 'user' else 'ia' }}">{{ m.content }}</div>
+    {% if m.role == 'user' %}<div class="burbuja user">{{ m.content }}</div>
+    {% else %}<div class="burbuja ia burbuja-md">{{ m.content|md }}</div>{% endif %}{# ### CAMBIO AQUÍ ### tablas y listas #}
     {% endfor %}
   </div>
   <form onsubmit="preguntar(document.getElementById('chat-inp').value); return false;" style="display:flex;gap:8px">
@@ -193,7 +199,12 @@ function preguntar(texto) {
       if (r.status === 401) { sesionVencida(espera); return null; }
       return r.json();
     })
-    .then(function(d){ if (d) espera.textContent = d.respuesta || d.error || 'Sin respuesta'; })
+    .then(function(d){
+      if (!d) return;
+      // ### CAMBIO AQUÍ ### el servidor manda el HTML ya escapado (tablas, listas, negritas)
+      if (d.html && !d.error) { espera.classList.add('burbuja-md'); espera.innerHTML = d.html; }
+      else espera.textContent = d.respuesta || d.error || 'Sin respuesta';
+    })
     .catch(function(){ espera.textContent = 'Error de conexión. Revisá internet y probá de nuevo.'; })
     .finally(function(){ bloquear(false); });
 }

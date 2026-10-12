@@ -756,3 +756,52 @@ tr.fila-subir td:last-child { color:#2e7d4f; font-weight:600; }
 tr.fila-limite td:last-child { color:#a86a00; }
 .tabla-dispo td, .tabla-dispo th { white-space:nowrap; }
 .tabla-dispo td.col-dice { white-space:normal; min-width:260px; }
+
+/* ### CAMBIO AQUÍ ### Qué hacer hoy / Estrategia */
+.hoy-datos { margin:-6px 0 12px; font-size:.85rem; }
+.hoy-ok { margin-bottom:14px; }
+.hoy-vacio .btn { margin:6px 6px 0 0; }
+.hoy-prop { margin-bottom:16px; }
+.hoy-prop-cab { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:6px 12px; margin-bottom:10px; }
+.hoy-prop-cab h3 { margin:0; }
+.hoy-cal { font-size:.8rem; }
+.txt-alerta { color:#c0392b; font-weight:600; }
+.hoy-cols { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:14px; }
+.hoy-col h4 { font-size:.8rem; text-transform:uppercase; letter-spacing:.06em; color:var(--gold-hover); margin:0 0 8px; }
+.hoy-col-hoy h4 { color:#c0392b; }
+.accion { border:1px solid var(--border); border-left:4px solid var(--gold); border-radius:8px; padding:10px 12px; margin-bottom:10px; background:#fff; }
+.hoy-col-hoy .accion { border-left-color:#c0392b; }
+.hoy-col-mes .accion { border-left-color:#2f6fb3; }
+.accion-tit { font-weight:700; margin-bottom:4px; }
+.accion-hacer { font-size:.88rem; margin-bottom:6px; }
+.accion-botones { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:8px 0 4px; }
+.accion-botones form { margin:0; }
+.origen { font-size:.83rem; }
+.origen summary { cursor:pointer; color:var(--gold-hover); }
+.origen ul { margin:6px 0 4px 18px; padding:0; }
+.origen li { margin-bottom:3px; line-height:1.35; }
+.coment { margin-top:6px; font-size:.83rem; }
+.coment summary { cursor:pointer; color:#6b6157; }
+.coment-item { display:flex; gap:8px; align-items:flex-start; background:#f7f3ec; border-radius:6px; padding:6px 8px; margin-top:6px; }
+.coment-fecha { color:#8a7f72; white-space:nowrap; font-size:.75rem; padding-top:1px; }
+.coment-texto { flex:1; white-space:pre-wrap; word-break:break-word; }
+.coment-borrar { margin:0; }
+.coment-borrar button { border:none; background:none; color:#8a7f72; cursor:pointer; }
+.coment-form { display:flex; gap:6px; align-items:flex-end; margin-top:6px; }
+.coment-form textarea { flex:1; min-width:0; font-size:.85rem; padding:6px 8px; border:1px solid var(--border); border-radius:6px; resize:vertical; }
+.est-datos { margin-bottom:16px; }
+.est-lista { margin:6px 0 0 18px; padding:0; font-size:.9rem; }
+.est-lista li { margin-bottom:5px; line-height:1.4; }
+#estadia, #precios, #descuentos, #pruebas, #eventos { margin-bottom:16px; }
+.tabla-est td, .tabla-est th { white-space:nowrap; }
+.est-precios { list-style:none; margin:0; padding:0; }
+.est-precios li { display:grid; grid-template-columns:minmax(120px, 1fr) auto; gap:2px 12px; padding:8px 0; border-bottom:1px solid var(--border); }
+.est-precios .origen { grid-column:1 / -1; }
+.est-fechas { font-weight:600; }
+.est-precio { font-weight:700; font-size:1.05rem; text-align:right; }
+.est-desc { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:12px; }
+.est-desc-item { border:1px solid var(--border); border-radius:8px; padding:12px; }
+.est-desc-num { font-size:1.6rem; font-weight:700; }
+.est-desc-lbl { font-size:.85rem; margin-bottom:6px; }
+.est-form { margin:6px 0 12px; }
+.hoy-mas > summary { cursor:pointer; color:var(--gold-hover); font-size:.85rem; margin-bottom:8px; }

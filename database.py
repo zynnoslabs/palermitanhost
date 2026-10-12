@@ -235,6 +235,61 @@ def init_db():
         for col_sql in ("pais TEXT DEFAULT 'Argentina'", "pais_codigo TEXT DEFAULT 'AR'", "provincia TEXT DEFAULT ''",
                         "piso_depto TEXT DEFAULT ''", "m2 INTEGER", "cochera INTEGER DEFAULT 0"):
             cur.execute(f"ALTER TABLE propiedades ADD COLUMN IF NOT EXISTS {col_sql}")
+        # ### CAMBIO AQUÍ ### costos por cada salida de huésped (recambio), estadía mínima y calendario iCal
+        for col_sql in ("recambio_limpieza DOUBLE PRECISION DEFAULT 0", "recambio_lavanderia DOUBLE PRECISION DEFAULT 0",
+                        "recambio_insumos DOUBLE PRECISION DEFAULT 0", "estadia_minima INTEGER", "ical_url TEXT DEFAULT ''"):
+            cur.execute(f"ALTER TABLE propiedades ADD COLUMN IF NOT EXISTS {col_sql}")
+        # noches ocupadas/bloqueadas según el calendario iCal de Airbnb (se reemplaza en cada lectura)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS ical_bloqueos (
+                id           SERIAL PRIMARY KEY,
+                propiedad_id INTEGER NOT NULL,
+                desde        TEXT NOT NULL,
+                hasta        TEXT NOT NULL,
+                tipo         TEXT DEFAULT 'reservada'
+            )
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_ical_prop ON ical_bloqueos (propiedad_id)")
+        # lo que Adriano marca o comenta sobre cada sugerencia (nunca se borra solo)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS comentarios (
+                id        SERIAL PRIMARY KEY,
+                clave     TEXT NOT NULL,
+                texto     TEXT NOT NULL,
+                creado_en TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_comentarios_clave ON comentarios (clave)")
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS acciones_estado (
+                clave     TEXT PRIMARY KEY,
+                estado    TEXT NOT NULL,
+                fecha     TEXT NOT NULL
+            )
+        """)
+        # pruebas de descuento/promoción que Adriano hizo en Airbnb (para medir qué funcionó)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS pruebas_descuento (
+                id           SERIAL PRIMARY KEY,
+                propiedad_id INTEGER NOT NULL,
+                fecha        TEXT NOT NULL,
+                tipo         TEXT NOT NULL,
+                porcentaje   DOUBLE PRECISION DEFAULT 0,
+                nota         TEXT DEFAULT '',
+                creado_en    TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        # eventos que mueven la demanda (recitales, congresos...). Los feriados se traen solos.
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS eventos (
+                id        SERIAL PRIMARY KEY,
+                desde     TEXT NOT NULL,
+                hasta     TEXT NOT NULL,
+                nombre    TEXT NOT NULL,
+                impacto   INTEGER DEFAULT 10,
+                creado_en TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
 
         cur.execute("""
             CREATE TABLE IF NOT EXISTS consultas_huespedes (

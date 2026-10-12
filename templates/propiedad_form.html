@@ -137,6 +137,37 @@
     </div>
   </div>
 
+  {# ### CAMBIO AQUÍ ### costos de cada recambio, estadía mínima y calendario de Airbnb (los usa "Qué hacer hoy") #}
+  <h3 class="section-title">Costos por cada salida de huésped (recambio){{ info('recambio') }}</h3>
+  <p class="muted" style="margin:-4px 0 10px;font-size:.85rem">Lo que gastás <strong>cada vez que se va un huésped</strong> y entra otro, en la moneda de arriba.
+    Es distinto de los costos mensuales: con estadías largas pagás esto menos veces.</p>
+  <div class="form-grid">
+    <div class="form-group">
+      <label>Limpieza (por salida)</label>
+      <input type="text" inputmode="decimal" name="recambio_limpieza" placeholder="Ej: 25.000" value="{{ d.recambio_limpieza|monto_input(0) }}">
+    </div>
+    <div class="form-group">
+      <label>Lavandería (por salida)</label>
+      <input type="text" inputmode="decimal" name="recambio_lavanderia" placeholder="Ej: 8.000" value="{{ d.recambio_lavanderia|monto_input(0) }}">
+    </div>
+    <div class="form-group">
+      <label>Toallas, sábanas e insumos (promedio por salida){{ info('recambio_insumos') }}</label>
+      <input type="text" inputmode="decimal" name="recambio_insumos" placeholder="Ej: 12.000" value="{{ d.recambio_insumos|monto_input(0) }}">
+    </div>
+  </div>
+
+  <h3 class="section-title">Configuración en Airbnb</h3>
+  <div class="form-grid">
+    <div class="form-group">
+      <label>Estadía mínima actual en Airbnb (noches){{ info('estadia_minima') }}</label>
+      <input type="text" inputmode="numeric" name="estadia_minima" placeholder="Ej: 3" value="{{ d.estadia_minima or '' }}">
+    </div>
+    <div class="form-group" style="grid-column: span 2">
+      <label>Link del calendario de Airbnb (Exportar calendario){{ info('ical') }}</label>
+      <input type="url" name="ical_url" placeholder="https://www.airbnb.com.ar/calendar/ical/....ics?s=..." value="{{ d.ical_url or '' }}" autocomplete="off">
+    </div>
+  </div>
+
   <h3 class="section-title">Información para huéspedes{{ info('info_huespedes') }}</h3>
   <div class="form-group">
     <label>WiFi, check-in, reglas, cómo llegar, etc. (usa esto el asistente de IA)</label>

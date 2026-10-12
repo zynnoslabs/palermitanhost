@@ -227,6 +227,13 @@ def build_context(db, alias=None, mencionados=()):
                 f"(rango {monedas.formatear(st['minimo'], mon_p)} – {monedas.formatear(st['maximo'], mon_p)}), "
                 f"búsqueda del {max(c['fecha'] or '' for c in comps)}")
     mercado_txt = "\n".join(mercado_lineas) or "Sin datos de competencia todavía (usar la sección Competencia)."
+    # ### CAMBIO AQUÍ ### la estrategia (Qué hacer hoy) también la conoce la IA; los comentarios se pasan sin nombres
+    try:
+        import estrategia
+        estrategia_txt = privacidad.ocultar(estrategia.resumen_ia(tc=tc), alias or {})[0]
+    except Exception as e:
+        print(f"[asistente] estrategia: {e}")
+        estrategia_txt = "No disponible en este momento."
 
     system_prompt = f"""Eres el asistente de negocio de Adriano, propietario de Palermitan Host, 
 una administración de alquileres temporarios (barrios: ver PROPIEDADES ACTIVAS).
@@ -255,6 +262,9 @@ estratégicas y responder con precisión usando los datos reales del negocio.
 {mercado_txt}
 - Temporadas que usa el sistema para los precios: {temporadas_txt}
 
+═══ ESTRATEGIA (lo mismo que muestran "Qué hacer hoy" y "Estrategia") ═══
+{estrategia_txt}
+
 ═══ INSTRUCCIONES ═══
 - Responde siempre en español rioplatense, directo y profesional.
 - Usa los datos reales del negocio en tus análisis.
@@ -262,6 +272,11 @@ estratégicas y responder con precisión usando los datos reales del negocio.
 - Si detectas algo preocupante (ocupación baja, precio fuera de mercado), señálalo.
 - Chat con huéspedes: {"ACTIVO" if chat_activo else "DESACTIVADO (próxima versión)"}.
 - No inventes datos. Si algo no está en el sistema, dilo claramente.
+- Explicá simple, como a alguien que no sabe de números: cada cifra que des, decí de dónde sale y con qué datos.
+- Si te piden un cuadro, comparación o lista, usá una tabla en formato markdown (| col | col |) o viñetas.
+- Si te piden ejemplos, usá los números reales de arriba (precios, recambio, ritmo), no inventados.
+- Si Adriano corrigió algo en sus comentarios, priorizá su corrección y mencionala.
+- Cuando recomiendes algo, decí exactamente qué tocar en Airbnb (pantalla y valor).
 - Los huéspedes aparecen como "Huésped #número" por privacidad. Nombralos SIEMPRE así,
   exactamente con ese formato (el sistema le muestra a Adriano el nombre real).
 """
@@ -324,8 +339,10 @@ def chat():
     historial.append({"role": "assistant", "content": respuesta})
     _guardar_historial(_recortar(historial))
 
+    from flask import current_app   # ### CAMBIO AQUÍ ### también en HTML seguro (tablas, listas, negritas)
     return jsonify({
         "respuesta": respuesta,
+        "html": str(current_app.jinja_env.filters["md"](respuesta)),
         "automatica": False,
     })
 

@@ -1,0 +1,29 @@
+{# ### CAMBIO AQUÍ ### — barra para que Adriano comente, cuestione o corrija una sugerencia #}
+{% macro caja(clave, lista, volver, texto_boton='Comentar') %}
+<details class="coment" {% if lista %}open{% endif %}>
+  <summary>💬 {{ 'Comentarios (' ~ lista|length ~ ')' if lista else '¿Algo no cierra? Comentá o corregí' }}</summary>
+  {% for c in lista or [] %}
+  <div class="coment-item">
+    <span class="coment-fecha">{{ c.creado_en.strftime('%d/%m %H:%M') if c.creado_en else '' }}</span>
+    <span class="coment-texto">{{ c.texto }}</span>
+    <form method="post" action="{{ url_for('comentario_eliminar', cid=c.id) }}" class="coment-borrar">
+      <input type="hidden" name="volver" value="{{ volver }}">
+      <button type="submit" title="Borrar comentario" aria-label="Borrar comentario">✕</button>
+    </form>
+  </div>
+  {% endfor %}
+  <form method="post" action="{{ url_for('comentar') }}" class="coment-form">
+    <input type="hidden" name="clave" value="{{ clave }}">
+    <input type="hidden" name="volver" value="{{ volver }}">
+    <textarea name="texto" rows="2" maxlength="1000" placeholder="Ej: este precio es bajo para diciembre / la limpieza ahora sale 30.000 / no aplica porque…"></textarea>
+    <button type="submit" class="btn btn-sm">{{ texto_boton }}</button>
+  </form>
+</details>
+{% endmacro %}
+
+{# lista "¿De dónde sale?" #}
+{% macro origen(lineas) %}
+<details class="origen"><summary>¿De dónde sale?</summary>
+  <ul>{% for l in lineas %}<li>{{ l }}</li>{% endfor %}</ul>
+</details>
+{% endmacro %}

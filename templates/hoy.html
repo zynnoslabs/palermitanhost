@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% from "_comentarios.html" import caja, origen %}
+{% block title %}Qué hacer hoy – PalermitanHost{% endblock %}
+{# ### CAMBIO AQUÍ ### — página nueva: lo primero que se ve al entrar #}
+{% set volver = request.script_root ~ request.full_path %}
+{% set DIAS_L = ['lunes','martes','miércoles','jueves','viernes','sábado','domingo'] %}
+{% set MESES_L = ['','enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'] %}
+{% block content %}
+<div class="page-header">
+  <h2>Qué hacer hoy{{ info('que_hacer') }}</h2>
+  <span class="muted">{{ DIAS_L[dia.weekday()]|capitalize }} {{ dia.day }} de {{ MESES_L[dia.month] }}</span>
+</div>
+
+{% if not hay_props %}
+<div class="card hoy-vacio">
+  <p>Todavía no hay propiedades activas.</p>
+  <a href="{{ url_for('importar') }}" class="btn btn-primary">Subir el archivo de Airbnb</a>
+  <a href="{{ url_for('nueva_propiedad') }}" class="btn">Cargar una propiedad</a>
+</div>
+{% else %}
+
+<p class="muted hoy-datos">
+  Datos: {% if ultima_reservas %}archivo de Reservas del {{ ultima_reservas|fecha }}{% else %}todavía no se subió el archivo de Reservas{% endif %}.
+  {% if total %}{{ total }} cosa{{ 's' if total != 1 }} para hacer.{% endif %}
+</p>
+
+{% if not total %}
+<div class="card hoy-ok"><strong>✅ Todo en orden.</strong> No hay nada para cambiar en Airbnb hoy.</div>
+{% endif %}
+
+{% for b in bloques %}
+<section class="card hoy-prop">
+  <div class="hoy-prop-cab">
+    <h3>🏠 {{ b.prop.nombre }}</h3>
+    <span class="muted hoy-cal">
+      {% if b.cal_error %}<span class="txt-alerta">Calendario de Airbnb: no se pudo leer</span>
+      {% elif b.cal_cuando %}Calendario de Airbnb leído {{ b.cal_cuando|hace }}
+      {% elif b.prop.ical_url %}Calendario de Airbnb: todavía sin leer
+      {% else %}Sin calendario de Airbnb conectado{% endif %}
+      {% if b.prop.ical_url %}
+      <form method="post" action="{{ url_for('ical_leer', pid=b.prop.id) }}" style="display:inline">
+        <input type="hidden" name="volver" value="{{ volver }}">
+        <button type="submit" class="link-btn">Leer ahora</button>
+      </form>{% endif %}
+      · <a class="link" href="{{ url_for('estrategia_pagina', propiedad_id=b.prop.id) }}">Ver estrategia</a>
+    </span>
+  </div>
+  {% if not b.acciones %}
+  <p class="muted">Nada para hacer con esta propiedad. ✅</p>
+  {% endif %}
+  <div class="hoy-cols">
+    {% for c, titulo in [('hoy', 'Hoy'), ('semana', 'Esta semana'), ('mes', 'Este mes')] %}
+    {% if b.por[c] %}
+    <div class="hoy-col hoy-col-{{ c }}">
+      <h4>{{ titulo }}</h4>
+      {% for x in b.por[c] %}
+      {% if loop.index == 4 %}<details class="hoy-mas"><summary>Ver {{ b.por[c]|length - 3 }} más</summary>{% endif %}
+      <article class="accion" id="acc-{{ loop.index }}-{{ c }}">
+        <div class="accion-tit">{{ x.titulo }}</div>
+        <div class="accion-hacer"><span class="muted">Qué hacer:</span> {{ x.hacer }}</div>
+        {{ origen(x.origen) }}
+        <div class="accion-botones">
+          <form method="post" action="{{ url_for('accion_estado') }}">
+            <input type="hidden" name="clave" value="{{ x.clave }}"><input type="hidden" name="estado" value="hecho">
+            <input type="hidden" name="volver" value="{{ volver }}">
+            <button type="submit" class="btn btn-sm btn-primary">✓ Hecho</button>
+          </form>
+          <form method="post" action="{{ url_for('accion_estado') }}">
+            <input type="hidden" name="clave" value="{{ x.clave }}"><input type="hidden" name="estado" value="descartado">
+            <input type="hidden" name="volver" value="{{ volver }}">
+            <button type="submit" class="btn btn-sm">No aplica</button>
+          </form>
+          {% if x.link %}<a class="link" href="{{ request.script_root }}/{{ x.link }}">Ver detalle →</a>{% endif %}
+        </div>
+        {{ caja(x.clave, coment.get(x.clave), volver) }}
+      </article>
+      {% if loop.last and loop.length > 3 %}</details>{% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+</section>
+{% endfor %}
+{% endif %}
+{% endblock %}

@@ -6,6 +6,12 @@
 from markupsafe import Markup, escape
 
 AYUDA = {
+    # ── ### CAMBIO AQUÍ ### Estrategia / Qué hacer hoy ──
+    "recambio": "Cada vez que se va un huésped pagás limpieza, lavandería y reponés cosas. Con estadías cortas eso pasa muchas veces al mes; con largas, pocas. Con estos números el sistema compara qué te deja más plata.",
+    "recambio_insumos": "Un promedio: lo que gastás por mes en toallas, sábanas, jabón, papel, etc., dividido por la cantidad de huéspedes que tuviste ese mes.",
+    "estadia_minima": "La cantidad mínima de noches que tenés configurada en Airbnb. Sirve para avisarte cuando quedan noches libres entre dos reservas que nadie puede reservar.",
+    "ical": "En Airbnb: Calendario → Disponibilidad → Conectar calendarios → Exportar calendario. Copiá ese link y pegalo acá. Solo dice qué noches están ocupadas (no trae precios ni nombres). El sistema lo lee como mucho una vez por hora.",
+    "que_hacer": "Lo que conviene cambiar en Airbnb, ordenado por urgencia. Cada sugerencia explica de dónde sale. Cuando la hagas, tocá 'Hecho' y desaparece. Si algo no cierra, escribilo en el comentario: queda guardado y lo lee el Asistente IA.",
     # ── ### CAMBIO AQUÍ ### ¿Cuánto más podrías cobrar? ──
     "disposicion": "Airbnb no dice cuánto más habría pagado un huésped, pero hay una pista: si una fecha se vende mucho antes de lo normal, a ese precio sobraba demanda. Se calcula con las reservas cargadas (necesita el archivo de Reservas, que trae cuándo se hizo cada reserva).",
     "ritmo": "Cuánto de cada período ya está vendido, comparado con lo que normalmente tenés vendido a esta misma distancia. Ejemplo: si a 20 días de una fecha normalmente tenés 30% vendido y hoy tenés 60%, la demanda está fuerte y podés subir.",

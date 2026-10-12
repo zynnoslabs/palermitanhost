@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% from "_comentarios.html" import caja, origen %}
+{% block title %}Estrategia – PalermitanHost{% endblock %}
+{# ### CAMBIO AQUÍ ### — página nueva: estadía mínima, precio por noche, descuentos, pruebas y eventos #}
+{% set volver = request.script_root ~ request.full_path %}
+{% block content %}
+<div class="page-header">
+  <h2>Estrategia</h2>
+  {% if propiedades %}
+  <form method="get" class="filter-form">
+    <select name="propiedad_id" onchange="this.form.submit()" aria-label="Propiedad">
+      {% for p in propiedades %}<option value="{{ p.id }}" {% if prop and p.id == prop.id %}selected{% endif %}>{{ p.nombre }}{% if (p.estado or 'activa') != 'activa' %} ({{ p.estado }}){% endif %}</option>{% endfor %}
+    </select>
+  </form>
+  {% endif %}
+</div>
+
+{% if not prop %}
+<div class="card"><p>Primero cargá una propiedad o subí el archivo de Airbnb.</p>
+  <a href="{{ url_for('importar') }}" class="btn btn-primary">Importar CSV</a></div>
+{% elif not a %}
+<div class="alert alert-error">No se pudo armar la estrategia de esta propiedad. Revisá que tenga los datos completos.</div>
+{% else %}
+{% set mp = a.h.mon %}
+{% set pid = prop.id %}
+
+{# ── Qué datos se usan ── #}
+<div class="card est-datos">
+  <div class="card-title">Con qué datos se calcula todo esto</div>
+  <ul class="est-lista">
+    <li><strong>Reservas:</strong>
+      {% if a.h.n %}{{ a.h.n }} reservas con precio del último año ({{ a.h.desde|fecha }} al {{ a.h.hasta|fecha }}), de los archivos de Airbnb.
+      {% else %}ninguna con precio todavía. <a class="link" href="{{ url_for('importar') }}">Subí el archivo de Reservas</a>.{% endif %}</li>
+    <li><strong>Precio de partida:</strong>
+      {% if a.cx.base %}{{ a.cx.base|dinero(mp) }} — {{ a.cx.base_txt }}.{% else %}falta: cargá el precio base de la propiedad.{% endif %}</li>
+    <li id="recambio"><strong>Costo de cada recambio:</strong>
+      {% if a.em.recambio.cargado %}{{ a.em.recambio.total|dinero(mp) }}
+        ({% for k, v in a.em.recambio.partes.items() %}{{ k }} {{ v|dinero(mp) }}{{ ', ' if not loop.last }}{% endfor %}).
+      {% else %}<span class="txt-alerta">sin cargar</span>.{% endif %}
+      <a class="link" href="{{ url_for('editar_propiedad', pid=pid) }}?resaltar=recambio_limpieza">Editar</a></li>
+    <li><strong>Estadía mínima en Airbnb:</strong> {{ (prop.estadia_minima ~ ' noches') if prop.estadia_minima else 'sin cargar' }}.
+      <a class="link" href="{{ url_for('editar_propiedad', pid=pid) }}?resaltar=estadia_minima">Editar</a></li>
+    <li><strong>Noches ocupadas:</strong> según {{ a.fuente }}.
+      {% if cal_error %}<span class="txt-alerta">El calendario de Airbnb no se pudo leer: {{ cal_error }}</span>
+      {% elif cal_cuando %}Calendario leído {{ cal_cuando|hace }}.
+      {% elif not prop.ical_url %}<a class="link" href="{{ url_for('editar_propiedad', pid=pid) }}?resaltar=ical_url">Conectá el calendario de Airbnb</a> para que esté siempre al día.{% endif %}</li>
+  </ul>
+  {{ caja(pid ~ ':recambio', coment.get(pid ~ ':recambio'), volver) }}
+</div>
+
+{# ── Estadía mínima ── #}
+<div class="card" id="estadia">
+  <div class="card-title">¿Estadías cortas o largas?{{ info('recambio') }}</div>
+  {% if not a.em.filas %}
+    <p class="muted">Todavía no hay al menos 2 reservas de una misma duración para comparar.</p>
+  {% else %}
+  <div class="table-wrap"><table class="tabla tabla-est">
+    <thead><tr><th>Duración</th><th>Reservas</th><th>Precio por noche</th><th>+ Limpieza cobrada</th><th>− Recambio</th><th>Te queda por noche</th><th></th></tr></thead>
+    <tbody>
+    {% for f in a.em.filas %}
+    <tr>
+      <td><strong>{{ f.nombre }}</strong><br><small class="muted">{{ f.noches_prom|num(1) }} noches prom.</small></td>
+      <td>{{ f.reservas }}</td>
+      <td>{{ f.precio|dinero(mp) }}</td>
+      <td>{{ (f.limpieza / f.noches_prom)|dinero(mp) if f.limpieza else '—' }}</td>
+      <td>{{ f.recambio_noche|dinero(mp) if f.recambio_noche is not none else '—' }}</td>
+      <td><strong>{{ f.neto|dinero(mp) if f.neto is not none else '—' }}</strong></td>
+      <td>{{ origen(f.explica) }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% if not a.em.recambio.cargado %}
+    <p class="alert alert-warn" style="margin-top:8px">Para saber cuánto te queda en cada caso, <a class="link" href="{{ url_for('editar_propiedad', pid=pid) }}?resaltar=recambio_limpieza">cargá el costo de cada recambio</a>.</p>
+  {% elif a.em.conclusion %}
+    <div class="respuesta-texto" style="margin-top:10px">{{ a.em.conclusion }}</div>
+  {% else %}
+    <p class="muted" style="font-size:.85rem;margin-top:8px">Todavía no saco una conclusión: hacen falta al menos 3 reservas en cada una de las duraciones que se comparan.</p>
+  {% endif %}
+  {% if a.em.sin_datos %}<p class="muted" style="font-size:.8rem;margin-top:6px">Sin datos suficientes (menos de 2 reservas): {{ a.em.sin_datos|join(', ') }}.</p>{% endif %}
+  {% endif %}
+  {{ caja(pid ~ ':estadia', coment.get(pid ~ ':estadia'), volver) }}
+</div>
+
+{# ── Precio por noche ── #}
+<div class="card" id="precios">
+  <div class="card-title">Precio sugerido para las noches libres (próximos 30 días)</div>
+  {% if not a.precios %}
+    <p class="muted">No hay noches libres en los próximos 30 días. 🎉</p>
+  {% else %}
+  <ul class="est-precios">
+    {% for g in a.precios %}
+    <li>
+      <span class="est-fechas">{{ g.txt }}</span>
+      <span class="est-precio">{{ g.precio|dinero(mp) if g.precio else '—' }}</span>
+      {{ origen(g.motivos) }}
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="muted" style="font-size:.8rem;margin-top:6px">Solo noches libres según {{ a.fuente }}. No distingue días de semana de fines de semana (tus archivos no traen el precio de cada noche por separado).</p>
+  {% endif %}
+  {{ caja(pid ~ ':precios', coment.get(pid ~ ':precios'), volver) }}
+</div>
+
+{# ── Descuentos ── #}
+<div class="card" id="descuentos">
+  <div class="card-title">¿Hasta cuánto descuento conviene?</div>
+  <div class="est-desc">
+    <div class="est-desc-item">
+      <div class="est-desc-num">{{ (a.desc.vacia.pct ~ '%') if a.desc.vacia else '—' }}</div>
+      <div class="est-desc-lbl">Descuento máximo para una noche que quedaría vacía</div>
+      {% if a.desc.vacia %}{{ origen(a.desc.vacia.explica) }}{% else %}<p class="muted">Falta un precio de partida.</p>{% endif %}
+    </div>
+    <div class="est-desc-item">
+      <div class="est-desc-num">{{ (a.desc.mensual.pct ~ '%') if a.desc.mensual else '—' }}</div>
+      <div class="est-desc-lbl">Descuento mensual (28+ noches) que te deja lo mismo por noche que las estadías cortas</div>
+      {% if a.desc.mensual %}{{ origen(a.desc.mensual.explica) }}
+      {% else %}<p class="muted">Necesita el costo de recambio y al menos 3 reservas de menos de 28 noches.</p>{% endif %}
+    </div>
+  </div>
+  <p class="muted" style="font-size:.8rem;margin-top:8px">Airbnb no dice cuánta visibilidad te da cada % de descuento. Por eso: probalo y anotalo abajo, y en 14 días el sistema te muestra qué pasó.</p>
+  {{ caja(pid ~ ':descuentos', coment.get(pid ~ ':descuentos'), volver) }}
+</div>
+
+{# ── Pruebas ── #}
+<div class="card" id="pruebas">
+  <div class="card-title">Pruebas que hiciste en Airbnb</div>
+  <form method="post" action="{{ url_for('prueba_nueva') }}" class="form-grid est-form">
+    <input type="hidden" name="propiedad_id" value="{{ pid }}"><input type="hidden" name="volver" value="{{ volver }}">
+    <div class="form-group"><label>Fecha</label><input type="date" name="fecha" value="{{ dia.isoformat() }}" max="{{ dia.isoformat() }}" required></div>
+    <div class="form-group"><label>Qué cambiaste</label>
+      <select name="tipo">{% for k, v in TIPOS_PRUEBA.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+    <div class="form-group"><label>% (si aplica)</label><input type="text" inputmode="decimal" name="porcentaje" placeholder="Ej: 10"></div>
+    <div class="form-group"><label>Nota</label><input type="text" name="nota" maxlength="300" placeholder="Ej: Airbnb sugirió 15% para noviembre"></div>
+    <div class="form-group" style="align-self:end"><button type="submit" class="btn btn-primary">Anotar</button></div>
+  </form>
+  {% if a.pruebas %}
+  <div class="table-wrap"><table class="tabla">
+    <thead><tr><th>Fecha</th><th>Qué</th><th>14 días antes</th><th>14 días después</th><th></th></tr></thead>
+    <tbody>
+    {% for p in a.pruebas %}
+    <tr>
+      <td>{{ p.fecha|fecha }}</td>
+      <td>{{ TIPOS_PRUEBA.get(p.tipo, p.tipo) }}{% if p.porcentaje %} {{ p.porcentaje|num(0) }}%{% endif %}{% if p.nota %}<br><small class="muted">{{ p.nota }}</small>{% endif %}</td>
+      <td>{{ p.antes.reservas }} reservas · {{ p.antes.noches }} noches{% if p.antes.precio %}<br><small>{{ p.antes.precio|dinero(mp) }}/noche</small>{% endif %}</td>
+      <td>{{ p.despues.reservas }} reservas · {{ p.despues.noches }} noches{% if p.despues.precio %}<br><small>{{ p.despues.precio|dinero(mp) }}/noche</small>{% endif %}
+        {% if p.faltan %}<br><small class="muted">faltan {{ p.faltan }} días para completar</small>{% endif %}</td>
+      <td><form method="post" action="{{ url_for('prueba_eliminar', prid=p.id) }}" onsubmit="return confirm('¿Borrar esta prueba?')">
+        <input type="hidden" name="volver" value="{{ volver }}"><button type="submit" class="link-btn">Borrar</button></form></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="muted" style="font-size:.8rem;margin-top:6px">Cuenta las reservas que se <strong>hicieron</strong> (fecha "Reservada" del archivo de Reservas) en los 14 días antes y después de cada prueba. Si cambiaste varias cosas juntas, no se puede saber cuál funcionó.</p>
+  {% else %}
+  <p class="muted">Todavía no anotaste ninguna prueba.</p>
+  {% endif %}
+  {{ caja(pid ~ ':pruebas', coment.get(pid ~ ':pruebas'), volver) }}
+</div>
+
+{# ── Feriados y eventos ── #}
+<div class="card" id="eventos">
+  <div class="card-title">Feriados y eventos (próximos 90 días)</div>
+  {% if esp %}
+  <ul class="est-lista">
+    {% for x in esp %}
+    <li>
+      <strong>{{ x.desde|fecha }}{% if x.hasta != x.desde %} al {{ x.hasta|fecha }}{% endif %}</strong> · {{ x.nombre }}
+      <span class="muted">· {{ 'feriado' if x.tipo == 'feriado' else 'evento' }} · {{ ('+' if x.impacto > 0 else '') ~ x.impacto }}% en el precio</span>
+      {% if x.id %}<form method="post" action="{{ url_for('evento_eliminar', eid=x.id) }}" style="display:inline">
+        <input type="hidden" name="volver" value="{{ volver }}"><button type="submit" class="link-btn">Borrar</button></form>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">No hay feriados ni eventos en los próximos 90 días.</p>{% endif %}
+  <p class="muted" style="font-size:.8rem">Feriados: {{ 'fuente oficial (argentinadatos.com)' if origen_fer == 'oficial' else 'calculados por el sistema porque no hubo conexión con la fuente oficial (no incluye días puente)' }}.
+    En un feriado se sube la noche anterior y la del feriado (o todo el fin de semana largo).</p>
+  <form method="post" action="{{ url_for('evento_nuevo') }}" class="form-grid est-form">
+    <input type="hidden" name="volver" value="{{ volver }}">
+    <div class="form-group"><label>Desde</label><input type="date" name="desde" required></div>
+    <div class="form-group"><label>Hasta</label><input type="date" name="hasta"></div>
+    <div class="form-group"><label>Evento</label><input type="text" name="nombre" maxlength="80" placeholder="Ej: Lollapalooza" required></div>
+    <div class="form-group"><label>Cambio de precio (%)</label><input type="number" name="impacto" value="15" min="-50" max="100"></div>
+    <div class="form-group" style="align-self:end"><button type="submit" class="btn btn-primary">Agregar evento</button></div>
+  </form>
+  {{ caja('eventos', coment.get('eventos'), volver) }}
+</div>
+{% endif %}
+{% endblock %}
