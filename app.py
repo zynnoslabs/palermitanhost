@@ -278,7 +278,7 @@ def filtro_dinero(monto, moneda="ARS", convertir_a=None):
 def cambiar_moneda(m):
     if m in monedas.MONEDAS:
         session["moneda_vista"] = m
-    return redirect(request.referrer or url_for("dashboard"))
+    return _volver_referrer()   # ### CAMBIO AQUÍ ### solo a páginas de este sitio
 
 
 @app.route("/tipo-cambio", methods=["POST"])
@@ -297,7 +297,7 @@ def tipo_cambio():
             flash("Tipo de cambio guardado.", "ok")
     except Exception as e:
         flash(f"No se pudo actualizar el tipo de cambio: {e}", "error")
-    return redirect(request.referrer or url_for("dashboard"))
+    return _volver_referrer()   # ### CAMBIO AQUÍ ### solo a páginas de este sitio
 
 
 # ### CAMBIO AQUÍ ### alias de huéspedes ("Huésped #12") para no mandar nombres reales a la IA
@@ -316,6 +316,30 @@ def _alias_huespedes(extra=None):
 def _link_seguro(url):
     url = (url or "").strip()
     return url[:500] if url.lower().startswith(("http://", "https://")) else ""
+
+
+def destino_interno(url):
+    """### CAMBIO AQUÍ ### SEGURIDAD: True solo para direcciones de este mismo sitio ("/hoy?x=1").
+    Antes "/\\otro-sitio.com" pasaba el control y el navegador lo trataba como otro sitio (redirección abierta)."""
+    from urllib.parse import urlsplit
+    if not url or not url.startswith("/") or url[1:2] in ("/", "\\"):
+        return False
+    if any(ord(c) < 32 or c == "\\" for c in url):
+        return False
+    u = urlsplit(url)
+    return not u.scheme and not u.netloc
+
+
+def _volver_referrer(defecto="dashboard"):
+    """### CAMBIO AQUÍ ### vuelve a la página anterior solo si era de este sitio."""
+    from urllib.parse import urlsplit
+    ref = request.referrer or ""
+    u = urlsplit(ref)
+    if u.netloc and u.netloc == request.host:
+        destino = u.path + ("?" + u.query if u.query else "")
+        if destino_interno(destino):
+            return redirect(destino)
+    return redirect(url_for(defecto))
 
 
 # ### CAMBIO AQUÍ ### — SEGURIDAD: encabezados en todas las respuestas.
@@ -337,6 +361,10 @@ def encabezados_seguridad(resp):
     resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     if os.getenv("RENDER"):
         resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    # ### CAMBIO AQUÍ ### las páginas con datos del negocio no se guardan en cachés intermedias ni en el navegador
+    if session.get("logged_in") and resp.mimetype in ("text/html", "application/json"):
+        resp.headers["Cache-Control"] = "no-store"
+        resp.headers.add("Vary", "Cookie")
     return resp
 
 
@@ -424,7 +452,7 @@ def login():
             session["logged_in"] = True
             session.permanent = True   # vence a las 12 horas
             # solo rutas internas (nunca otro sitio)
-            if volver.startswith("/") and not volver.startswith("//") and not volver.startswith("/login"):
+            if destino_interno(volver) and not volver.startswith("/login"):   # ### CAMBIO AQUÍ ###
                 return redirect(volver)
             return redirect(url_for("hoy"))   # ### CAMBIO AQUÍ ### al entrar, primero "Qué hacer hoy"
         _registrar_fallo(ip)
@@ -510,7 +538,7 @@ def _alertas_seguras(prop_id):
 
 def _volver_al_dashboard():
     destino = request.form.get("volver") or ""
-    return redirect(destino if destino.startswith("/") and not destino.startswith("//") else url_for("dashboard"))
+    return redirect(destino if destino_interno(destino) else url_for("dashboard"))   # ### CAMBIO AQUÍ ###
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -523,7 +551,7 @@ app.jinja_env.globals["UNIDAD_PRUEBA"] = {k: v[1] for k, v in pruebas.TIPOS.item
 
 def _volver(defecto):
     destino = request.form.get("volver") or ""
-    return redirect(destino if destino.startswith("/") and not destino.startswith("//") else defecto)
+    return redirect(destino if destino_interno(destino) else defecto)   # ### CAMBIO AQUÍ ###
 
 
 def _leer_calendario(p):
