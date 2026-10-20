@@ -21,14 +21,11 @@
       <div class="sidebar-logo-text" style="display:none">PalermitanHost</div>
     </div>
 
-    {# ### CAMBIO AQUÍ ### menú simple (Ley de Hick): 6 opciones a la vista, el resto dentro de "Más" #}
+    {# ### CAMBIO AQUÍ ### menú simple (Ley de Hick), ordenado por uso: lo diario arriba (hoy, calendario, precios), después seguimiento (pruebas, números, IA), y lo ocasional en "Más" #}
     {% set en_mas = request.endpoint and ('propiedad' in request.endpoint or 'importar' in request.endpoint or 'informe' in request.endpoint or 'competencia' in request.endpoint) %}
     <nav class="sidebar-nav" aria-label="Menú principal">
       <a href="{{ url_for('hoy') }}" class="{% if request.endpoint=='hoy' %}active{% endif %}" {% if request.endpoint=='hoy' %}aria-current="page"{% endif %}>
         <span class="nav-icon" aria-hidden="true">✓</span> Qué hacer hoy
-      </a>
-      <a href="{{ url_for('pruebas_pagina') }}" class="{% if request.endpoint=='pruebas_pagina' %}active{% endif %}" {% if request.endpoint=='pruebas_pagina' %}aria-current="page"{% endif %}>
-        <span class="nav-icon" aria-hidden="true">⚗</span> Pruebas
       </a>
       <a href="{{ url_for('calendario') }}" class="{% if request.endpoint=='calendario' %}active{% endif %}" {% if request.endpoint=='calendario' %}aria-current="page"{% endif %}>
         <span class="nav-icon" aria-hidden="true">▤</span> Calendario
@@ -36,6 +33,9 @@
       </a>
       <a href="{{ url_for('precios') }}" class="{% if request.endpoint=='precios' %}active{% endif %}" {% if request.endpoint=='precios' %}aria-current="page"{% endif %}>
         <span class="nav-icon" aria-hidden="true">◈</span> Precios
+      </a>
+      <a href="{{ url_for('pruebas_pagina') }}" class="{% if request.endpoint=='pruebas_pagina' %}active{% endif %}" {% if request.endpoint=='pruebas_pagina' %}aria-current="page"{% endif %}>
+        <span class="nav-icon" aria-hidden="true">⚗</span> Pruebas
       </a>
       <a href="{{ url_for('dashboard') }}" class="{% if request.endpoint=='dashboard' %}active{% endif %}" {% if request.endpoint=='dashboard' %}aria-current="page"{% endif %}>
         <span class="nav-icon" aria-hidden="true">▦</span> Dashboard
