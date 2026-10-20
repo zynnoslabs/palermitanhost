@@ -97,8 +97,8 @@
         <option value="{{ p.id }}" {% if prop_id == p.id %}selected{% endif %}>{{ p.nombre }}</option>
       {% endfor %}
     </select>
-    <input type="date" name="desde" value="{{ desde }}">
-    <input type="date" name="hasta" value="{{ hasta }}">
+    <input type="date" name="desde" aria-label="Desde" value="{{ desde }}">
+    <input type="date" name="hasta" aria-label="Hasta" value="{{ hasta }}">
     <button type="submit" class="btn btn-sm">Filtrar</button>{{ info('filtro') }}
   </form>
 </div>

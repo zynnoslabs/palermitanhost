@@ -8,11 +8,12 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
 <body>
+<a href="#contenido" class="saltar">Saltar al contenido</a>{# ### CAMBIO AQUÍ ### accesibilidad #}
 
 <div class="layout">
 
   <!-- ── SIDEBAR ─────────────────────────────────────── -->
-  <aside class="sidebar">
+  <aside class="sidebar" aria-label="Navegación">
     <div class="sidebar-logo">
       <img src="{{ url_for('static', filename='logo.png') }}"
            onerror="this.style.display='none';this.nextElementSibling.style.display='block'"
@@ -20,48 +21,43 @@
       <div class="sidebar-logo-text" style="display:none">PalermitanHost</div>
     </div>
 
-    <nav class="sidebar-nav">
-      {# ### CAMBIO AQUÍ ### primero: qué hacer hoy (incluye la estrategia) #}
-      <a href="{{ url_for('hoy') }}" class="{% if request.endpoint=='hoy' %}active{% endif %}">
-        <span class="nav-icon">✓</span> Qué hacer hoy
+    {# ### CAMBIO AQUÍ ### menú simple (Ley de Hick): 6 opciones a la vista, el resto dentro de "Más" #}
+    {% set en_mas = request.endpoint and ('propiedad' in request.endpoint or 'importar' in request.endpoint or 'informe' in request.endpoint or 'competencia' in request.endpoint) %}
+    <nav class="sidebar-nav" aria-label="Menú principal">
+      <a href="{{ url_for('hoy') }}" class="{% if request.endpoint=='hoy' %}active{% endif %}" {% if request.endpoint=='hoy' %}aria-current="page"{% endif %}>
+        <span class="nav-icon" aria-hidden="true">✓</span> Qué hacer hoy
       </a>
-      <a href="{{ url_for('pruebas_pagina') }}" class="{% if request.endpoint=='pruebas_pagina' %}active{% endif %}">{# ### CAMBIO AQUÍ ### #}
-        <span class="nav-icon">⚗</span> Pruebas
+      <a href="{{ url_for('pruebas_pagina') }}" class="{% if request.endpoint=='pruebas_pagina' %}active{% endif %}" {% if request.endpoint=='pruebas_pagina' %}aria-current="page"{% endif %}>
+        <span class="nav-icon" aria-hidden="true">⚗</span> Pruebas
       </a>
-      <a href="{{ url_for('dashboard') }}"
-         class="{% if request.endpoint=='dashboard' %}active{% endif %}">
-        <span class="nav-icon">▦</span> Dashboard
+      <a href="{{ url_for('calendario') }}" class="{% if request.endpoint=='calendario' %}active{% endif %}" {% if request.endpoint=='calendario' %}aria-current="page"{% endif %}>
+        <span class="nav-icon" aria-hidden="true">▤</span> Calendario
+        {% if movimientos_hoy %}<span class="nav-badge" title="Llegadas y salidas de hoy">{{ movimientos_hoy }}<span class="solo-lector"> llegadas y salidas hoy</span></span>{% endif %}
       </a>
-      <a href="{{ url_for('calendario') }}"
-         class="{% if request.endpoint=='calendario' %}active{% endif %}">{# ### CAMBIO AQUÍ ### #}
-        <span class="nav-icon">▤</span> Calendario
-        {% if movimientos_hoy %}<span class="nav-badge" title="Llegadas y salidas de hoy">{{ movimientos_hoy }}</span>{% endif %}
+      <a href="{{ url_for('precios') }}" class="{% if request.endpoint=='precios' %}active{% endif %}" {% if request.endpoint=='precios' %}aria-current="page"{% endif %}>
+        <span class="nav-icon" aria-hidden="true">◈</span> Precios
       </a>
-      <a href="{{ url_for('propiedades') }}"
-         class="{% if 'propiedad' in request.endpoint %}active{% endif %}">
-        <span class="nav-icon">⌂</span> Propiedades
+      <a href="{{ url_for('dashboard') }}" class="{% if request.endpoint=='dashboard' %}active{% endif %}" {% if request.endpoint=='dashboard' %}aria-current="page"{% endif %}>
+        <span class="nav-icon" aria-hidden="true">▦</span> Dashboard
       </a>
-      <a href="{{ url_for('importar') }}"
-         class="{% if 'importar' in request.endpoint %}active{% endif %}">
-        <span class="nav-icon">↓</span> Importar CSV
+      <a href="{{ url_for('asistente') }}" class="{% if request.endpoint=='asistente' %}active{% endif %}" {% if request.endpoint=='asistente' %}aria-current="page"{% endif %}>
+        <span class="nav-icon" aria-hidden="true">✦</span> Asistente IA
       </a>
-      <a href="{{ url_for('precios') }}"
-         class="{% if request.endpoint=='precios' %}active{% endif %}">
-        <span class="nav-icon">◈</span> Precios
-      </a>
-      <a href="{{ url_for('asistente') }}"
-         class="{% if request.endpoint=='asistente' %}active{% endif %}">
-        <span class="nav-icon">✦</span> Asistente IA
-      </a>
-      <a href="{{ url_for('informes') }}"
-         class="{% if 'informe' in request.endpoint %}active{% endif %}">
-        <span class="nav-icon">≡</span> Informes
-      </a>
-      <!-- ### CAMBIO AQUÍ ### — faltaba el link a Competencia en el menú -->
-      <a href="{{ url_for('competencia') }}"
-         class="{% if 'competencia' in request.endpoint %}active{% endif %}">
-        <span class="nav-icon">◇</span> Competencia
-      </a>
+      <details class="nav-mas" {% if en_mas %}open{% endif %}>
+        <summary><span class="nav-icon" aria-hidden="true">⋯</span> Más <span class="nav-flecha" aria-hidden="true">›</span></summary>
+        <a href="{{ url_for('propiedades') }}" class="{% if 'propiedad' in request.endpoint %}active{% endif %}">
+          <span class="nav-icon" aria-hidden="true">⌂</span> Propiedades
+        </a>
+        <a href="{{ url_for('importar') }}" class="{% if 'importar' in request.endpoint %}active{% endif %}">
+          <span class="nav-icon" aria-hidden="true">↓</span> Importar CSV
+        </a>
+        <a href="{{ url_for('informes') }}" class="{% if 'informe' in request.endpoint %}active{% endif %}">
+          <span class="nav-icon" aria-hidden="true">≡</span> Informes
+        </a>
+        <a href="{{ url_for('competencia') }}" class="{% if 'competencia' in request.endpoint %}active{% endif %}">
+          <span class="nav-icon" aria-hidden="true">◇</span> Competencia
+        </a>
+      </details>
     </nav>
 
     <div class="sidebar-footer">
@@ -72,7 +68,7 @@
   </aside>
 
   <!-- ### CAMBIO AQUÍ ### fondo oscuro detrás del menú en el celular -->
-  <div class="menu-fondo" onclick="toggleMenu(false)"></div>
+  <div class="menu-fondo" onclick="toggleMenu(false)" aria-hidden="true"></div>
 
   <!-- ── TOPBAR ──────────────────────────────────────── -->
   <header class="topbar">
@@ -94,14 +90,14 @@
           <form method="post" action="{{ url_for('tipo_cambio') }}" style="margin-bottom:10px">
             <label class="muted">Traer cotización (dolarapi.com)</label>
             <div style="display:flex;gap:6px">
-              <select name="tipo">{% for k, v in tipos_dolar.items() %}<option value="{{ k }}">Dólar {{ v }}</option>{% endfor %}</select>
+              <select name="tipo" aria-label="Tipo de dólar">{% for k, v in tipos_dolar.items() %}<option value="{{ k }}">Dólar {{ v }}</option>{% endfor %}</select>
               <button class="btn btn-sm btn-primary">Traer</button>
             </div>
           </form>
           <form method="post" action="{{ url_for('tipo_cambio') }}">
             <label class="muted">O cargarlo a mano (pesos por dólar)</label>
             <div style="display:flex;gap:6px">
-              <input type="text" inputmode="decimal" name="valor" placeholder="Ej: 1400" style="width:100%" required>
+              <input type="text" inputmode="decimal" name="valor" aria-label="Pesos por dólar" placeholder="Ej: 1400" style="width:100%" required>
               <button class="btn btn-sm">Guardar</button>
             </div>
           </form>
@@ -113,7 +109,7 @@
   </header>
 
   <!-- ── MAIN ────────────────────────────────────────── -->
-  <main class="main">
+  <main class="main" id="contenido" tabindex="-1">{# ### CAMBIO AQUÍ ### #}
     {% with msgs = get_flashed_messages(with_categories=True) %}
       {% for cat, msg in msgs %}
         <div class="alert alert-{{ cat }}">{{ msg }}</div>

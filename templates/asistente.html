@@ -5,16 +5,16 @@
 <style>
   .tabs { display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap; }
   .tabs a { padding:.5rem 1rem; border-radius:20px; border:1px solid var(--border); text-decoration:none; color:inherit; font-size:.9rem; }
-  .tabs a.on { background:var(--gold); color:#fff; border-color:var(--gold); }
+  .tabs a.on { background:var(--color-primary); color:var(--color-on-color); border-color:var(--color-primary); }
   .chat-log { max-height:380px; overflow-y:auto; display:flex; flex-direction:column; gap:10px; margin:12px 0; }
   .burbuja { max-width:85%; padding:.7rem 1rem; border-radius:10px; white-space:pre-wrap; font-size:.9rem; line-height:1.6; }
-  .burbuja.user { align-self:flex-end; background:var(--arena-light, #efe9d6); }
-  .burbuja.ia { align-self:flex-start; background:var(--surface-2, #f7f5ef); border:1px solid var(--border); }
+  .burbuja.user { align-self:flex-end; background:var(--arena-light); }
+  .burbuja.ia { align-self:flex-start; background:var(--color-surface-2); border:1px solid var(--border); }
   .burbuja-md { white-space:normal; max-width:100%; }
   .burbuja-md p { margin:0 0 6px; } .burbuja-md ul { margin:0 0 6px 18px; } .burbuja-md h3, .burbuja-md h4 { margin:8px 0 4px; font-size:1rem; }
   .burbuja-md .table-wrap { margin:6px 0; } .tabla-ia td, .tabla-ia th { padding:5px 8px; font-size:.85rem; }
   .chips { display:flex; gap:6px; flex-wrap:wrap; }
-  .chips button { border:1px solid var(--border); background:#fff; border-radius:16px; padding:.3rem .8rem; cursor:pointer; font-size:.8rem; }
+  .chips button { border:1px solid var(--border); background:var(--color-surface); color:var(--color-text); border-radius:16px; padding:.3rem .8rem; cursor:pointer; font-size:.8rem; }
   .filtros a { margin-right:6px; }
 </style>
 
@@ -38,7 +38,7 @@
     <button type="button" onclick="preguntar(this.textContent)">¿Qué hago hoy en Airbnb y por qué?</button>
     <button type="button" onclick="preguntar(this.textContent)">Haceme un cuadro: ¿estadías cortas o largas?</button>
   </div>
-  <div class="chat-log" id="chat-log">
+  <div class="chat-log" id="chat-log" role="log" aria-live="polite">
     {% for m in chat_hist %}
     {% if m.role == 'user' %}<div class="burbuja user">{{ m.content }}</div>
     {% else %}<div class="burbuja ia burbuja-md">{{ m.content|md }}</div>{% endif %}{# ### CAMBIO AQUÍ ### tablas y listas #}
@@ -190,21 +190,25 @@ function preguntar(texto) {
   var inp = document.getElementById('chat-inp');
   inp.value = ''; bloquear(true);
   agregarBurbuja(texto, 'user');
-  var espera = agregarBurbuja('Analizando…', 'ia');
+  // ### CAMBIO AQUÍ ### skeleton: líneas grises mientras la IA piensa (antes decía "Analizando…")
+  var espera = agregarBurbuja('', 'ia');
+  espera.classList.add('burbuja-sk');
+  espera.innerHTML = '<span class="solo-lector">Analizando…</span><div class="sk sk-linea"></div><div class="sk sk-linea"></div><div class="sk sk-linea"></div>';
   fetch('{{ url_for("asistente.chat") }}', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({mensaje: texto})
   }).then(function(r){
-      if (r.status === 401) { sesionVencida(espera); return null; }
+      if (r.status === 401) { espera.classList.remove('burbuja-sk'); sesionVencida(espera); return null; }
       return r.json();
     })
     .then(function(d){
       if (!d) return;
       // ### CAMBIO AQUÍ ### el servidor manda el HTML ya escapado (tablas, listas, negritas)
+      espera.classList.remove('burbuja-sk');
       if (d.html && !d.error) { espera.classList.add('burbuja-md'); espera.innerHTML = d.html; }
       else espera.textContent = d.respuesta || d.error || 'Sin respuesta';
     })
-    .catch(function(){ espera.textContent = 'Error de conexión. Revisá internet y probá de nuevo.'; })
+    .catch(function(){ espera.classList.remove('burbuja-sk'); espera.textContent = 'Error de conexión. Revisá internet y probá de nuevo.'; })
     .finally(function(){ bloquear(false); });
 }
 function limpiarChat() {

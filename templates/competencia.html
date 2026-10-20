@@ -99,7 +99,7 @@
   <div class="card-title">Tendencia del mercado{{ info('tendencia') }} <span class="muted">· mediana por noche ({{ ult.moneda }}), últimos {{ historial|length }} registros</span></div>
   {% if ant.mediana %}{% set var = ((ult.mediana - ant.mediana) / ant.mediana * 100) %}
   <p>Desde el {{ ant.fecha|fecha }} la mediana pasó de {{ ant.mediana|dinero(ant.moneda) }} a {{ ult.mediana|dinero(ult.moneda) }}
-    (<strong style="color:{{ '#2d6a46' if var >= 0 else '#9b4a4a' }}">{{ '+' if var > 0 else '' }}{{ var|num }}%</strong>).</p>
+    (<strong style="color:{{ 'var(--color-success)' if var >= 0 else 'var(--color-danger)' }}">{{ '+' if var > 0 else '' }}{{ var|num }}%</strong>).</p>
   {% endif %}
   <canvas id="chartHist" height="90"></canvas>
 </div>

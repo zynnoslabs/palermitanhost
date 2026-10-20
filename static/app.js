@@ -109,3 +109,76 @@ window.addEventListener('pageshow', function () {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iluminar);
   else iluminar();
 })();
+
+// ### CAMBIO AQUÍ ### — SKELETONS: mientras carga la página siguiente se ve la forma del contenido
+// (bloques grises que brillan) en vez de una pantalla quieta. Solo aparece si tarda más de 0,15 s.
+(function () {
+  var DESCARGAS = /\/(respaldo\/descargar|archivo-anual\/|informes\/\d+\/(pdf|excel))|\.(zip|pdf|xlsx|csv)(\?|$)/i;
+  var timer = null, corte = null;
+  function capa() {
+    var main = document.querySelector('main.main');
+    if (!main || main.classList.contains('cargando-pagina')) return;
+    var c = document.createElement('div');
+    c.className = 'sk-capa';
+    c.setAttribute('role', 'status');
+    c.innerHTML = '<span class="solo-lector">Cargando…</span>' +
+      '<div class="sk sk-titulo"></div>' +
+      '<div class="sk-grilla"><div class="sk sk-tarjeta"></div><div class="sk sk-tarjeta"></div><div class="sk sk-tarjeta"></div></div>' +
+      '<div class="sk sk-bloque"></div>' +
+      '<div class="sk sk-linea" style="width:90%"></div><div class="sk sk-linea" style="width:75%"></div><div class="sk sk-linea" style="width:60%"></div>';
+    main.classList.add('cargando-pagina');
+    main.setAttribute('aria-busy', 'true');
+    main.appendChild(c);
+    corte = setTimeout(sacar, 10000);   // si algo falla, a los 10 s vuelve a mostrar la página
+  }
+  function sacar() {
+    clearTimeout(timer); clearTimeout(corte); timer = null;
+    var main = document.querySelector('main.main');
+    if (!main) return;
+    main.classList.remove('cargando-pagina');
+    main.removeAttribute('aria-busy');
+    var c = main.querySelector('.sk-capa'); if (c) c.remove();
+  }
+  function programar() { clearTimeout(timer); timer = setTimeout(capa, 150); }
+  document.addEventListener('click', function (e) {
+    if (e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+    var a = e.target.closest && e.target.closest('a[href]');
+    if (!a || a.target === '_blank' || a.hasAttribute('download')) return;
+    var url;
+    try { url = new URL(a.href, location.href); } catch (err) { return; }
+    if (url.origin !== location.origin || DESCARGAS.test(url.pathname)) return;
+    if (url.pathname === location.pathname && url.search === location.search && url.hash) return;   // salto dentro de la misma página
+    programar();
+  });
+  document.addEventListener('submit', function (e) {
+    var f = e.target;
+    if (f.hasAttribute('data-sin-carga')) return;
+    var dest = f.getAttribute('action') || location.pathname;
+    if (DESCARGAS.test(dest)) return;
+    setTimeout(function () { if (!e.defaultPrevented) programar(); }, 0);   // si un confirm() lo canceló, no se muestra
+  });
+  window.addEventListener('pageshow', sacar);
+})();
+
+// ### CAMBIO AQUÍ ### — ACCESIBILIDAD: cada etiqueta queda unida a su campo (el lector de pantalla
+// lee "Desde" al entrar al campo y tocar la etiqueta pone el cursor en el campo)
+(function () {
+  function unir() {
+    var n = 0;
+    document.querySelectorAll('label:not([for])').forEach(function (l) {
+      if (l.querySelector('input, select, textarea')) return;
+      var g = l.parentElement; if (!g) return;
+      var c = g.querySelector('input:not([type=hidden]), select, textarea');
+      if (!c || (c.labels && c.labels.length) || c.getAttribute('aria-label')) return;
+      if (!c.id) c.id = 'campo-' + (++n) + '-' + Math.random().toString(36).slice(2, 6);
+      l.setAttribute('for', c.id);
+    });
+    // campos de filtro sin etiqueta visible: se usa el texto de la primera opción
+    document.querySelectorAll('select:not([aria-label])').forEach(function (s) {
+      if (s.labels && s.labels.length) return;
+      var t = s.name === 'propiedad_id' || s.name === 'pid' ? 'Propiedad' : (s.options[0] ? s.options[0].text.trim() : '');
+      if (t) s.setAttribute('aria-label', t);
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', unir); else unir();
+})();
