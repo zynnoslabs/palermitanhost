@@ -4,20 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}PalermitanHost{% endblock %}</title>
-  {# ### CAMBIO AQUÍ ### Ajustes (modo oscuro, letra, contraste, animaciones): se aplican antes de dibujar, sin parpadeo #}
-  <script>
-  (function () {
-    var a = {};
-    try { a = JSON.parse(localStorage.getItem('ph-ajustes') || '{}') || {}; } catch (e) { a = {}; }
-    var h = document.documentElement;
-    h.setAttribute('data-tema', a.tema || 'claro');
-    if (a.letra && a.letra !== 'normal') h.setAttribute('data-letra', a.letra);
-    if (a.contraste) h.setAttribute('data-contraste', 'alto');
-    if (a.movimiento === 'menos') h.setAttribute('data-movimiento', 'menos');
-  })();
-  // color de un design token (para los gráficos)
-  function tk(nombre) { return getComputedStyle(document.documentElement).getPropertyValue(nombre).trim() || '#806428'; }
-  </script>
+  {% include '_ajustes_head.html' %}{# ### CAMBIO AQUÍ ### modo oscuro, letra, contraste #}
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>

@@ -1,0 +1,15 @@
+{# ### CAMBIO AQUÍ ### se incluye en todas las páginas (también login y errores) #}
+  {# ### CAMBIO AQUÍ ### Ajustes (modo oscuro, letra, contraste, animaciones): se aplican antes de dibujar, sin parpadeo #}
+  <script>
+  (function () {
+    var a = {};
+    try { a = JSON.parse(localStorage.getItem('ph-ajustes') || '{}') || {}; } catch (e) { a = {}; }
+    var h = document.documentElement;
+    h.setAttribute('data-tema', a.tema || 'claro');
+    if (a.letra && a.letra !== 'normal') h.setAttribute('data-letra', a.letra);
+    if (a.contraste) h.setAttribute('data-contraste', 'alto');
+    if (a.movimiento === 'menos') h.setAttribute('data-movimiento', 'menos');
+  })();
+  // color de un design token (para los gráficos)
+  function tk(nombre) { return getComputedStyle(document.documentElement).getPropertyValue(nombre).trim() || '#806428'; }
+  </script>
