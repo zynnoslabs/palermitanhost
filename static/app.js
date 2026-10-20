@@ -182,3 +182,10 @@ window.addEventListener('pageshow', function () {
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', unir); else unir();
 })();
+
+// ### CAMBIO AQUÍ ### — gráficos: textos y líneas de fondo con los colores del tema (claro u oscuro)
+(function () {
+  if (typeof Chart === 'undefined' || typeof tk !== 'function') return;
+  Chart.defaults.color = tk('--color-text-2');
+  Chart.defaults.borderColor = tk('--color-border-soft');
+})();

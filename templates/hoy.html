@@ -22,6 +22,7 @@
 
 <p class="muted hoy-datos">
   {% if total %}{{ total }} cosa{{ 's' if total != 1 }} para hacer{% else %}✅ Nada para cambiar en Airbnb hoy{% endif %}
+  {% if juego_txt %}· <strong class="hoy-juego" title="Lo que puede entrar si se alquilan las noches de las tareas de hoy">hasta {{ juego_txt }} en juego hoy</strong>{% endif %}{# ### CAMBIO AQUÍ ### #}
   · Reservas al {% if ultima_reservas %}{{ ultima_reservas|fecha }}{% else %}— (subí el archivo){% endif %}
 </p>
 
@@ -72,7 +73,7 @@
   {% if tareas %}
   <div class="hoy-cols">
     {% for c, titulo in [('hoy', 'Hoy'), ('semana', 'Esta semana'), ('mes', 'Más adelante')] %}
-    {% set lista = tareas|selectattr('cuando', 'equalto', c)|list %}
+    {% set lista = tareas|selectattr('cuando', 'equalto', c)|sort(attribute='orden')|list %}{# ### CAMBIO AQUÍ ### primero lo que más plata mueve #}
     {% if lista %}
     <div class="hoy-col hoy-col-{{ c }}">
       <h4>{{ titulo }}</h4>
@@ -80,6 +81,7 @@
       {% if loop.index == 4 %}<details class="hoy-mas"><summary>+{{ lista|length - 3 }} más</summary>{% endif %}
       <article class="accion">
         <div class="accion-tit">{% if x.link %}<a href="{{ request.script_root }}/{{ x.link }}">{{ x.titulo }}</a>{% else %}{{ x.titulo }}{% endif %}</div>
+        {% if x.impacto %}<div class="accion-imp">≈ +{{ x.impacto.monto|dinero(x.impacto.mon) }} <span>{{ x.impacto.corto }}</span></div>{% endif %}{# ### CAMBIO AQUÍ ### #}
         <div class="accion-botones">
           <form method="post" action="{{ url_for('accion_estado') }}">
             <input type="hidden" name="clave" value="{{ x.clave }}"><input type="hidden" name="estado" value="hecho">

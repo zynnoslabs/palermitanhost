@@ -211,6 +211,7 @@
 
 {% block scripts %}
 <script>
+// ### CAMBIO AQUÍ ### colores de los gráficos desde los design tokens (cambian solos en modo oscuro)
 const porMes = {{ por_mes|tojson }};  // ### CAMBIO AQUÍ ### tojson escapa caracteres peligrosos
 // ### CAMBIO AQUÍ ### gráfico de ocupación diaria
 const ocup7 = {{ ocup_7|tojson }};
@@ -219,7 +220,7 @@ if (el7 && typeof Chart !== 'undefined') new Chart(el7, {
   type:'bar',
   data:{ labels: ocup7.map(d => d.fecha.slice(5).split('-').reverse().join('/')),
          datasets:[{label:'Ocupación %', data: ocup7.map(d => d.pct),
-           backgroundColor:'rgba(42,42,30,0.75)', borderRadius:4}]},
+           backgroundColor: tk('--color-primary'), borderRadius:4}]},
   options:{responsive:true, plugins:{legend:{display:false}},
     scales:{y:{min:0, max:100, ticks:{callback:v=>v+'%'}}}}
 });
@@ -232,14 +233,14 @@ if(meses.length && typeof Chart !== 'undefined'){   // ### CAMBIO AQUÍ ### si n
   new Chart(document.getElementById('chartIngresos'), {
     type:'bar',
     data:{ labels:etiquetas, datasets:[{label:'Ingreso bruto', data:ingresos,
-      backgroundColor:'rgba(99,102,241,0.75)', borderRadius:4}]},
+      backgroundColor: tk('--color-info-accent'), borderRadius:4}]},
     options:{responsive:true, plugins:{legend:{display:false}},
       scales:{y:{ticks:{callback:v=>'{{ 'US$' if vista == 'USD' else '$' }} '+v.toLocaleString('es-AR')}}}}
   });
   new Chart(document.getElementById('chartNoches'), {
     type:'bar',
     data:{ labels:etiquetas, datasets:[{label:'Noches', data:noches,
-      backgroundColor:'rgba(16,185,129,0.75)', borderRadius:4}]},
+      backgroundColor: tk('--color-success-accent'), borderRadius:4}]},
     options:{responsive:true, plugins:{legend:{display:false}}}
   });
 }

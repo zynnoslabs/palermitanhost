@@ -335,10 +335,16 @@ def acciones(a):
     rc = a["em"]["recambio"]
     out = []
 
-    def add(clave, cuando, titulo, hacer, origen, link=None, prueba=None):
+    def add(clave, cuando, titulo, hacer, origen, link=None, prueba=None, impacto=None):
         # ### CAMBIO AQUÍ ### prueba: lo que se anota solo en "Pruebas" al tocar ✓ Hecho
+        # ### CAMBIO AQUÍ ### impacto: (monto, texto corto, cómo se calculó) → plata en juego de la tarea
+        imp = None
+        if impacto and impacto[0] and impacto[0] > 0:
+            imp = {"monto": round(impacto[0]), "mon": mon, "corto": impacto[1], "explica": impacto[2]}
+            origen = origen + ["Impacto: " + impacto[2]]
         out.append({"clave": f"{pid}:{clave}", "cuando": cuando, "titulo": titulo, "hacer": hacer,
-                    "origen": origen, "link": link, "prop_id": pid, "prop": prop["nombre"], "prueba": prueba})
+                    "origen": origen, "link": link, "prop_id": pid, "prop": prop["nombre"], "prueba": prueba,
+                    "impacto": imp, "orden": -(imp["monto"] if imp else 0)})
 
     # 1) datos que faltan (sin ellos los cálculos quedan cortos)
     if not h["validas"]:
@@ -408,10 +414,19 @@ def acciones(a):
                 [f"Aun pagando el recambio ({monedas.formatear(rc['total'], mon)}) te quedan "
                  f"{monedas.formatear(neto, mon)} por noche."] if neto is not None else [])
         p_base, _ = precio_noche(ini, cx, aprender=False)
+        n_libre = (fin7 - ini).days + 1
+        if extra and rc["cargado"]:   # ### CAMBIO AQUÍ ### se abre un hueco: entra la limpieza y sale un recambio
+            monto_imp = p * n_libre + h["limpieza_cobrada"] - rc["total"]
+            como = (f"{n_libre} noche(s) × {monedas.formatear(p, mon)} + limpieza cobrada − recambio "
+                    f"= {monedas.formatear(monto_imp, mon)}, si se alquilan.")
+        else:
+            monto_imp = p * n_libre
+            como = f"{n_libre} noche(s) libres × {monedas.formatear(p, mon)} = {monedas.formatear(monto_imp, mon)}, si se alquilan."
         add(f"libre:{ini}:{fin7}:{p}", "hoy", f"Libre {_rango_txt(ini, fin7)}: poné {monedas.formatear(p, mon)} por noche",
             f"Airbnb → Calendario → seleccioná {_rango_txt(ini, fin7)} → precio por noche {monedas.formatear(p, mon)}{extra}.",
             mot + [f"Noches ocupadas según {a['fuente']}."], f"hoy?resaltar=precios-{pid}",
-            prueba={"tipo": "precio", "desde": ini.isoformat(), "hasta": fin7.isoformat(), "valor": p, "sugerido": p_base})
+            prueba={"tipo": "precio", "desde": ini.isoformat(), "hasta": fin7.isoformat(), "valor": p, "sugerido": p_base},
+            impacto=(monto_imp, "si se alquila", como))
 
     # 3) huecos más cortos que la estadía mínima (más adelante)
     if minima:
@@ -437,7 +452,13 @@ def acciones(a):
                  f"Noches ocupadas según {a['fuente']}."]
                 + ([f"Aun con el recambio ({monedas.formatear(rc['total'], mon)}) te quedan "
                     f"{monedas.formatear(neto, mon)} por noche."] if neto is not None else []),
-                prueba={"tipo": "minima", "desde": ini.isoformat(), "hasta": fin.isoformat(), "valor": largo})
+                prueba={"tipo": "minima", "desde": ini.isoformat(), "hasta": fin.isoformat(), "valor": largo},
+                impacto=((neto * largo, "si se alquila",
+                          f"{largo} noche(s) a {monedas.formatear(p, mon)}, más limpieza cobrada y menos el recambio "
+                          f"= {monedas.formatear(neto * largo, mon)} que hoy no pueden entrar.") if neto is not None else
+                         ((p or 0) * largo, "si se alquila",
+                          f"{largo} noche(s) × {monedas.formatear(p or 0, mon)} = {monedas.formatear((p or 0) * largo, mon)} "
+                          f"que hoy no pueden entrar (sin contar el recambio: cargalo para afinarlo).")))
 
     # 4) ritmo de ventas más adelante
     if a["dp"] and a["dp"].get("ritmo"):
@@ -450,16 +471,29 @@ def acciones(a):
                         f"(calculado con tus últimos {a['dp']['ritmo']['dias_hist']} días de reservas).")
             if fila["tipo"] == "subir" and fila["vendidas"] < fila["noches"]:
                 pct = 10 if fila["real"] >= fila["esperado"] * 1.3 else 5
+                libres_v = [d1 + timedelta(days=k) for k in range((d2 - d1).days + 1) if d1 + timedelta(days=k) not in a["ocup"]]
+                extra_r = sum((precio_noche(d, cx)[0] or 0) * pct / (100 + pct) for d in libres_v)
                 add(f"ritmo:{a0}:subir:{semana}", cuando, f"{_rango_txt(d1, d2)}: subí {pct}% las noches libres",
                     f"Airbnb → Calendario → seleccioná las noches libres de {_rango_txt(d1, d2)} → subí el precio {pct}%.",
                     [base_txt, "Se está vendiendo más rápido que lo normal: a ese precio sobra demanda."],
-                    f"precios?propiedad_id={pid}&resaltar=ritmo")
+                    f"precios?propiedad_id={pid}&resaltar=ritmo",
+                    impacto=(extra_r, "de más",
+                             f"lo que suma el {pct}% en las {len(libres_v)} noches libres de esas fechas "
+                             f"= {monedas.formatear(extra_r, mon)} de más, si se alquilan."))
             elif fila["tipo"] == "bajar":
                 add(f"ritmo:{a0}:bajar:{semana}", cuando, f"{_rango_txt(d1, d2)}: viene más flojo que lo normal",
                     "No subas el precio. Si en una semana sigue igual, bajá 5% o activá una promoción de Airbnb para esas fechas.",
                     [base_txt], f"precios?propiedad_id={pid}&resaltar=ritmo")
 
     # 5) feriados y eventos con noches libres
+    def _extra_esp(noches, pct):
+        """### CAMBIO AQUÍ ### lo que suma la suba en las noches libres del feriado o evento."""
+        if not pct or pct <= 0:
+            return None
+        extra = sum((precio_noche(n, cx)[0] or 0) * pct / (100 + pct) for n in noches)
+        return (extra, "de más", f"lo que suma el {pct}% en {len(noches)} noche(s) libres = "
+                                 f"{monedas.formatear(extra, mon)} de más, si se alquilan.")
+
     libres_set = {hoy + timedelta(days=k) for k in range(DIAS_ADELANTE)} - a["ocup"]
     vistos = set()
     for x in a["esp"]:
@@ -481,7 +515,8 @@ def acciones(a):
              "Cuando hay feriado, la gente viaja la noche anterior y la del feriado (o todo el fin de semana largo).",
              f"{len(libres_x)} de esas noches siguen libres."],
             prueba={"tipo": "precio", "desde": libres_x[0].isoformat(), "hasta": libres_x[-1].isoformat(),
-                    "valor": p, "sugerido": p_base} if p else None)
+                    "valor": p, "sugerido": p_base} if p else None,
+            impacto=_extra_esp(libres_x, x["impacto"]))
 
     # 6) estadía mínima: probar otra si los números lo justifican
     em = a["em"]

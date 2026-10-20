@@ -183,9 +183,9 @@
   var h = {{ historial_json|tojson }};   // ### CAMBIO AQUÍ ###
   new Chart(el, {type: 'line',
     data: {labels: h.map(function(x){ return x.fecha.slice(5).split('-').reverse().join('/'); }),
-      datasets: [{label: 'Mediana', data: h.map(function(x){ return x.mediana; }), borderColor: '#2a2a1e', tension: .3},
-                 {label: 'Mínimo', data: h.map(function(x){ return x.minimo; }), borderColor: '#b89a5a', borderDash: [4,4], tension: .3},
-                 {label: 'Máximo', data: h.map(function(x){ return x.maximo; }), borderColor: '#a89a72', borderDash: [4,4], tension: .3}]},
+      datasets: [{label: 'Mediana', data: h.map(function(x){ return x.mediana; }), borderColor: tk('--color-text'), tension: .3},
+                 {label: 'Mínimo', data: h.map(function(x){ return x.minimo; }), borderColor: tk('--color-accent'), borderDash: [4,4], tension: .3},
+                 {label: 'Máximo', data: h.map(function(x){ return x.maximo; }), borderColor: tk('--color-border-strong'), borderDash: [4,4], tension: .3}]},
     options: {plugins: {legend: {position: 'bottom'}}}});
 })();
 </script>

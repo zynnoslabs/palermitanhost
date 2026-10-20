@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Ajustes – PalermitanHost{% endblock %}
+{# ### CAMBIO AQUÍ ### — página nueva: cómo se ve el sistema (se guarda en este dispositivo) #}
+{% block content %}
+<div class="page-header"><h2>Ajustes</h2></div>
+<p class="muted" style="margin:-6px 0 14px">Se aplica al instante y se guarda en este dispositivo: en el celular y en la compu podés tener distinto.</p>
+
+<div class="card" style="max-width:720px">
+  <fieldset class="aj-grupo">
+    <legend>Colores</legend>
+    <div class="aj-opciones">
+      <label class="aj-opcion"><input type="radio" name="tema" value="claro"> Claro</label>
+      <label class="aj-opcion"><input type="radio" name="tema" value="oscuro"> Oscuro</label>
+      <label class="aj-opcion"><input type="radio" name="tema" value="auto"> Como el dispositivo</label>
+    </div>
+  </fieldset>
+
+  <fieldset class="aj-grupo">
+    <legend>Tamaño de letra</legend>
+    <div class="aj-opciones">
+      <label class="aj-opcion"><input type="radio" name="letra" value="normal"> Normal</label>
+      <label class="aj-opcion" style="font-size:1.1rem"><input type="radio" name="letra" value="grande"> Grande</label>
+      <label class="aj-opcion" style="font-size:1.2rem"><input type="radio" name="letra" value="muy"> Muy grande</label>
+    </div>
+  </fieldset>
+
+  <label class="aj-switch">
+    <span><strong>Alto contraste</strong><br><span class="muted">Textos secundarios más oscuros, bordes más marcados y links subrayados.</span></span>
+    <input type="checkbox" name="contraste">
+  </label>
+  <label class="aj-switch">
+    <span><strong>Menos animaciones</strong><br><span class="muted">Sin brillos ni movimientos. Si tu dispositivo ya lo pide, se aplica solo.</span></span>
+    <input type="checkbox" name="movimiento">
+  </label>
+  <p class="muted" id="aj-estado" role="status" style="margin-top:10px;font-size:.85rem"></p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ### CAMBIO AQUÍ ### lee y guarda los ajustes; los aplica en el momento
+(function () {
+  var a = {};
+  try { a = JSON.parse(localStorage.getItem('ph-ajustes') || '{}') || {}; } catch (e) { a = {}; }
+  a.tema = a.tema || 'claro'; a.letra = a.letra || 'normal';
+  var h = document.documentElement, est = document.getElementById('aj-estado');
+  function aplicar() {
+    h.setAttribute('data-tema', a.tema);
+    if (a.letra === 'normal') h.removeAttribute('data-letra'); else h.setAttribute('data-letra', a.letra);
+    if (a.contraste) h.setAttribute('data-contraste', 'alto'); else h.removeAttribute('data-contraste');
+    if (a.movimiento === 'menos') h.setAttribute('data-movimiento', 'menos'); else h.removeAttribute('data-movimiento');
+  }
+  function guardar() {
+    aplicar();
+    try { localStorage.setItem('ph-ajustes', JSON.stringify(a)); est.textContent = 'Guardado en este dispositivo.'; }
+    catch (e) { est.textContent = 'Se aplicó, pero este navegador no deja guardarlo: al cerrar vuelve a como estaba.'; }
+  }
+  document.querySelectorAll('input[name=tema]').forEach(function (i) {
+    i.checked = i.value === a.tema;
+    i.addEventListener('change', function () { a.tema = i.value; guardar(); });
+  });
+  document.querySelectorAll('input[name=letra]').forEach(function (i) {
+    i.checked = i.value === a.letra;
+    i.addEventListener('change', function () { a.letra = i.value; guardar(); });
+  });
+  var c = document.querySelector('input[name=contraste]'), m = document.querySelector('input[name=movimiento]');
+  c.checked = !!a.contraste; m.checked = a.movimiento === 'menos';
+  c.addEventListener('change', function () { a.contraste = c.checked; guardar(); });
+  m.addEventListener('change', function () { a.movimiento = m.checked ? 'menos' : ''; guardar(); });
+})();
+</script>
+{% endblock %}

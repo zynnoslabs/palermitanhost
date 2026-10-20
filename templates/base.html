@@ -4,6 +4,20 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}PalermitanHost{% endblock %}</title>
+  {# ### CAMBIO AQUÍ ### Ajustes (modo oscuro, letra, contraste, animaciones): se aplican antes de dibujar, sin parpadeo #}
+  <script>
+  (function () {
+    var a = {};
+    try { a = JSON.parse(localStorage.getItem('ph-ajustes') || '{}') || {}; } catch (e) { a = {}; }
+    var h = document.documentElement;
+    h.setAttribute('data-tema', a.tema || 'claro');
+    if (a.letra && a.letra !== 'normal') h.setAttribute('data-letra', a.letra);
+    if (a.contraste) h.setAttribute('data-contraste', 'alto');
+    if (a.movimiento === 'menos') h.setAttribute('data-movimiento', 'menos');
+  })();
+  // color de un design token (para los gráficos)
+  function tk(nombre) { return getComputedStyle(document.documentElement).getPropertyValue(nombre).trim() || '#806428'; }
+  </script>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
@@ -22,7 +36,7 @@
     </div>
 
     {# ### CAMBIO AQUÍ ### menú simple (Ley de Hick), ordenado por uso: lo diario arriba (hoy, calendario, precios), después seguimiento (pruebas, números, IA), y lo ocasional en "Más" #}
-    {% set en_mas = request.endpoint and ('propiedad' in request.endpoint or 'importar' in request.endpoint or 'informe' in request.endpoint or 'competencia' in request.endpoint) %}
+    {% set en_mas = request.endpoint and ('propiedad' in request.endpoint or 'importar' in request.endpoint or 'informe' in request.endpoint or 'competencia' in request.endpoint or request.endpoint == 'ajustes') %}
     <nav class="sidebar-nav" aria-label="Menú principal">
       <a href="{{ url_for('hoy') }}" class="{% if request.endpoint=='hoy' %}active{% endif %}" {% if request.endpoint=='hoy' %}aria-current="page"{% endif %}>
         <span class="nav-icon" aria-hidden="true">✓</span> Qué hacer hoy
@@ -56,6 +70,9 @@
         </a>
         <a href="{{ url_for('competencia') }}" class="{% if 'competencia' in request.endpoint %}active{% endif %}">
           <span class="nav-icon" aria-hidden="true">◇</span> Competencia
+        </a>
+        <a href="{{ url_for('ajustes') }}" class="{% if request.endpoint == 'ajustes' %}active{% endif %}">{# ### CAMBIO AQUÍ ### #}
+          <span class="nav-icon" aria-hidden="true">⚙</span> Ajustes
         </a>
       </details>
     </nav>

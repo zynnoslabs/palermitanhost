@@ -594,9 +594,22 @@ def hoy():
         claves += [x["clave"] for x in acc] + [f"{pid}:{k}" for k in ("techo", "descuentos", "disponibilidad",
                                                                        "recambio", "estadia", "precios")]
     f_imp = db.query_one("SELECT valor FROM config WHERE clave='ultima_importacion_reservas'")
+    # ### CAMBIO AQUÍ ### plata en juego: suma del impacto de las tareas de hoy, en la moneda elegida arriba
+    vista, tc = moneda_vista(), monedas.tc_valor()
+    en_juego, sin_tc = 0, {}
+    for b in bloques:
+        for x in b["acciones"]:
+            if x.get("impacto") and x["cuando"] == "hoy":
+                v = monedas.convertir(x["impacto"]["monto"], x["impacto"]["mon"], vista, tc)
+                if v is None:
+                    sin_tc[x["impacto"]["mon"]] = sin_tc.get(x["impacto"]["mon"], 0) + x["impacto"]["monto"]
+                else:
+                    en_juego += v
+    juego_txt = " + ".join([monedas.formatear(en_juego, vista)] * bool(en_juego)
+                           + [monedas.formatear(v, m) for m, v in sin_tc.items()])
     return render_template("hoy.html", bloques=bloques, dia=dia, coment=estrategia.comentarios(claves),
                            ultima_reservas=(f_imp or {}).get("valor"), hay_props=bool(props), esp=lista_esp,
-                           origen_fer=origen_fer, total=sum(len(b["acciones"]) for b in bloques))
+                           origen_fer=origen_fer, total=sum(len(b["acciones"]) for b in bloques), juego_txt=juego_txt)
 
 
 @app.route("/estrategia")
@@ -884,6 +897,13 @@ MESES_LARGOS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", 
 def calendario():
     import calendar as cal
     hoy = date.today()
+    # ### CAMBIO AQUÍ ### dos vistas: "mes" (almanaque) y "linea" (línea de tiempo por propiedad). Se recuerda la última.
+    vista = request.args.get("vista")
+    if vista in ("mes", "linea"):
+        session["cal_vista"] = vista
+    vista = session.get("cal_vista", "mes")
+    if vista == "linea":
+        return _calendario_linea(hoy)
     txt = request.args.get("mes") or ""
     try:
         anio, mes_n = int(txt[:4]), int(txt[5:7])
@@ -896,11 +916,106 @@ def calendario():
     semanas = cal.Calendar(firstweekday=0).monthdatescalendar(anio, mes_n)   # semanas de lunes a domingo
     ant = date(anio, mes_n, 1) - timedelta(days=1)
     sig = date(anio, mes_n, cal.monthrange(anio, mes_n)[1]) + timedelta(days=1)
-    return render_template("calendario.html", dias=dias, semanas=semanas, anio=anio, mes_n=mes_n,
+    return render_template("calendario.html", vista="mes", dias=dias, semanas=semanas, anio=anio, mes_n=mes_n,
                            titulo=f"{MESES_LARGOS[mes_n - 1]} {anio}", hoy=hoy.isoformat(), unidades=unidades,
                            ant=f"{ant.year}-{ant.month:02d}", sig=f"{sig.year}-{sig.month:02d}",
                            propiedades=db.query("SELECT id, nombre FROM propiedades ORDER BY nombre"), prop_id=prop_id,
                            seleccionado=request.args.get("dia") or (hoy.isoformat() if (hoy.year, hoy.month) == (anio, mes_n) else ""))
+
+
+@app.route("/ajustes")
+@login_required
+def ajustes():
+    """### CAMBIO AQUÍ ### modo oscuro, tamaño de letra, alto contraste y menos animaciones (se guardan en el dispositivo)."""
+    return render_template("ajustes.html")
+
+
+LINEA_DIAS = 14
+
+
+def _calendario_linea(hoy):
+    """### CAMBIO AQUÍ ### línea de tiempo: una fila por propiedad, 14 días. Ocupado según reservas + calendario de Airbnb
+    (lo mismo que usa "Qué hacer hoy"); en lo libre, el precio sugerido y los huecos que nadie puede reservar."""
+    desde = met.fecha_valida(request.args.get("desde")) or hoy
+    desde = max(hoy, min(desde, hoy + timedelta(days=estrategia.DIAS_ADELANTE - LINEA_DIAS)))
+    prop_id = request.args.get("propiedad_id", type=int)
+    todas = db.query("SELECT * FROM propiedades WHERE COALESCE(estado,'activa') = 'activa' ORDER BY nombre")
+    props = [p for p in todas if not prop_id or p["id"] == prop_id]
+    _refrescar_calendarios(props)   # lee el calendario de Airbnb si hace más de una hora
+    props = [p for p in db.query("SELECT * FROM propiedades WHERE COALESCE(estado,'activa') = 'activa' ORDER BY nombre")
+             if not prop_id or p["id"] == prop_id]
+    analisis, _, _ = _analisis_estrategia(props, hoy)
+    reservas = [r for r in db.query("SELECT * FROM reservas WHERE COALESCE(estado,'') <> 'cancelada'")]
+    dias = [desde + timedelta(days=k) for k in range(LINEA_DIAS)]
+    filas = []
+    for a in analisis:
+        prop, mon = a["prop"], a["h"]["mon"]
+        minima = prop.get("estadia_minima")
+        propias = []
+        for r in reservas:
+            if r["propiedad_id"] == prop["id"]:
+                fi, ff, n = met._rango(r)
+                if fi and ff:
+                    propias.append((fi, ff, n, r))
+
+        def reserva_de(d):
+            for fi, ff, n, r in propias:
+                if fi <= d < ff:
+                    return fi, ff, n, r
+            return None
+
+        def tramo_de(d):
+            for t in a["libres"]:
+                if t[0] <= d <= t[1]:
+                    return t
+            return None
+
+        claves = []
+        for d in dias:
+            if d in a["ocup"]:
+                rr = reserva_de(d)
+                claves.append(("ocup", rr[3]["id"] if rr else None))
+            else:
+                claves.append(("libre", None))
+        segs, k = [], 0
+        while k < len(dias):
+            j = k
+            while j + 1 < len(dias) and claves[j + 1] == claves[k]:
+                j += 1
+            d1, d2, n = dias[k], dias[j], j - k + 1
+            seg = {"col": k + 2, "span": n, "desde": d1, "hasta": d2}
+            if claves[k][0] == "ocup":
+                rr = reserva_de(d1)
+                if rr:
+                    nombre = (rr[3].get("huesped_nombre") or "Huésped").split(" ")[0]
+                    seg.update(clase="ocupado", txt=nombre, sub=f"{rr[2]} noche{'s' if rr[2] != 1 else ''}",
+                               aria=f"Reservado: {nombre}, del {rr[0].strftime('%d/%m')} al {rr[1].strftime('%d/%m')}")
+                else:
+                    seg.update(clase="ocupado bloqueado", txt="Ocupado", sub="según Airbnb",
+                               aria="Ocupado según el calendario de Airbnb")
+            else:
+                precios = [estrategia.precio_noche(d, a["cx"])[0] for d in dias[k:j + 1]]
+                precios = [p for p in precios if p]
+                t = tramo_de(d1)
+                largo = (t[1] - t[0]).days + 1 if t else n
+                corto = bool(t and t[2] and minima and largo < minima)
+                if precios:
+                    lo, hi = min(precios), max(precios)
+                    ptxt = monedas.formatear(lo, mon) + ("" if lo == hi else " a " + monedas.formatear(hi, mon))
+                else:
+                    ptxt = "sin precio base"
+                seg.update(clase="libre corto" if corto else "libre",
+                           txt=(f"{largo} noche{'s' if largo != 1 else ''}: nadie puede reservar" if corto else "Libre"),
+                           sub=ptxt, aria=("Libre, más corto que la estadía mínima. " if corto else "Libre. ") + "Precio sugerido " + ptxt)
+            segs.append(seg)
+            k = j + 1
+        filas.append({"prop": prop, "segs": segs, "fuente": a["fuente"]})
+    ant = desde - timedelta(days=LINEA_DIAS)
+    sig = desde + timedelta(days=LINEA_DIAS)
+    return render_template("calendario.html", vista="linea", filas=filas, dias=dias, hoy=hoy, desde=desde,
+                           ant=ant.isoformat() if ant >= hoy else (hoy.isoformat() if desde > hoy else None),
+                           sig=sig.isoformat() if sig <= hoy + timedelta(days=estrategia.DIAS_ADELANTE - LINEA_DIAS) else None,
+                           propiedades=todas, prop_id=prop_id, DIAS_C=["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"])
 
 
 # ════════════════════════════════════════════════════════════════════════════

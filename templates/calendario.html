@@ -4,8 +4,14 @@
 {% block content %}
 <div class="page-header">
   <h2>Calendario{{ info('calendario') }}</h2>
+  {# ### CAMBIO AQUÍ ### elegir la vista: almanaque del mes o línea de tiempo por propiedad #}
+  <div class="cal-acciones">
+  <nav class="seg" aria-label="Vista del calendario">
+    <a href="{{ url_for('calendario', vista='mes', propiedad_id=prop_id) }}" {% if vista == 'mes' %}aria-current="page" class="on"{% endif %}>Mes</a>
+    <a href="{{ url_for('calendario', vista='linea', propiedad_id=prop_id) }}" {% if vista == 'linea' %}aria-current="page" class="on"{% endif %}>Línea de tiempo</a>
+  </nav>
   <form method="get" class="filter-form">
-    <input type="hidden" name="mes" value="{{ '%04d-%02d'|format(anio, mes_n) }}">
+    {% if vista == 'mes' %}<input type="hidden" name="mes" value="{{ '%04d-%02d'|format(anio, mes_n) }}">{% else %}<input type="hidden" name="desde" value="{{ desde.isoformat() }}">{% endif %}
     <select name="propiedad_id" onchange="this.form.submit()">
       <option value="">Todas las propiedades</option>
       {% for p in propiedades %}
@@ -13,7 +19,50 @@
       {% endfor %}
     </select>
   </form>
+  </div>
 </div>
+
+{% if vista == 'linea' %}
+{# ### CAMBIO AQUÍ ### LÍNEA DE TIEMPO #}
+<div class="card">
+  <div class="cal-nav">
+    {% if ant %}<a class="btn btn-sm" href="{{ url_for('calendario', vista='linea', desde=ant, propiedad_id=prop_id) }}" aria-label="Dos semanas antes">‹</a>{% else %}<span class="btn btn-sm" aria-hidden="true" style="visibility:hidden">‹</span>{% endif %}
+    <h3>{{ desde|fecha }} al {{ dias[-1]|fecha }}</h3>
+    {% if sig %}<a class="btn btn-sm" href="{{ url_for('calendario', vista='linea', desde=sig, propiedad_id=prop_id) }}" aria-label="Dos semanas después">›</a>{% endif %}
+    <a class="btn btn-sm" href="{{ url_for('calendario', vista='linea', propiedad_id=prop_id) }}">Hoy</a>
+  </div>
+  {% if not filas %}
+  <p class="muted">No hay propiedades activas.</p>
+  {% else %}
+  <p class="tl-desliza" aria-hidden="true">Deslizá hacia el costado para ver los 14 días →</p>
+  <div class="tl-scroll">
+    <div class="tl" role="table" aria-label="Ocupación por propiedad, del {{ desde|fecha }} al {{ dias[-1]|fecha }}">
+      <div class="tl-fila tl-cab" role="row">
+        <span role="columnheader" class="tl-prop">Propiedad</span>
+        {% for d in dias %}<span role="columnheader" class="tl-dia {{ 'es-hoy' if d == hoy }} {{ 'finde' if d.weekday() >= 5 }}">{{ DIAS_C[d.weekday()] }} <b>{{ d.day }}</b></span>{% endfor %}
+      </div>
+      {% for f in filas %}
+      <div class="tl-fila" role="row">
+        <span role="rowheader" class="tl-prop" title="Ocupado según {{ f.fuente }}">{{ f.prop.nombre }}</span>
+        {% for s in f.segs %}
+        <span role="cell" class="tl-seg {{ s.clase }}" style="grid-column: {{ s.col }} / span {{ s.span }}" title="{{ s.aria }}">
+          <span class="solo-lector">{{ s.desde|fecha }}{% if s.span > 1 %} al {{ s.hasta|fecha }}{% endif %}: {{ s.aria }}</span>
+          <span aria-hidden="true"><strong>{{ s.txt }}</strong>{% if s.span > 1 or s.clase.startswith('ocupado') %}<br>{% else %} {% endif %}<small>{{ s.sub }}</small></span>
+        </span>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="cal-leyenda tl-leyenda">
+    <span><i class="tl-mues ocupado"></i> Reservado</span>
+    <span><i class="tl-mues libre"></i> Libre, con el precio sugerido</span>
+    <span><i class="tl-mues libre corto"></i> Hueco más corto que la estadía mínima</span>
+  </div>
+  <p class="muted" style="font-size:.8rem;margin-top:6px">Los precios son los mismos de "Qué hacer hoy". Ocupado según tus reservas y, si está conectado, el calendario de Airbnb.</p>
+  {% endif %}
+</div>
+{% else %}
 
 <div class="cal-wrap">
   <div class="card cal-card">
@@ -62,9 +111,11 @@
     <p class="muted">Tocá un día para ver qué pasa (o qué pasó).</p>
   </div>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
+{% if vista == 'mes' %}
 <script>
 var DIAS = {{ dias|tojson }};
 var HOY = {{ hoy|tojson }};
@@ -112,4 +163,5 @@ document.querySelectorAll('.cal-dia[data-dia]').forEach(function (b) {
 var inicial = {{ seleccionado|tojson }};
 if (inicial && DIAS[inicial]) { var bi = document.querySelector('.cal-dia[data-dia="' + inicial + '"]'); if (bi) bi.classList.add('sel'); mostrar(inicial, true); }
 </script>
+{% endif %}
 {% endblock %}
