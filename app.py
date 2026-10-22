@@ -719,8 +719,10 @@ def _invalidar_cache(resp):
     return resp
 
 
-def _refrescar_calendarios(props, espera=6.0):
-    """Lee los calendarios de Airbnb que tengan más de una hora (en paralelo, sin trabar la página)."""
+def _refrescar_calendarios(props, espera=2.5):
+    """Lee los calendarios de Airbnb que tengan más de una hora (en paralelo, sin trabar la página).
+    ### CAMBIO AQUÍ ### la página espera como mucho 2,5 s (antes 6 s). Si Airbnb tarda más, la lectura
+    sigue de fondo y lo nuevo aparece en la próxima carga."""
     import threading
     hilos = [threading.Thread(target=_leer_calendario, args=(p,), daemon=True)
              for p in props if (p.get("ical_url") or "").strip()]

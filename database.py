@@ -5,6 +5,7 @@ import psycopg2.extras
 import psycopg2.pool
 import psycopg2.extensions
 import threading
+import time
 from contextlib import contextmanager
 
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -38,6 +39,12 @@ def _get_pool():
     return _pool
 
 
+# ### CAMBIO AQUÍ ### — velocidad con base remota (Neon): la conexión se "prueba" con SELECT 1
+# solo si estuvo quieta más de 30 s. Antes se probaba en CADA consulta (2 viajes extra a la base).
+_ULTIMO_USO = {}
+_PROBAR_SI_QUIETA = 30
+
+
 def get_db():
     pool = _get_pool()
     for intento in range(3):
@@ -45,6 +52,9 @@ def get_db():
         try:
             if conn.closed:
                 raise psycopg2.InterfaceError("conexión cerrada")
+            if (time.monotonic() - _ULTIMO_USO.get(id(conn), 0) < _PROBAR_SI_QUIETA
+                    and conn.get_parameter_status("TimeZone") == ZONA):
+                return conn
             cur = conn.cursor()
             cur.execute("SELECT 1")
             if conn.get_parameter_status("TimeZone") != ZONA:
@@ -68,6 +78,7 @@ def get_db_connection():
 
 
 def _release(conn):
+    _ULTIMO_USO[id(conn)] = time.monotonic()   # ### CAMBIO AQUÍ ###
     try:
         if not conn.closed and conn.get_transaction_status() != psycopg2.extensions.TRANSACTION_STATUS_IDLE:
             conn.rollback()
@@ -440,34 +451,39 @@ def init_db():
         _release(conn)
 
 
+def _leer(sql, params, uno):
+    """### CAMBIO AQUÍ ### lectura con un reintento: si la conexión se había cortado (la base se durmió
+    o se reinició), se descarta y se prueba una vez más con otra, en vez de mostrar un error."""
+    for intento in range(2):
+        conn = get_db()
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute(sql, params)
+            out = cur.fetchone() if uno else cur.fetchall()
+            cur.close()
+            _release(conn)
+            if uno:
+                return dict(out) if out else None
+            return [dict(r) for r in out]
+        except (psycopg2.OperationalError, psycopg2.InterfaceError):
+            try:
+                _get_pool().putconn(conn, close=True)
+            except Exception:
+                pass
+            if intento == 1:
+                raise
+        except Exception:
+            _rollback(conn)
+            _release(conn)
+            raise
+
+
 def query(sql, params=()):
-    conn = get_db()
-    try:
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute(sql, params)
-        rows = cur.fetchall()
-        cur.close()
-        return [dict(r) for r in rows]
-    except Exception:
-        _rollback(conn)
-        raise
-    finally:
-        _release(conn)   # ### CAMBIO AQUÍ ### — siempre se devuelve al pool
+    return _leer(sql, params, False)
 
 
 def query_one(sql, params=()):
-    conn = get_db()
-    try:
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute(sql, params)
-        row = cur.fetchone()
-        cur.close()
-        return dict(row) if row else None
-    except Exception:
-        _rollback(conn)
-        raise
-    finally:
-        _release(conn)
+    return _leer(sql, params, True)
 
 
 def execute(sql, params=()):
