@@ -394,6 +394,45 @@ with app.app_context():
 
 
 # ── Decorador de login ───────────────────────────────────────────────────────
+# ### CAMBIO AQUÍ ### — SESIONES MÁS SEGURAS
+# Cada sesión guarda: la "versión" de sesiones (en la base), una huella de la contraseña y cuándo se inició.
+#  · "Cerrar sesión en todos los dispositivos" sube la versión → todas las sesiones viejas dejan de valer.
+#  · Cambiar ADMIN_PASS en Render cambia la huella → todas las sesiones se cierran solas.
+#  · Aunque se use todos los días, a los 30 días pide la contraseña de nuevo.
+#  · Por inactividad sigue igual: 12 horas sin usar y se cierra.
+SESION_MAXIMA_DIAS = 30
+
+
+def _huella_clave():
+    import hashlib
+    return hmac.new(app.secret_key.encode(), ADMIN_PASS.encode(), hashlib.sha256).hexdigest()[:16]
+
+
+def _version_sesiones():
+    try:
+        row = db.query_one("SELECT valor FROM config WHERE clave='sesiones_version'")
+        return int(row["valor"]) if row and str(row["valor"]).isdigit() else 0
+    except Exception:
+        return 0
+
+
+def _sesion_valida():
+    if not session.get("logged_in"):
+        return True
+    inicio = session.get("inicio") or 0
+    return (session.get("huella") == _huella_clave()
+            and session.get("ver") == _version_sesiones()
+            and 0 < time.time() - inicio < SESION_MAXIMA_DIAS * 86400)
+
+
+@app.before_request
+def revisar_sesion():
+    if session.get("logged_in") and not _sesion_valida():
+        session.clear()
+        if request.endpoint not in ("static", "login"):
+            flash("Tu sesión se cerró. Volvé a ingresar.", "warn")
+
+
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -450,7 +489,10 @@ def login():
             volver = session.get("volver_a") or ""
             session.clear()
             session["logged_in"] = True
-            session.permanent = True   # vence a las 12 horas
+            session["ver"] = _version_sesiones()   # ### CAMBIO AQUÍ ### ver "SESIONES MÁS SEGURAS"
+            session["huella"] = _huella_clave()
+            session["inicio"] = int(time.time())
+            session.permanent = True   # vence a las 12 horas sin uso
             # solo rutas internas (nunca otro sitio)
             if destino_interno(volver) and not volver.startswith("/login"):   # ### CAMBIO AQUÍ ###
                 return redirect(volver)
@@ -458,6 +500,17 @@ def login():
         _registrar_fallo(ip)
         flash("Usuario o contraseña incorrectos.", "error")
     return render_template("login.html")
+
+
+@app.route("/sesiones/cerrar-todas", methods=["POST"])
+@login_required
+def cerrar_todas_las_sesiones():
+    """### CAMBIO AQUÍ ### cierra la sesión en la compu, el celular y cualquier otro dispositivo."""
+    db.execute("""INSERT INTO config (clave, valor) VALUES ('sesiones_version', %s)
+                  ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor""", (str(_version_sesiones() + 1),))
+    session.clear()
+    flash("Se cerró la sesión en todos los dispositivos. Volvé a ingresar.", "ok")
+    return redirect(url_for("login"))
 
 
 @app.route("/logout")

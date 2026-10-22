@@ -34,6 +34,16 @@
   </label>
   <p class="muted" id="aj-estado" role="status" style="margin-top:10px;font-size:.85rem"></p>
 </div>
+
+{# ### CAMBIO AQUÍ ### seguridad de la sesión #}
+<div class="card" style="max-width:720px;margin-top:16px">
+  <h3 style="margin:0 0 6px;font-size:1rem">Sesiones abiertas</h3>
+  <p class="muted" style="margin-bottom:12px">Cada dispositivo tiene su propia sesión. Se cierra sola a las 12 horas sin usar, y a los 30 días aunque se use todos los días. Si cambiás la contraseña, se cierran todas.</p>
+  <form method="post" action="{{ url_for('cerrar_todas_las_sesiones') }}" onsubmit="return confirm('¿Cerrar la sesión en todos los dispositivos, incluido este?')">
+    <button type="submit" class="btn">Cerrar sesión en todos los dispositivos</button>
+  </form>
+  <p class="muted" style="margin-top:8px;font-size:.85rem">Usalo si perdiste el celular o entraste desde una compu que no es tuya.</p>
+</div>
 {% endblock %}
 
 {% block scripts %}
