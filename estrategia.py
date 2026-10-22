@@ -34,6 +34,21 @@ def _f(d):
     return f"{DIAS[d.weekday()]} {d.day}/{d.month}"
 
 
+DIAS_LARGOS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+
+
+def _rango_largo(a, b):
+    """### CAMBIO AQUÍ ### 'del jueves 22 al domingo 25' (más fácil de leer que 'jue 22/10 al dom 25/10')."""
+    def f(d):
+        return f"{DIAS_LARGOS[d.weekday()]} {d.day}" + (f" de {MESES[d.month]}" if d.month != date.today().month else "")
+    return f"el {f(a)}" if a == b else f"del {f(a)} al {f(b)}"
+
+
+def _copiar(v):
+    """Lo que se pega en Airbnb: el número sin puntos ni símbolo."""
+    return str(int(round(v))) if v is not None else ""
+
+
 def _rango_txt(a, b):
     """a y b incluidos."""
     return _f(a) if a == b else f"{_f(a)} al {_f(b)}"
@@ -335,16 +350,18 @@ def acciones(a):
     rc = a["em"]["recambio"]
     out = []
 
-    def add(clave, cuando, titulo, hacer, origen, link=None, prueba=None, impacto=None):
+    def add(clave, cuando, titulo, hacer, origen, link=None, prueba=None, impacto=None, ver=None):
         # ### CAMBIO AQUÍ ### prueba: lo que se anota solo en "Pruebas" al tocar ✓ Hecho
         # ### CAMBIO AQUÍ ### impacto: (monto, texto corto, cómo se calculó) → plata en juego de la tarea
         imp = None
         if impacto and impacto[0] and impacto[0] > 0:
             imp = {"monto": round(impacto[0]), "mon": mon, "corto": impacto[1], "explica": impacto[2]}
             origen = origen + ["Impacto: " + impacto[2]]
+        # ### CAMBIO AQUÍ ### "ver": lo que se muestra en la vista tranquila (una frase, el valor grande y qué copiar)
         out.append({"clave": f"{pid}:{clave}", "cuando": cuando, "titulo": titulo, "hacer": hacer,
                     "origen": origen, "link": link, "prop_id": pid, "prop": prop["nombre"], "prueba": prueba,
-                    "impacto": imp, "orden": -(imp["monto"] if imp else 0)})
+                    "impacto": imp, "orden": -(imp["monto"] if imp else 0), "ver": ver,
+                    "pasos": [x.strip() for x in hacer.split("→")] if "→" in hacer else []})
 
     # 1) datos que faltan (sin ellos los cálculos quedan cortos)
     if not h["validas"]:
@@ -413,20 +430,40 @@ def acciones(a):
                          f"si no la bajás, nadie las puede reservar."] + (
                 [f"Aun pagando el recambio ({monedas.formatear(rc['total'], mon)}) te quedan "
                  f"{monedas.formatear(neto, mon)} por noche."] if neto is not None else [])
-        p_base, _ = precio_noche(ini, cx, aprender=False)
-        n_libre = (fin7 - ini).days + 1
-        if extra and rc["cargado"]:   # ### CAMBIO AQUÍ ### se abre un hueco: entra la limpieza y sale un recambio
-            monto_imp = p * n_libre + h["limpieza_cobrada"] - rc["total"]
-            como = (f"{n_libre} noche(s) × {monedas.formatear(p, mon)} + limpieza cobrada − recambio "
-                    f"= {monedas.formatear(monto_imp, mon)}, si se alquilan.")
+        # ### CAMBIO AQUÍ ### una tarea por cada tramo con el MISMO precio (así coincide con lo que muestra Precios).
+        # Si hay que abrir un hueco (bajar la estadía mínima), va todo junto en una sola tarea.
+        if extra:
+            tramos_p = [(ini, fin7, p, mot)]
         else:
-            monto_imp = p * n_libre
-            como = f"{n_libre} noche(s) libres × {monedas.formatear(p, mon)} = {monedas.formatear(monto_imp, mon)}, si se alquilan."
-        add(f"libre:{ini}:{fin7}:{p}", "hoy", f"Libre {_rango_txt(ini, fin7)}: poné {monedas.formatear(p, mon)} por noche",
-            f"Airbnb → Calendario → seleccioná {_rango_txt(ini, fin7)} → precio por noche {monedas.formatear(p, mon)}{extra}.",
-            mot + [f"Noches ocupadas según {a['fuente']}."], f"hoy?resaltar=precios-{pid}",
-            prueba={"tipo": "precio", "desde": ini.isoformat(), "hasta": fin7.isoformat(), "valor": p, "sugerido": p_base},
-            impacto=(monto_imp, "si se alquila", como))
+            tramos_p, d = [], ini
+            while d <= fin7:
+                pd, md = precio_noche(d, cx)
+                if tramos_p and tramos_p[-1][2] == pd and tramos_p[-1][1] + timedelta(days=1) == d:
+                    tramos_p[-1] = (tramos_p[-1][0], d, pd, tramos_p[-1][3])
+                else:
+                    tramos_p.append((d, d, pd, md))
+                d += timedelta(days=1)
+        for t_ini, t_fin, p, mot_t in tramos_p:
+            if p is None:
+                continue
+            p_base, _ = precio_noche(t_ini, cx, aprender=False)
+            n_libre = (t_fin - t_ini).days + 1
+            if extra and rc["cargado"]:   # ### CAMBIO AQUÍ ### se abre un hueco: entra la limpieza y sale un recambio
+                monto_imp = p * n_libre + h["limpieza_cobrada"] - rc["total"]
+                como = (f"{n_libre} noche(s) × {monedas.formatear(p, mon)} + limpieza cobrada − recambio "
+                        f"= {monedas.formatear(monto_imp, mon)}, si se alquilan.")
+            else:
+                monto_imp = p * n_libre
+                como = f"{n_libre} noche(s) libres × {monedas.formatear(p, mon)} = {monedas.formatear(monto_imp, mon)}, si se alquilan."
+            frase = (f"{_rango_largo(t_ini, t_fin).capitalize()} {'todavía está libre' if t_ini == t_fin else 'todavía están libres'}. "
+                     + (f"Poné este precio y bajá la estadía mínima a {largo_total} noche{'s' if largo_total > 1 else ''} para esas fechas:"
+                        if extra else "Poné este precio para que se alquile:"))
+            ver = {"frase": frase, "valor": monedas.formatear(p, mon), "unidad": "por noche", "copiar": _copiar(p)}
+            add(f"libre:{t_ini}:{t_fin}:{p}", "hoy", f"Libre {_rango_txt(t_ini, t_fin)}: poné {monedas.formatear(p, mon)} por noche",
+                f"Airbnb → Calendario → seleccioná {_rango_txt(t_ini, t_fin)} → precio por noche {monedas.formatear(p, mon)}{extra}.",
+                mot_t + [f"Noches ocupadas según {a['fuente']}."], f"hoy?resaltar=precios-{pid}",
+                prueba={"tipo": "precio", "desde": t_ini.isoformat(), "hasta": t_fin.isoformat(), "valor": p, "sugerido": p_base},
+                impacto=(monto_imp, "si se alquila", como), ver=ver)
 
     # 3) huecos más cortos que la estadía mínima (más adelante)
     if minima:
@@ -446,13 +483,16 @@ def acciones(a):
                      f"Una estadía de {largo} noche(s) a {monedas.formatear(p, mon)} te deja "
                      f"{monedas.formatear(neto, mon)} por noche después del recambio ({monedas.formatear(rc['total'], mon)})."])
                 continue
+            ver_h = {"frase": f"{_rango_largo(ini, fin).capitalize()} quedan {largo} noche{'s' if largo > 1 else ''} libres entre dos reservas "
+                              f"y con tu estadía mínima ({minima}) nadie las puede reservar. Cambiá la estadía mínima de esas fechas a:",
+                     "valor": f"{largo} noche{'s' if largo > 1 else ''}", "unidad": "de estadía mínima", "copiar": str(largo)}
             add(f"hueco:{ini}:{fin}", cuando, f"{_rango_txt(ini, fin)}: {largo} noche{'s' if largo > 1 else ''} que nadie puede reservar",
                 f"Airbnb → Calendario → seleccioná {_rango_txt(ini, fin)} → Estadía mínima: {largo} noche{'s' if largo > 1 else ''}.",
                 [f"Quedan {largo} noches libres entre dos reservas y tu estadía mínima es {minima}.",
                  f"Noches ocupadas según {a['fuente']}."]
                 + ([f"Aun con el recambio ({monedas.formatear(rc['total'], mon)}) te quedan "
                     f"{monedas.formatear(neto, mon)} por noche."] if neto is not None else []),
-                prueba={"tipo": "minima", "desde": ini.isoformat(), "hasta": fin.isoformat(), "valor": largo},
+                prueba={"tipo": "minima", "desde": ini.isoformat(), "hasta": fin.isoformat(), "valor": largo}, ver=ver_h,
                 impacto=((neto * largo, "si se alquila",
                           f"{largo} noche(s) a {monedas.formatear(p, mon)}, más limpieza cobrada y menos el recambio "
                           f"= {monedas.formatear(neto * largo, mon)} que hoy no pueden entrar.") if neto is not None else
@@ -477,13 +517,17 @@ def acciones(a):
                     f"Airbnb → Calendario → seleccioná las noches libres de {_rango_txt(d1, d2)} → subí el precio {pct}%.",
                     [base_txt, "Se está vendiendo más rápido que lo normal: a ese precio sobra demanda."],
                     f"precios?propiedad_id={pid}&resaltar=ritmo",
+                    ver={"frase": f"Para {_rango_largo(d1, d2)} se está vendiendo más rápido que lo normal. "
+                                  f"Subí el precio de las noches que quedan libres:", "valor": f"+{pct}%", "unidad": "", "copiar": ""},
                     impacto=(extra_r, "de más",
                              f"lo que suma el {pct}% en las {len(libres_v)} noches libres de esas fechas "
                              f"= {monedas.formatear(extra_r, mon)} de más, si se alquilan."))
             elif fila["tipo"] == "bajar":
                 add(f"ritmo:{a0}:bajar:{semana}", cuando, f"{_rango_txt(d1, d2)}: viene más flojo que lo normal",
                     "No subas el precio. Si en una semana sigue igual, bajá 5% o activá una promoción de Airbnb para esas fechas.",
-                    [base_txt], f"precios?propiedad_id={pid}&resaltar=ritmo")
+                    [base_txt], f"precios?propiedad_id={pid}&resaltar=ritmo",
+                    ver={"frase": f"Para {_rango_largo(d1, d2)} se está vendiendo más lento que lo normal. Por ahora no subas el precio; "
+                                  "si en una semana sigue igual, bajá un 5%."})
 
     # 5) feriados y eventos con noches libres
     def _extra_esp(noches, pct):
@@ -516,7 +560,10 @@ def acciones(a):
              f"{len(libres_x)} de esas noches siguen libres."],
             prueba={"tipo": "precio", "desde": libres_x[0].isoformat(), "hasta": libres_x[-1].isoformat(),
                     "valor": p, "sugerido": p_base} if p else None,
-            impacto=_extra_esp(libres_x, x["impacto"]))
+            impacto=_extra_esp(libres_x, x["impacto"]),
+            ver={"frase": f"Viene {x['nombre']} ({_rango_largo(x['desde'], x['hasta'])}). Subí el precio de las noches libres de esas fechas:",
+                 "valor": f"+{x['impacto']}%", "unidad": (f"≈ {monedas.formatear(p, mon)} por noche" if p else ""),
+                 "copiar": _copiar(p) if p else ""})
 
     # 6) estadía mínima: probar otra si los números lo justifican
     em = a["em"]
@@ -525,7 +572,9 @@ def acciones(a):
         add(f"minima:{em['sugerido']}:{hoy.strftime('%Y-%m')}", "mes", f"Probá estadía mínima de {em['sugerido']} noches",
             f"Airbnb → Calendario → Configuración → Duración del viaje → estadía mínima {em['sugerido']} noches. "
             f"Volvé a mirar la ocupación en 3 o 4 semanas.",
-            [em["conclusion"]], f"hoy?resaltar=estadia-{pid}")
+            [em["conclusion"]], f"hoy?resaltar=estadia-{pid}",
+            ver={"frase": "Tus números dicen que conviene probar otra estadía mínima. Volvé a mirar la ocupación en 3 o 4 semanas:",
+                 "valor": f"{em['sugerido']} noches", "unidad": "de estadía mínima", "copiar": str(em["sugerido"])})
 
     hechas = {f["clave"] for f in db.query("SELECT clave FROM acciones_estado WHERE clave = ANY(%s)",
                                            ([x["clave"] for x in out],))} if out else set()

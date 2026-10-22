@@ -3,7 +3,7 @@
 {% block title %}Precios – PalermitanHost{% endblock %}
 {# ### CAMBIO AQUÍ ### — una sección plegable por propiedad: sus precios, sus costos, calcular por fecha y cómo viene vendiendo #}
 {% block content %}
-<div class="page-header"><h2>Precios{{ info('precios') }}</h2></div>
+<div class="page-header"><h2>Precios{{ info('precios') }}</h2><span class="muted">Qué cobrar en cada departamento</span></div>
 
 {% if not fichas %}
 <div class="form-card"><p>Primero cargá una propiedad.</p>
@@ -12,16 +12,68 @@
 
 {% for f in fichas %}
 {% set p = f.p %}{% set pid = p.id %}{% set mp = f.mon %}
-<details class="card pp" id="pp-{{ pid }}" {% if f.abierta %}open{% endif %}>
-  <summary class="pp-cab">
-    <span class="pp-nombre">{{ p.nombre }}{% if (p.estado or 'activa') != 'activa' %} <small class="muted">({{ p.estado }})</small>{% endif %}</span>
-    <span class="pp-chips">
-      <span>Base <strong>{{ (p.precio_base)|dinero(mp) if p.precio_base else '—' }}</strong></span>
-      {% if f.dispo and f.dispo.techo %}<span>Techo <strong>{{ (f.dispo.techo.p90)|dinero(mp) }}</strong></span>{% endif %}
-      {% if f.mercado %}<span>Zona <strong>{{ (f.mercado.mediana)|dinero(mp) }}</strong></span>{% endif %}
-      <span>Costos <strong>{{ (f.fijos_total)|dinero(mp) }}</strong>/mes</span>
-    </span>
-  </summary>
+{# ### CAMBIO AQUÍ ### PRECIOS SIMPLE: primero lo que conviene cobrar ahora (grande), una barra de mínimo / normal / techo
+   y las próximas noches en fichas. Costos, cálculos y herramientas quedan plegados. #}
+<article class="card precio-prop" id="prop-{{ pid }}">
+  <h3 class="precio-nombre">{{ p.nombre }}{% if (p.estado or 'activa') != 'activa' %} <small class="muted">({{ p.estado }})</small>{% endif %}</h3>
+
+  {% if f.proxima and f.proxima.precio %}
+  <div>
+    <div class="precio-et">Conviene cobrar ahora · {{ f.proxima.txt }}</div>
+    <div class="precio-grande">{{ (f.proxima.precio)|dinero(mp) }} <small>por noche</small>
+      <button type="button" class="btn btn-sm" data-copiar="{{ f.proxima.precio|int }}" aria-label="Copiar el precio">Copiar</button></div>
+  </div>
+  {% elif f.a and not f.a.precios %}
+  <p class="precio-tranqui">No hay noches libres en los próximos 30 días.</p>
+  {% else %}
+  <p class="precio-tranqui">Para sugerirte un precio falta el precio base. <a class="link" href="{{ url_for('editar_propiedad', pid=pid) }}?resaltar=precio_base">Cargalo acá</a>.</p>
+  {% endif %}
+
+  {% set e = f.escala %}
+  {% if e %}
+  <div class="escala" role="img" aria-label="Mínimo {{ (e.minimo)|dinero(mp) }}, lo normal {{ (e.normal)|dinero(mp) }}{% if e.techo %}, techo {{ (e.techo)|dinero(mp) }}{% endif %}{% if e.actual %}; el precio de hoy es {{ (e.actual)|dinero(mp) }}{% endif %}">
+    <div class="escala-linea" aria-hidden="true">
+      <span class="escala-zona" style="left: {{ e.p_normal }}%; right: {{ 100 - e.p_techo }}%"></span>
+      {% if e.p_actual is not none %}<span class="escala-punto" style="left: {{ e.p_actual }}%"></span>{% endif %}
+    </div>
+    {# las etiquetas van debajo de su lugar real en la barra; si "lo normal" y el techo están muy cerca, van juntas #}
+    {% set junto = (not e.techo) or (e.p_techo - e.p_normal) < 24 %}
+    <div class="escala-txt" aria-hidden="true">
+      <span class="et-min">Mínimo<b>{{ (e.minimo)|dinero(mp) }}</b></span>
+      <span class="et-pos" style="left: {{ [[e.p_normal, 24]|max, 62 if not junto else 76]|min }}%">{{ 'Lo normal' if not e.techo or e.techo == e.normal or not junto else 'Normal y techo' }}<b>{{ (e.normal)|dinero(mp) }}{% if junto and e.techo and e.techo != e.normal %} a {{ (e.techo)|dinero(mp) }}{% endif %}</b></span>
+      {% if not junto %}<span class="et-max">Techo<b>{{ (e.techo)|dinero(mp) }}</b></span>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if f.proximos %}
+  <div>
+    <div class="precio-et" style="margin-bottom:8px">Próximas noches libres</div>
+    <div class="precio-fichas">
+      {% for g in f.proximos %}
+      <div class="precio-ficha"><div class="pf-d">{{ g.txt }}</div><div class="pf-p">{{ (g.precio)|dinero(mp) }}</div>
+        {% if g.etiqueta %}<span class="pf-et">{{ g.etiqueta }}</span>{% endif %}</div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <details class="mas"><summary>Ver costos del departamento</summary>
+    <table class="precio-costos">
+      <tr><td>Costos fijos por mes</td><td>{{ (f.fijos_total)|dinero(mp) }}</td></tr>
+      <tr><td>Por noche</td><td>{{ (f.fijos_total / 30.44)|dinero(mp) }}</td></tr>
+      <tr><td>Cada limpieza y recambio</td><td>{{ (f.recambio.total)|dinero(mp) if f.recambio.cargado else 'sin cargar' }}</td></tr>
+    </table>
+    <a class="link" href="{{ url_for('editar_propiedad', pid=pid) }}?resaltar=costo_expensas">Editar costos</a>
+  </details>
+  <details class="mas"><summary>Cómo se calcula</summary>
+    <p>Lo normal es lo que te pagaron por noche en tu último año. El techo es lo más alto que pagaron 9 de cada 10 huéspedes. El mínimo cubre tus costos: nunca te sugerimos bajar de ahí.</p>
+    {% if f.proxima %}<ul>{% for m in f.proxima.motivos %}<li>{{ m }}</li>{% endfor %}</ul>{% endif %}
+  </details>
+
+<details class="pp" id="pp-{{ pid }}" {% if f.abierta %}open{% endif %}>
+  <summary class="pp-cab"><span class="pp-nombre">Más herramientas</span>
+    <span class="pp-chips"><span>calcular por fecha · competencia · cómo venís vendiendo</span></span></summary>
 
   <div class="pp-grid">
     {# ── Precios ── #}
@@ -118,5 +170,6 @@
   </details>
   {% endif %}
 </details>
+</article>
 {% endfor %}
 {% endblock %}

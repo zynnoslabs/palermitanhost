@@ -840,12 +840,38 @@ def _armar_hoy(dia, vista=None, refrescar=True):
             "f_imp": f_imp, "juego_txt": juego_txt, "puesta": puesta, "datos_viejos": datos_viejos}
 
 
+def _plan_tranquilo(h, dia):
+    """### CAMBIO AQUÍ ### Qué hacer hoy en modo tranquilo: los pasos de hoy (todas las propiedades juntas,
+    de mayor a menor impacto), lo no urgente aparte y cuántos se hicieron hoy (para la barra de progreso)."""
+    hoy_p, despues, config = [], [], []
+    for b in h["bloques"]:
+        for x in b["acciones"]:
+            (config if x.get("cfg") else hoy_p if x["cuando"] == "hoy" else despues).append(x)
+    hoy_p.sort(key=lambda x: x["orden"])
+    despues.sort(key=lambda x: (x["cuando"] != "semana", x["orden"]))
+    hechos = db.query_one("SELECT COUNT(*) n FROM acciones_estado WHERE estado='hecho' AND fecha=%s "
+                          "AND clave NOT LIKE %s", (dia.isoformat(), "%:cfg:%"))["n"]
+    ult = session.get("ultimo_hecho")
+    total = len(hoy_p) + hechos
+    return {"pasos": hoy_p, "despues": despues, "config": config, "hechos": hechos, "total": total,
+            "pct": round(hechos / total * 100) if total else 0, "minutos": max(2, 2 * len(hoy_p)),
+            "ultimo": ult if ult and not any(x["clave"] == ult["clave"] for x in hoy_p + despues) else None}
+
+
 @app.route("/hoy")
 @login_required
 def hoy():
     dia = date.today()
     h = _armar_hoy(dia)
-    return render_template("hoy.html", bloques=h["bloques"], dia=dia, coment=estrategia.comentarios(h["claves"]),
+    plan = _plan_tranquilo(h, dia)
+    try:   # ### CAMBIO AQUÍ ### saludo según la hora de Buenos Aires (Render usa otra zona horaria)
+        from zoneinfo import ZoneInfo
+        hora = datetime.now(ZoneInfo("America/Argentina/Buenos_Aires")).hour
+    except Exception:
+        hora = 10
+    saludo = "Buen día" if 5 <= hora < 13 else ("Buenas tardes" if 13 <= hora < 20 else "Buenas noches")
+    nombre = session.get("nombre") or ADMIN_USER.split("@")[0].capitalize()
+    return render_template("hoy.html", plan=plan, saludo=saludo, nombre=nombre, bloques=h["bloques"], dia=dia, coment=estrategia.comentarios(h["claves"]),
                            ultima_reservas=(h["f_imp"] or {}).get("valor"), hay_props=bool(h["props"]), esp=h["lista_esp"],
                            origen_fer=h["origen_fer"], total=sum(len(b["acciones"]) for b in h["bloques"]),
                            juego_txt=h["juego_txt"], puesta=h["puesta"], datos_viejos=h["datos_viejos"])
@@ -885,7 +911,22 @@ def accion_estado():
                     msg += " Quedó anotado en Pruebas."
             except Exception as e:
                 print(f"[pruebas] desde hecho: {e}")
-        flash(msg, "success")
+        # ### CAMBIO AQUÍ ### en la vista tranquila no hay cartel: se ve el progreso y se puede deshacer
+        session["ultimo_hecho"] = {"clave": clave, "estado": estado}
+        if not request.form.get("silencioso"):
+            flash(msg, "success")
+    return _volver(url_for("hoy"))
+
+
+@app.route("/acciones/deshacer", methods=["POST"])
+@login_required
+def accion_deshacer():
+    """### CAMBIO AQUÍ ### vuelve atrás el último "Listo" o "No aplica" (y la prueba que se había anotado sola)."""
+    ult = session.pop("ultimo_hecho", None)
+    clave = (request.form.get("clave") or "").strip()[:200]
+    if ult and ult.get("clave") == clave:
+        db.execute("DELETE FROM acciones_estado WHERE clave=%s", (clave,))
+        db.execute("DELETE FROM pruebas_descuento WHERE clave=%s AND origen='hecho' AND fecha=%s", (clave, date.today().isoformat()))
     return _volver(url_for("hoy"))
 
 
@@ -2067,6 +2108,45 @@ def eliminar_competencia(cid):
 # PRECIOS SUGERIDOS (ruta legacy — mantiene compatibilidad)
 # ════════════════════════════════════════════════════════════════════════════
 
+def _escala_precio(a, dispo, proxima):
+    """### CAMBIO AQUÍ ### la barra simple de Precios: mínimo, lo normal y el techo, y dónde cae el precio de hoy."""
+    if not a or not a["cx"].get("base"):
+        return None
+    minimo = a["cx"].get("piso") or 0
+    techo_d = (dispo or {}).get("techo") or {}
+    normal = techo_d.get("mediana") or a["cx"]["base"]
+    techo = techo_d.get("p90")
+    actual = (proxima or {}).get("precio")
+    lo = minimo
+    hi = max(x for x in (techo, normal * 1.25, actual) if x) * 1.05
+    if hi <= lo:
+        return None
+    pos = lambda v: max(0, min(100, round((v - lo) / (hi - lo) * 100, 1))) if v else None
+    return {"minimo": minimo, "normal": normal, "techo": techo, "actual": actual,
+            "p_normal": pos(normal), "p_techo": pos(techo) if techo else pos(normal * 1.25), "p_actual": pos(actual)}
+
+
+def _proximos_precios(a, cuantos=6):
+    """### CAMBIO AQUÍ ### las próximas noches libres con su precio, para mostrar como fichas.
+    Se juntan las noches seguidas con el mismo precio (menos fichas, más fácil de leer)."""
+    if not a:
+        return []
+    grupos = []
+    for g in a["precios"]:
+        if not g.get("precio"):
+            continue
+        dias = [g["desde"] + timedelta(days=k) for k in range((g["hasta"] - g["desde"]).days + 1)]
+        esp = next((a["cx"]["especiales"][d][0] for d in dias if d in a["cx"]["especiales"]), None)
+        ult = grupos[-1] if grupos else None
+        if ult and ult["precio"] == g["precio"] and ult["etiqueta"] == esp and ult["hasta"] + timedelta(days=1) == g["desde"]:
+            ult["hasta"] = g["hasta"]
+        else:
+            grupos.append({"desde": g["desde"], "hasta": g["hasta"], "precio": g["precio"], "etiqueta": esp})
+    for x in grupos:
+        x["txt"] = estrategia._rango_txt(x["desde"], x["hasta"])
+    return grupos[:cuantos]
+
+
 @app.route("/precios", methods=["GET","POST"])
 @login_required
 def precios():
@@ -2140,7 +2220,8 @@ def precios():
                         resultado["precio_maximo"] = math.ceil(resultado["precio_sugerido"] * 1.2 / paso_piso) * paso_piso
         fichas.append({"p": p, "mon": mon, "mercado": mercado, "a": a, "dispo": dispo, "fijos": fijos,
                        "fijos_total": sum(fijos.values()), "recambio": recambio, "proxima": proxima, "resultado": resultado,
-                       "abierta": pid == pid_sel})
+                       "abierta": pid == pid_sel, "escala": _escala_precio(a, dispo, proxima),
+                       "proximos": _proximos_precios(a)})
     return render_template("precios.html", fichas=fichas, fecha=fecha, propiedades=propiedades)
 
 

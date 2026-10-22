@@ -210,3 +210,15 @@ document.addEventListener('click', function (e) {
   if (!e.target.closest || !e.target.closest('#instalar-app') || !pedidoInstalar) return;
   pedidoInstalar.prompt(); pedidoInstalar = null; e.target.closest('#instalar-app').hidden = true;
 });
+
+// ### CAMBIO AQUÍ ### — botón "Copiar" (precios para pegar en Airbnb, mensajes de limpieza)
+document.addEventListener('click', function (e) {
+  var b = e.target.closest && e.target.closest('[data-copiar]');
+  if (!b) return;
+  var t = b.getAttribute('data-copiar'), orig = b.dataset.textoCopiar || b.textContent;
+  b.dataset.textoCopiar = orig;
+  function listo() { b.textContent = '✓ Copiado'; setTimeout(function () { b.textContent = orig; }, 1600); }
+  function aMano() { window.prompt('Copiá esto:', t); }
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(listo, aMano);
+  else aMano();
+});

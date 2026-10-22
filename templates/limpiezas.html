@@ -45,16 +45,4 @@
 <p class="muted" style="font-size:.8rem;margin-top:10px">Salen de las reservas cargadas y, si está conectado, del calendario de Airbnb.</p>
 {% endblock %}
 
-{% block scripts %}
-<script>
-// ### CAMBIO AQUÍ ### copia el mensaje para pegarlo en WhatsApp o donde quieras
-document.querySelectorAll('[data-copiar]').forEach(function (b) {
-  b.addEventListener('click', function () {
-    var t = b.getAttribute('data-copiar'), orig = b.textContent;
-    function listo() { b.textContent = '¡Copiado!'; setTimeout(function () { b.textContent = orig; }, 1500); }
-    if (navigator.clipboard) navigator.clipboard.writeText(t).then(listo, function () { window.prompt('Copiá el mensaje:', t); });
-    else window.prompt('Copiá el mensaje:', t);
-  });
-});
-</script>
-{% endblock %}
+{# ### CAMBIO AQUÍ ### el botón Copiar ahora lo maneja static/app.js para todo el sistema #}

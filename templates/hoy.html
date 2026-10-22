@@ -2,38 +2,141 @@
 {% from "_comentarios.html" import caja, origen %}
 {% from "_detalle.html" import detalle %}
 {% block title %}Qué hacer hoy – PalermitanHost{% endblock %}
-{# ### CAMBIO AQUÍ ### — una sola pantalla: situación (techo, descuentos, disponibilidad), tareas y el detalle plegado #}
+{# ### CAMBIO AQUÍ ### — MODO TRANQUILO: primero cuánto hay que hacer, después un paso por tarjeta con el valor grande
+   y un botón para copiarlo. Las explicaciones quedan plegadas. El panorama de cada departamento, al final. #}
 {% set volver = request.script_root ~ request.full_path %}
 {% set DIAS_L = ['lunes','martes','miércoles','jueves','viernes','sábado','domingo'] %}
 {% set MESES_L = ['','enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'] %}
+
+{% macro form_hecho(x, texto, clase) %}
+<form method="post" action="{{ url_for('accion_estado') }}">
+  <input type="hidden" name="clave" value="{{ x.clave }}"><input type="hidden" name="estado" value="hecho">
+  {% if x.prueba %}{# se anota solo en Pruebas #}
+  <input type="hidden" name="p_pid" value="{{ x.prop_id }}"><input type="hidden" name="p_tipo" value="{{ x.prueba.tipo }}">
+  <input type="hidden" name="p_desde" value="{{ x.prueba.desde }}"><input type="hidden" name="p_hasta" value="{{ x.prueba.hasta }}">
+  <input type="hidden" name="p_valor" value="{{ x.prueba.valor }}"><input type="hidden" name="p_sugerido" value="{{ x.prueba.sugerido or '' }}">
+  {% endif %}
+  <input type="hidden" name="volver" value="{{ volver }}"><input type="hidden" name="silencioso" value="1">
+  <button type="submit" class="btn {{ clase }}">{{ texto }}</button>
+</form>
+{% endmacro %}
+{% macro form_no(x) %}
+<form method="post" action="{{ url_for('accion_estado') }}">
+  <input type="hidden" name="clave" value="{{ x.clave }}"><input type="hidden" name="estado" value="descartado">
+  <input type="hidden" name="volver" value="{{ volver }}"><input type="hidden" name="silencioso" value="1">
+  <button type="submit" class="link-btn" title="No aplica: no volver a mostrar">No aplica</button>
+</form>
+{% endmacro %}
+{% macro explicacion(x) %}
+{% if x.pasos %}<details class="mas"><summary>Cómo hacerlo en Airbnb</summary><ol>{% for p in x.pasos %}<li>{{ p }}</li>{% endfor %}</ol></details>
+{% elif x.hacer %}<details class="mas"><summary>Qué hacer</summary><p>{{ x.hacer }}</p></details>{% endif %}
+<details class="mas"><summary>Por qué</summary><ul>{% for o in x.origen %}<li>{{ o }}</li>{% endfor %}</ul></details>
+{% endmacro %}
+
 {% block content %}
-<div class="page-header">
-  <h2>Qué hacer hoy{{ info('que_hacer') }}</h2>
-  <span class="muted">{{ DIAS_L[dia.weekday()]|capitalize }} {{ dia.day }} de {{ MESES_L[dia.month] }}</span>
-</div>
+<div class="calma-pag">
+<header class="calma-cab">
+  <h2>{{ saludo }}, {{ nombre }}</h2>
+  <p class="muted">{{ DIAS_L[dia.weekday()]|capitalize }} {{ dia.day }} de {{ MESES_L[dia.month] }}{{ info('que_hacer') }}</p>
+</header>
 
 {% if not hay_props %}
-<div class="card hoy-vacio">
+<div class="card calma-card">
   <p>Todavía no hay propiedades activas.</p>
-  <a href="{{ url_for('importar') }}" class="btn btn-primary">Subir el archivo de Airbnb</a>
-  <a href="{{ url_for('nueva_propiedad') }}" class="btn">Cargar una propiedad</a>
+  <div class="calma-botones">
+    <a href="{{ url_for('importar') }}" class="btn btn-primary">Subir el archivo de Airbnb</a>
+    <a href="{{ url_for('nueva_propiedad') }}" class="btn">Cargar una propiedad</a>
+  </div>
 </div>
 {% else %}
 
-{# ### CAMBIO AQUÍ ### aviso fuerte si los datos están viejos #}
 {% if datos_viejos %}
-<div class="alerta alerta-alta hoy-viejo" role="alert">
-  <strong>Las reservas tienen {{ datos_viejos.dias }} días.</strong>
-  <span>Sin el calendario de Airbnb conectado, las sugerencias de hoy pueden estar mal (noches que ya se alquilaron). <a class="link" href="{{ url_for('importar') }}?resaltar=subir-reservas">Subí el archivo de Reservas</a> o conectá el calendario.</span>
+<div class="calma-aviso" role="alert">
+  <strong>Antes de empezar:</strong> las reservas tienen {{ datos_viejos.dias }} días y no hay calendario de Airbnb conectado, así que algunas sugerencias pueden estar viejas.
+  <a class="link" href="{{ url_for('importar') }}?resaltar=subir-reservas">Subí el archivo de Reservas</a> y volvé.
 </div>
 {% endif %}
-{# ### CAMBIO AQUÍ ### puesta a punto: qué falta cargar para que todo funcione (desaparece cuando está completo) #}
-{% if puesta %}
-<details class="card puesta" {% if puesta.listos <= 2 %}open{% endif %}>
-  <summary>
-    <span class="puesta-tit">Puesta a punto: {{ puesta.listos }} de {{ puesta.total }} listos</span>
-    <span class="puesta-barra" aria-hidden="true"><span style="width: {{ puesta.pct }}%"></span></span>
-  </summary>
+
+{# ── El plan del día ── #}
+{% set n = plan.pasos|length %}
+<section class="card calma-plan" aria-labelledby="plan-tit">
+  <h3 id="plan-tit" class="calma-frase">
+    {% if n == 0 and plan.hechos %}Terminaste todo por hoy.
+    {% elif n == 0 %}Hoy no hay nada para cambiar en Airbnb.
+    {% elif plan.hechos %}Vas bien: {{ plan.hechos }} de {{ plan.total }} listos. {{ 'Queda uno.' if n == 1 else 'Quedan ' ~ n ~ '.' }}
+    {% else %}Hoy {{ 'hay un cambio' if n == 1 else 'hay ' ~ n ~ ' cambios' }} para hacer en Airbnb. Son unos {{ plan.minutos }} minutos.{% endif %}
+  </h3>
+  {% if plan.total %}<div class="calma-barra" role="progressbar" aria-valuenow="{{ plan.hechos }}" aria-valuemin="0" aria-valuemax="{{ plan.total }}" aria-label="Progreso de hoy"><span style="width: {{ plan.pct }}%"></span></div>{% endif %}
+  {% if juego_txt and n %}<p class="calma-juego">Si se alquila lo sugerido: <strong class="hoy-juego">hasta {{ juego_txt }} en juego hoy</strong></p>{% endif %}
+  <p class="calma-ok"><span aria-hidden="true">✓</span>
+    {% if not datos_viejos and not puesta and not plan.config %}Todo lo demás está en orden.
+    {% else %}Lo demás puede esperar: abajo está lo que falta configurar, sin apuro.{% endif %}
+  </p>
+</section>
+
+{% if plan.ultimo %}
+<div class="calma-deshacer" role="status">
+  <span>✓ {{ 'Listo, anotado.' if plan.ultimo.estado == 'hecho' else 'Listo, no se vuelve a mostrar.' }}</span>
+  <form method="post" action="{{ url_for('accion_deshacer') }}">
+    <input type="hidden" name="clave" value="{{ plan.ultimo.clave }}"><input type="hidden" name="volver" value="{{ volver }}">
+    <button type="submit" class="link-btn">Deshacer</button>
+  </form>
+</div>
+{% endif %}
+
+{# ── Un paso por tarjeta ── #}
+{% for x in plan.pasos %}
+<article class="card calma-paso" id="paso-{{ loop.index }}">
+  <div class="calma-num">Paso {{ loop.index }} de {{ n }} · {{ x.prop }}</div>
+  {% if x.ver %}
+  <p class="calma-que">{{ x.ver.frase }}</p>
+  {% if x.ver.valor %}
+  <div class="calma-valor">
+    <div class="calma-monto">{{ x.ver.valor }} {% if x.ver.unidad %}<small>{{ x.ver.unidad }}</small>{% endif %}</div>
+    {% if x.ver.copiar %}<button type="button" class="btn" data-copiar="{{ x.ver.copiar }}" aria-label="Copiar {{ x.ver.copiar }}">Copiar</button>{% endif %}
+  </div>
+  {% endif %}
+  {% else %}
+  <p class="calma-que"><strong>{{ x.titulo }}</strong></p>
+  {% endif %}
+  {% if x.impacto %}<div class="accion-imp">≈ +{{ x.impacto.monto|dinero(x.impacto.mon) }} <span>{{ x.impacto.corto }}</span></div>{% endif %}
+  {{ explicacion(x) }}
+  <div class="calma-acciones">
+    {{ form_hecho(x, 'Listo, ya lo cambié', 'btn-primary calma-listo') }}
+    {{ form_no(x) }}
+  </div>
+</article>
+{% endfor %}
+
+{% if not plan.pasos %}
+<div class="calma-fin" role="status">
+  <h3>{{ 'Listo por hoy' if plan.hechos else 'Todo tranquilo' }}</h3>
+  <p>{{ 'Hiciste todo lo de hoy.' if plan.hechos else 'No hace falta cambiar nada en Airbnb.' }} Mañana te aviso si aparece algo nuevo.</p>
+</div>
+{% endif %}
+
+{# ── Lo no urgente ── #}
+{% if plan.despues %}
+<details class="card calma-despues">
+  <summary><span>Para más adelante (no es urgente) · {{ plan.despues|length }}</span><span aria-hidden="true" class="calma-flecha">›</span></summary>
+  {% for x in plan.despues %}
+  <div class="calma-item">
+    <div class="calma-item-tit"><span class="muted">{{ x.prop }} · {{ 'esta semana' if x.cuando == 'semana' else 'más adelante' }}</span><br>{{ x.ver.frase if x.ver else x.titulo }}
+      {% if x.ver and x.ver.valor %}<strong class="calma-item-valor">{{ x.ver.valor }}</strong>{% endif %}</div>
+    {% if x.impacto %}<div class="accion-imp">≈ +{{ x.impacto.monto|dinero(x.impacto.mon) }} <span>{{ x.impacto.corto }}</span></div>{% endif %}
+    {{ explicacion(x) }}
+    <div class="calma-acciones">{{ form_hecho(x, 'Ya lo hice', 'btn-sm') }}{{ form_no(x) }}</div>
+  </div>
+  {% endfor %}
+</details>
+{% endif %}
+
+{# ── Para que todo funcione (sin apuro) ── #}
+{% if puesta or plan.config %}
+<details class="card calma-despues">
+  <summary><span>Para que todo funcione mejor{% if puesta %} · {{ puesta.listos }} de {{ puesta.total }} listos{% endif %}</span><span aria-hidden="true" class="calma-flecha">›</span></summary>
+  {% if puesta %}
+  <div class="puesta-barra" aria-hidden="true" style="max-width:none;margin:8px 0"><span style="width: {{ puesta.pct }}%"></span></div>
   <ul class="puesta-lista">
     {% for x in puesta.pasos %}
     <li class="{{ 'ok' if x.ok else 'falta' }}">
@@ -43,108 +146,56 @@
     </li>
     {% endfor %}
   </ul>
+  {% endif %}
+  {% for x in plan.config if x.clave.split(':cfg:')[1].split(':')[0] in ('ical_error', 'archivo', 'sin_reservas') %}
+  <p class="calma-cfg"><a class="link" href="{{ request.script_root }}/{{ x.link or 'hoy' }}">{{ x.prop }}: {{ x.titulo }}</a> <span class="muted">· {{ x.hacer }}</span></p>
+  {% endfor %}
+  <p class="muted" style="font-size:.85rem;margin-top:6px">Puesta a punto: cuando esté todo cargado, este recuadro desaparece.</p>
 </details>
 {% endif %}
 
-<p class="muted hoy-datos">
-  {% if total %}{{ total }} cosa{{ 's' if total != 1 }} para hacer{% else %}✅ Nada para cambiar en Airbnb hoy{% endif %}
-  {% if juego_txt %}· <strong class="hoy-juego" title="Lo que puede entrar si se alquilan las noches de las tareas de hoy">hasta {{ juego_txt }} en juego hoy</strong>{% endif %}{# ### CAMBIO AQUÍ ### #}
-  · Reservas al {% if ultima_reservas %}{{ ultima_reservas|fecha }}{% else %}— (subí el archivo){% endif %}
-</p>
-
-{% for b in bloques %}
-{% set pid = b.prop.id %}
-<section class="card hoy-prop" id="prop-{{ pid }}">
-  <div class="hoy-prop-cab">
-    <h3>🏠 {{ b.prop.nombre }}</h3>
-    <span class="muted hoy-cal">
-      {% if b.cal_error %}<span class="txt-alerta">Calendario de Airbnb: no se pudo leer</span>
-      {% elif b.cal_cuando %}Calendario de Airbnb leído {{ b.cal_cuando|hace }}
-      {% elif b.prop.ical_url %}Calendario de Airbnb: todavía sin leer
-      {% else %}Sin calendario de Airbnb conectado{% endif %}
-      {% if b.prop.ical_url %}
-      <form method="post" action="{{ url_for('ical_leer', pid=pid) }}" style="display:inline">
-        <input type="hidden" name="volver" value="{{ volver }}">
-        <button type="submit" class="link-btn">Leer ahora</button>
-      </form>{% endif %}
-    </span>
-  </div>
-
-  {# ── Situación: las 3 tarjetas ── #}
-  {% if b.sit %}
-  <div class="sit-grid">
-    {% for k, titulo, icono in [('techo', 'Techo de precio', '⬆'), ('descuentos', 'Descuentos', '%'), ('disponibilidad', 'Disponibilidad', '▦')] %}
-    {% set s = b.sit[k] %}
-    <div class="sit-card sit-{{ k }}" id="{{ k }}-{{ pid }}">
-      <div class="sit-tit"><span class="sit-ico">{{ icono }}</span> {{ titulo }}</div>
-      <div class="sit-num">{{ s.numero }}</div>
-      <div class="sit-sub">{{ s.sub }}</div>
-      <div class="sit-txt">{{ s.texto }}</div>
-      <div class="sit-pie">{{ origen(s.origen) }}{{ caja(pid ~ ':' ~ k, coment.get(pid ~ ':' ~ k), volver) }}</div>
+{# ── El panorama de cada departamento (lo que antes estaba arriba) ── #}
+<details class="card calma-despues" id="panorama">
+  <summary><span>Ver el panorama de cada departamento</span><span aria-hidden="true" class="calma-flecha">›</span></summary>
+  {% for b in bloques %}
+  {% set pid = b.prop.id %}
+  <section class="hoy-prop" id="prop-{{ pid }}">
+    <div class="hoy-prop-cab">
+      <h3>{{ b.prop.nombre }}</h3>
+      <span class="muted hoy-cal">
+        {% if b.cal_error %}<span class="txt-alerta">Calendario de Airbnb: no se pudo leer</span>
+        {% elif b.cal_cuando %}Calendario de Airbnb leído {{ b.cal_cuando|hace }}
+        {% elif b.prop.ical_url %}Calendario de Airbnb: todavía sin leer
+        {% else %}Sin calendario de Airbnb conectado{% endif %}
+        {% if b.prop.ical_url %}
+        <form method="post" action="{{ url_for('ical_leer', pid=pid) }}" style="display:inline">
+          <input type="hidden" name="volver" value="{{ volver }}">
+          <button type="submit" class="link-btn">Leer ahora</button>
+        </form>{% endif %}
+      </span>
     </div>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  {# ── Lo que falta configurar: una sola línea ── #}
-  {% set cfg = b.acciones|selectattr('cfg')|list %}
-  {% set tareas = b.acciones|rejectattr('cfg')|list %}
-  {% if cfg %}
-  <div class="cfg-linea"><span class="muted">Falta:</span>
-    {% for x in cfg %}<a class="cfg-pill {{ 'cfg-urgente' if x.cuando == 'hoy' }}" href="{{ request.script_root }}/{{ x.link or 'hoy' }}" title="{{ x.hacer }}">{{ x.titulo }}</a>{% endfor %}
-  </div>
-  {% endif %}
-
-  {# ── Tareas ── #}
-  {% if tareas %}
-  <div class="hoy-cols">
-    {% for c, titulo in [('hoy', 'Hoy'), ('semana', 'Esta semana'), ('mes', 'Más adelante')] %}
-    {% set lista = tareas|selectattr('cuando', 'equalto', c)|sort(attribute='orden')|list %}{# ### CAMBIO AQUÍ ### primero lo que más plata mueve #}
-    {% if lista %}
-    <div class="hoy-col hoy-col-{{ c }}">
-      <h4>{{ titulo }}</h4>
-      {% for x in lista %}
-      {% if loop.index == 4 %}<details class="hoy-mas"><summary>+{{ lista|length - 3 }} más</summary>{% endif %}
-      <article class="accion">
-        <div class="accion-tit">{% if x.link %}<a href="{{ request.script_root }}/{{ x.link }}">{{ x.titulo }}</a>{% else %}{{ x.titulo }}{% endif %}</div>
-        {% if x.impacto %}<div class="accion-imp">≈ +{{ x.impacto.monto|dinero(x.impacto.mon) }} <span>{{ x.impacto.corto }}</span></div>{% endif %}{# ### CAMBIO AQUÍ ### #}
-        <div class="accion-botones">
-          <form method="post" action="{{ url_for('accion_estado') }}">
-            <input type="hidden" name="clave" value="{{ x.clave }}"><input type="hidden" name="estado" value="hecho">
-            {% if x.prueba %}{# ### CAMBIO AQUÍ ### se anota solo en Pruebas #}
-            <input type="hidden" name="p_pid" value="{{ x.prop_id }}"><input type="hidden" name="p_tipo" value="{{ x.prueba.tipo }}">
-            <input type="hidden" name="p_desde" value="{{ x.prueba.desde }}"><input type="hidden" name="p_hasta" value="{{ x.prueba.hasta }}">
-            <input type="hidden" name="p_valor" value="{{ x.prueba.valor }}"><input type="hidden" name="p_sugerido" value="{{ x.prueba.sugerido or '' }}">
-            {% endif %}
-            <input type="hidden" name="volver" value="{{ volver }}">
-            <button type="submit" class="btn btn-xs btn-primary" title="Ya lo hice en Airbnb{{ ' (se anota en Pruebas)' if x.prueba }}">✓ Hecho</button>
-          </form>
-          <form method="post" action="{{ url_for('accion_estado') }}">
-            <input type="hidden" name="clave" value="{{ x.clave }}"><input type="hidden" name="estado" value="descartado">
-            <input type="hidden" name="volver" value="{{ volver }}">
-            <button type="submit" class="btn btn-xs" title="No aplica: no volver a mostrar">✕</button>
-          </form>
-          {{ origen(['Cómo: ' ~ x.hacer] + x.origen) }}
-          {{ caja(x.clave, coment.get(x.clave), volver) }}
-        </div>
-      </article>
-      {% if loop.last and loop.length > 3 %}</details>{% endif %}
+    {% if b.sit %}
+    <div class="sit-grid">
+      {% for k, titulo, icono in [('techo', 'Techo de precio', '⬆'), ('descuentos', 'Descuentos', '%'), ('disponibilidad', 'Disponibilidad', '▦')] %}
+      {% set s = b.sit[k] %}
+      <div class="sit-card sit-{{ k }}" id="{{ k }}-{{ pid }}">
+        <div class="sit-tit"><span class="sit-ico" aria-hidden="true">{{ icono }}</span> {{ titulo }}</div>
+        <div class="sit-num">{{ s.numero }}</div>
+        <div class="sit-sub">{{ s.sub }}</div>
+        <div class="sit-txt">{{ s.texto }}</div>
+        <div class="sit-pie">{{ origen(s.origen) }}{{ caja(pid ~ ':' ~ k, coment.get(pid ~ ':' ~ k), volver) }}</div>
+      </div>
       {% endfor %}
     </div>
     {% endif %}
-    {% endfor %}
-  </div>
-  {% elif not cfg %}
-  <p class="muted" style="margin-top:6px">Nada para hacer con esta propiedad. ✅</p>
-  {% endif %}
+    {% if b.a %}{{ detalle(b.a, coment, volver, dia) }}{% endif %}
+  </section>
+  {% endfor %}
+</details>
 
-  {% if b.a %}{{ detalle(b.a, coment, volver, dia) }}{% endif %}
-</section>
-{% endfor %}
-
-{# ── Feriados y eventos (para todas las propiedades) ── #}
-<details class="card detalle-prop" id="eventos">
-  <summary>Feriados y eventos de los próximos 90 días ({{ esp|length }})</summary>
+{# ── Feriados y eventos ── #}
+<details class="card calma-despues" id="eventos">
+  <summary><span>Feriados y eventos de los próximos 90 días ({{ esp|length }})</span><span aria-hidden="true" class="calma-flecha">›</span></summary>
   {% if esp %}
   <ul class="est-lista">
     {% for x in esp %}
@@ -168,4 +219,5 @@
   {{ caja('eventos', coment.get('eventos'), volver) }}
 </details>
 {% endif %}
+</div>
 {% endblock %}

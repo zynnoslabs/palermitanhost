@@ -1177,3 +1177,90 @@ html[data-movimiento="menos"] .marca-logo .capa { animation: none !important; }
 .txt-ok { color:var(--color-success); font-weight:600; }   /* ### CAMBIO AQUÍ ### */
 
 .numeros-links { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0; }   /* ### CAMBIO AQUÍ ### */
+
+/* ══ ### CAMBIO AQUÍ ### MODO TRANQUILO: Qué hacer hoy ═══════════════════════
+   Una sola columna angosta, letra más grande, mucho aire, valor grande y botones grandes. */
+.calma-pag { max-width: 680px; display: flex; flex-direction: column; gap: 14px; }
+.calma-cab h2 { font-family: 'Cormorant Garamond', serif; font-size: 2.1rem; line-height: 1.1; margin: 0; }
+.calma-cab p { margin: 4px 0 0; }
+.calma-card, .calma-plan, .calma-paso { padding: 18px 20px; border-radius: 16px; margin: 0; }
+.calma-botones { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+.calma-frase { font-size: 1.2rem; font-weight: 600; margin: 0 0 10px; line-height: 1.35; font-family: 'Inter', system-ui, sans-serif; }
+.calma-barra { height: 8px; border-radius: 99px; background: var(--color-border-soft); overflow: hidden; margin-bottom: 10px; }
+.calma-barra span { display: block; height: 100%; background: var(--color-success-accent); border-radius: 99px; transition: width .5s ease; }
+.calma-juego { margin: 0 0 8px; font-size: .95rem; }
+.calma-ok { margin: 0; display: flex; gap: 8px; align-items: flex-start; font-size: .95rem; color: var(--color-info);
+  background: var(--color-info-bg); border-radius: 10px; padding: 10px 12px; }
+.calma-aviso { background: var(--color-warning-bg); color: var(--color-warning); border: 1px solid var(--color-warning-border);
+  border-radius: 12px; padding: 12px 14px; font-size: .95rem; }
+.calma-deshacer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;
+  background: var(--color-success-bg); color: var(--color-success); border-radius: 12px; padding: 8px 14px; font-weight: 600; }
+.calma-num { font-size: .78rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--color-text-2); }
+.calma-que { font-size: 1.05rem; line-height: 1.5; margin: 8px 0 12px; }
+.calma-valor { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+  background: var(--color-surface-2); border: 1px solid var(--color-border-soft); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; }
+.calma-monto { font-size: 1.9rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.calma-monto small { font-size: .85rem; font-weight: 500; color: var(--color-text-2); }
+.calma-valor .btn { min-height: 48px; padding: 0 18px; font-size: .95rem; }
+.calma-paso .accion-imp { font-size: .9rem; margin: 0 0 6px; }
+.calma-paso details.mas, .calma-item details.mas { margin-top: 4px; }
+details.mas > summary { cursor: pointer; color: var(--color-primary-text); font-size: .92rem; list-style: none; min-height: 34px;
+  display: flex; align-items: center; }
+details.mas > summary::-webkit-details-marker { display: none; }
+details.mas > summary::before { content: "›"; display: inline-block; width: 1em; transition: transform .15s; }
+details.mas[open] > summary::before { transform: rotate(90deg); }
+details.mas ol, details.mas ul { margin: 4px 0 8px; padding-left: 22px; color: var(--color-text-2); font-size: .92rem; display: flex; flex-direction: column; gap: 4px; }
+details.mas p { margin: 4px 0 8px; color: var(--color-text-2); font-size: .92rem; }
+.calma-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 12px; }
+.calma-acciones form:first-child { flex: 1 1 220px; }
+.calma-listo { width: 100%; min-height: 50px; font-size: 1rem; }
+.calma-fin { text-align: center; background: var(--color-success-bg); color: var(--color-success); border-radius: 16px; padding: 22px; }
+.calma-fin h3 { font-family: 'Cormorant Garamond', serif; font-size: 1.7rem; margin: 0 0 4px; }
+.calma-fin p { margin: 0; }
+.calma-despues { padding: 12px 20px; border-radius: 16px; margin: 0; }
+.calma-despues > summary { cursor: pointer; font-weight: 600; list-style: none; min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.calma-despues > summary::-webkit-details-marker { display: none; }
+.calma-flecha { transition: transform .15s; color: var(--color-text-2); }
+.calma-despues[open] > summary .calma-flecha { transform: rotate(90deg); }
+.calma-item { padding: 12px 0; border-top: 1px solid var(--color-border-soft); }
+.calma-item-tit { font-size: .98rem; }
+.calma-item-valor { display: inline-block; margin-left: 6px; font-variant-numeric: tabular-nums; }
+.calma-cfg { margin: 8px 0 0; font-size: .92rem; }
+#panorama .hoy-prop { border-top: 1px solid var(--color-border-soft); padding-top: 14px; margin-top: 10px; }
+#panorama .hoy-prop h3 { font-size: 1.05rem; margin: 0; }
+@media (max-width: 520px) {
+  .calma-cab h2 { font-size: 1.8rem; }
+  .calma-monto { font-size: 1.6rem; }
+  .calma-paso, .calma-plan { padding: 16px; }
+}
+
+/* ══ ### CAMBIO AQUÍ ### PRECIOS SIMPLE ══ */
+.precio-prop { max-width: 760px; padding: 18px 20px; border-radius: 16px; display: flex; flex-direction: column; gap: 14px; }
+.precio-nombre { margin: 0; font-size: 1.2rem; }
+.precio-et { font-size: .78rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--color-text-2); }
+.precio-grande { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; font-size: 2.3rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.precio-grande small { font-size: .9rem; font-weight: 500; color: var(--color-text-2); }
+.precio-grande .btn { align-self: center; }
+.precio-tranqui { margin: 0; font-size: 1rem; color: var(--color-text-2); }
+.escala { display: flex; flex-direction: column; gap: 8px; }
+.escala-linea { position: relative; height: 10px; border-radius: 99px; background: var(--color-border-soft); }
+.escala-zona { position: absolute; top: 0; bottom: 0; border-radius: 99px; background: var(--color-success-accent); opacity: .4; }
+.escala-punto { position: absolute; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%;
+  background: var(--color-primary); border: 3px solid var(--color-surface); box-shadow: 0 0 0 1px var(--color-primary); }
+.escala-txt { position: relative; min-height: 2.9em; font-size: .85rem; color: var(--color-text-2); }
+.escala-txt span { position: absolute; top: 0; white-space: nowrap; }
+.escala-txt .et-min { left: 0; }
+.escala-txt .et-pos { transform: translateX(-50%); text-align: center; }
+.escala-txt .et-max { right: 0; text-align: right; }
+.escala-txt b { display: block; color: var(--color-text); font-variant-numeric: tabular-nums; }
+.precio-fichas { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+.precio-ficha { border: 1px solid var(--color-border); border-radius: 12px; padding: 10px 12px; background: var(--color-surface-2); }
+.pf-d { font-size: .82rem; color: var(--color-text-2); }
+.pf-p { font-weight: 700; font-variant-numeric: tabular-nums; }
+.pf-et { display: inline-block; font-size: .74rem; padding: 2px 8px; border-radius: 99px; background: var(--color-warning-bg); color: var(--color-warning); margin-top: 4px; }
+.precio-costos { width: 100%; border-collapse: collapse; font-size: .92rem; margin: 6px 0 8px; }
+.precio-costos td { padding: 6px 0; border-bottom: 1px solid var(--color-border-soft); }
+.precio-costos td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.precio-prop > details.pp { border-top: 1px solid var(--color-border-soft); padding-top: 6px; box-shadow: none; }
+.precio-prop + .precio-prop { margin-top: 14px; }
+@media (max-width: 520px) { .precio-grande { font-size: 1.9rem; } .precio-prop { padding: 16px; } }

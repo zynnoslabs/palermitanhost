@@ -30,7 +30,7 @@ for cod, fi, ff, nom in (("A1", D(-3), D(0), "Ana Perez"), ("A2", D(0), D(3), "B
                   VALUES (%s,%s,%s,%s,%s,3,'confirmada',150000,120000,'ARS')""", (P, cod, nom, fi, ff))
 db.execute("INSERT INTO config (clave,valor) VALUES ('ultima_importacion_reservas',%s) ON CONFLICT (clave) DO UPDATE SET valor=EXCLUDED.valor", (D(-10),))
 h = admin.get("/hoy").get_data(as_text=True)
-chk("aviso de datos viejos (10 días, sin calendario)", "Las reservas tienen 10 días" in h)
+chk("aviso de datos viejos (10 días, sin calendario)", "reservas tienen 10 días" in h)
 l = admin.get("/limpiezas").get_data(as_text=True)
 chk("limpiezas: 3 salidas", l.count('class="card limp') == 3, l.count('class="card limp'))
 chk("limpiezas: urgente si entra otro el mismo día", "Entra otro huésped ese día" in l)

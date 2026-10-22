@@ -35,7 +35,7 @@ chk("hay una tarea para descartar", clave is not None)
 c.post("/acciones/estado", data={"clave": clave.group(1), "estado": "descartado", "volver": "/hoy"})
 h3 = c.get("/hoy").get_data(as_text=True)
 chk("después de un cambio recalcula", llamadas[0] == 2, llamadas[0])
-chk("la tarea descartada ya no aparece", clave.group(1) not in h3)
+chk("la tarea descartada ya no aparece (solo queda el botón Deshacer)", f'value="{clave.group(1)}"><input type="hidden" name="estado"' not in h3 and "Deshacer" in h3)
 db.execute("UPDATE propiedades SET precio_base=60000 WHERE id=%s", (P,))
 c.get("/hoy"); chk("si cambia la propiedad recalcula aunque sea por fuera", llamadas[0] == 3, llamadas[0])
 # el filtro de Sentry no manda datos personales
