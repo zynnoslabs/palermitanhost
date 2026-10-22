@@ -10,7 +10,10 @@ Cada paso dice **dónde** se hace y **qué** copiar. Las claves nunca se pegan e
 La base de datos gratis de Render **se borra a los 30 días**. Neon tiene un plan gratis que no vence.
 
 1. Entrá a <https://neon.tech> y creá una cuenta (podés usar la de Google de Adriano).
-2. **Create project** → nombre `palermitanhost` → región **AWS São Paulo** (la más cerca de Buenos Aires).
+2. **Create project** → nombre `palermitanhost` → región **la misma que el servicio de Render**.
+   Render está en **Oregon**, así que en Neon elegí **AWS US West 2 (Oregon)**.
+   **Importante:** si la base queda lejos del servidor (por ejemplo São Paulo con Render en Oregon), cada consulta
+   cruza el continente y las páginas tardan varios segundos. La región de un proyecto de Neon no se puede cambiar después.
 3. En el panel, **Connect** → **apagá "Connection pooling"** (el sistema ya maneja sus conexiones y necesita la conexión directa
    para la zona horaria) → copiá la *connection string* que empieza con `postgresql://` y termina con `?sslmode=require`.
    Tiene que decir `.neon.tech` y **no** tiene que decir `-pooler`.
