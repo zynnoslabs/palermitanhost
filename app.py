@@ -39,6 +39,26 @@ import alertas   # ### CAMBIO AQUÍ ### situaciones raras o pendientes
 
 from werkzeug.middleware.proxy_fix import ProxyFix   # ### CAMBIO AQUÍ ###
 
+# ### CAMBIO AQUÍ ### — AVISO DE ERRORES (Sentry). Solo se activa si en Render está la variable SENTRY_DSN.
+# Si algo falla, te llega un mail de Sentry con el error, antes de que Adriano tenga que avisarte.
+# No se mandan datos de huéspedes, cookies ni formularios: solo el error y en qué parte del código pasó.
+if os.getenv("SENTRY_DSN"):
+    try:
+        import sentry_sdk
+
+        def _sin_datos_personales(evento, _hint):
+            req = evento.get("request") or {}
+            for k in ("cookies", "data", "headers", "query_string", "env"):
+                req.pop(k, None)
+            evento.pop("user", None)
+            return evento
+
+        sentry_sdk.init(dsn=os.getenv("SENTRY_DSN"), send_default_pii=False, traces_sample_rate=0,
+                        environment=os.getenv("RENDER_SERVICE_NAME") or "local", before_send=_sin_datos_personales,
+                        max_request_body_size="never", include_local_variables=False)
+    except Exception as _e:   # sin la librería o con un DSN mal escrito, el sistema sigue andando igual
+        print(f"[sentry] no se activó: {_e}")
+
 app = Flask(__name__)
 app.jinja_env.globals["info"] = ayuda.info   # ### CAMBIO AQUÍ ### {{ info('clave') }} en las plantillas
 
@@ -659,9 +679,44 @@ def _volver(defecto):
 
 def _leer_calendario(p):
     try:
-        ical.actualizar(p)
+        ok, motivo = ical.actualizar(p)
+        if ok and motivo != "reciente":
+            _datos_cambiaron()   # ### CAMBIO AQUÍ ### el calendario trajo datos nuevos: "Qué hacer hoy" se recalcula
     except Exception as e:
         print(f"[ical] {p.get('id')}: {e}")
+
+
+# ### CAMBIO AQUÍ ### — CACHÉ DE "QUÉ HACER HOY"
+# Calcular todo (historial, ritmo, pruebas, feriados) tarda; con más propiedades se nota.
+# Se guarda el resultado 10 minutos y se recalcula antes si cambió cualquier dato
+# (cualquier cambio guardado en el sistema o un calendario de Airbnb con novedades).
+# La "versión de datos" vive en la base, así sirve aunque Render use 2 procesos.
+_CACHE_ANALISIS = {}
+CACHE_MINUTOS = 10
+
+
+def _version_datos():
+    try:
+        row = db.query_one("SELECT valor FROM config WHERE clave='datos_version'")
+        return row["valor"] if row else "0"
+    except Exception:
+        return "0"
+
+
+def _datos_cambiaron():
+    try:
+        db.execute("""INSERT INTO config (clave, valor) VALUES ('datos_version', %s)
+                      ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor""", (f"{time.time():.6f}",))
+    except Exception as e:
+        print(f"[cache] {e}")
+    _CACHE_ANALISIS.clear()
+
+
+@app.after_request
+def _invalidar_cache(resp):
+    if request.method == "POST" and session.get("logged_in") and resp.status_code < 400:
+        _datos_cambiaron()
+    return resp
 
 
 def _refrescar_calendarios(props, espera=6.0):
@@ -677,6 +732,17 @@ def _refrescar_calendarios(props, espera=6.0):
 
 
 def _analisis_estrategia(props, hoy):
+    clave = (hoy.isoformat(), tuple((p["id"], str(p)) for p in props), _version_datos(), str(monedas.tc_valor()))
+    guardado = _CACHE_ANALISIS.get(clave)
+    if guardado and time.time() - guardado[0] < CACHE_MINUTOS * 60:
+        return guardado[1]
+    resultado = _analisis_estrategia_calcular(props, hoy)
+    _CACHE_ANALISIS.clear()   # una sola entrada: no crece la memoria
+    _CACHE_ANALISIS[clave] = (time.time(), resultado)
+    return resultado
+
+
+def _analisis_estrategia_calcular(props, hoy):
     reservas = db.query("SELECT * FROM reservas")
     tc = monedas.tc_valor()
     try:
