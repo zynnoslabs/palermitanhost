@@ -189,3 +189,12 @@ window.addEventListener('pageshow', function () {
   Chart.defaults.color = tk('--color-text-2');
   Chart.defaults.borderColor = tk('--color-border-soft');
 })();
+
+// ### CAMBIO AQUÍ ### — el logo se anima una sola vez por sesión (no en cada página)
+(function () {
+  var l = document.getElementById('marca-logo');
+  if (!l) return;
+  var visto = false;
+  try { visto = sessionStorage.getItem('ph-logo') === '1'; sessionStorage.setItem('ph-logo', '1'); } catch (e) { visto = true; }
+  if (!visto) l.classList.add('anim');
+})();

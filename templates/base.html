@@ -15,12 +15,12 @@
 
   <!-- ── SIDEBAR ─────────────────────────────────────── -->
   <aside class="sidebar" aria-label="Navegación">
-    <div class="sidebar-logo">
-      <img src="{{ url_for('static', filename='logo.png') }}"
-           onerror="this.style.display='none';this.nextElementSibling.style.display='block'"
-           alt="PalermitanHost">
-      <div class="sidebar-logo-text" style="display:none">PalermitanHost</div>
-    </div>
+    {# ### CAMBIO AQUÍ ### logo integrado al menú: mismas letras y estrellas del logo original, sin el cuadrado de fondo #}
+    <a href="{{ url_for('hoy') }}" class="marca" aria-label="PalermitanHost, ir a Qué hacer hoy">
+      <span class="marca-logo" id="marca-logo" aria-hidden="true">
+        <span class="capa c-pal"></span><span class="capa c-est"></span><span class="capa c-host"></span><span class="capa c-brillo"></span>
+      </span>
+    </a>
 
     {# ### CAMBIO AQUÍ ### menú simple (Ley de Hick), ordenado por uso: lo diario arriba (hoy, calendario, precios), después seguimiento (pruebas, números, IA), y lo ocasional en "Más" #}
     {% set en_mas = request.endpoint and ('propiedad' in request.endpoint or 'importar' in request.endpoint or 'informe' in request.endpoint or 'competencia' in request.endpoint or request.endpoint == 'ajustes') %}

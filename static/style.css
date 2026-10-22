@@ -42,6 +42,10 @@
   --color-info:    #2a5f9e; --color-info-accent:    #2f6fb3; --color-info-bg:    #f1f6fc;
   --color-highlight:     #fff6df;   /* resaltado momentáneo */
   --color-focus:         #2a5f9e;   /* anillo de foco del teclado */
+  --color-marca:         #d6cda6;   /* ### CAMBIO AQUÍ ### beige exacto del fondo del logo */
+  --color-marca-2:       #e6dfc3;
+  --color-marca-tinta:   #1c1d21;   /* color exacto de las letras del logo */
+  --color-marca-brillo:  rgba(255,236,180,.95);
 
   /* Nombres viejos → apuntan a los roles (no romper nada) */
   --surface:      var(--color-surface);
@@ -1067,7 +1071,7 @@ html[data-tema="oscuro"] { --color-bg:#16140f; --color-surface:#211e17; --color-
   --color-info:#a3c8f2; --color-info-accent:#5b9be0; --color-info-bg:#152233;
   --color-highlight:#3a3015; --color-focus:#8ab8ff;
   --arena:#5a5240; --arena-light:#3a3528; --arena-dark:#c9bfa8; --arena-bg:#16140f;
-  --shadow: 0 2px 8px rgba(0,0,0,.35); color-scheme: dark; }
+  --shadow: 0 2px 8px rgba(0,0,0,.35); color-scheme: dark; --color-marca:#2b271d; --color-marca-2:#231f17; --color-marca-tinta:#efe6cc; --color-marca-brillo:rgba(255,226,150,.9); }
 @media (prefers-color-scheme: dark) {
   html[data-tema="auto"] { --color-bg:#16140f; --color-surface:#211e17; --color-surface-2:#1c1a14; --color-surface-3:#28241b;
   --color-border:#3d382b; --color-border-soft:#2c281f; --color-border-strong:#7a6e52;
@@ -1079,7 +1083,7 @@ html[data-tema="oscuro"] { --color-bg:#16140f; --color-surface:#211e17; --color-
   --color-info:#a3c8f2; --color-info-accent:#5b9be0; --color-info-bg:#152233;
   --color-highlight:#3a3015; --color-focus:#8ab8ff;
   --arena:#5a5240; --arena-light:#3a3528; --arena-dark:#c9bfa8; --arena-bg:#16140f;
-  --shadow: 0 2px 8px rgba(0,0,0,.35); color-scheme: dark; }
+  --shadow: 0 2px 8px rgba(0,0,0,.35); color-scheme: dark; --color-marca:#2b271d; --color-marca-2:#231f17; --color-marca-tinta:#efe6cc; --color-marca-brillo:rgba(255,226,150,.9); }
 }
 html[data-letra="grande"] { font-size: 112.5%; }
 html[data-letra="muy"]    { font-size: 125%; }
@@ -1102,3 +1106,34 @@ html[data-movimiento="menos"] *, html[data-movimiento="menos"] *::before, html[d
 .aj-switch input { width:22px; height:22px; flex:none; accent-color: var(--color-primary); }
 .aj-opcion input { accent-color: var(--color-primary); width:auto; flex:none; margin:0; }
 .aj-switch input { margin:0; }
+
+
+/* ══ ### CAMBIO AQUÍ ### LOGO INTEGRADO AL MENÚ ══════════════════════════════
+   Las letras y las estrellas son las del logo original (static/marca/*.png, sin fondo).
+   El beige del logo pasa a ser el fondo del encabezado y se funde con el menú. */
+.marca { position: relative; display: block; height: 128px; overflow: hidden; text-decoration: none;
+  background:
+    radial-gradient(120% 90% at 50% 0%, var(--color-marca-2) 0%, transparent 70%),
+    linear-gradient(180deg, var(--color-marca) 0%, var(--color-marca) 55%, var(--color-surface) 100%); }
+.marca::after { content: ""; position: absolute; left: 20px; right: 20px; bottom: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-border), transparent); }
+.marca-logo { position: absolute; inset: 22px 24px 26px; }
+.marca-logo .capa { position: absolute; inset: 0; background: var(--color-marca-tinta);
+  -webkit-mask: var(--m) center / contain no-repeat; mask: var(--m) center / contain no-repeat; }
+.marca-logo .c-pal  { --m: url("marca/palermitan.png"); }
+.marca-logo .c-est  { --m: url("marca/estrellas.png"); }
+.marca-logo .c-host { --m: url("marca/host.png"); }
+.marca-logo .c-brillo { --m: url("marca/letras.png");
+  background: linear-gradient(105deg, transparent 35%, var(--color-marca-brillo) 50%, transparent 65%);
+  background-size: 300% 100%; background-position: 150% 0; }
+.marca-logo.anim .c-pal  { animation: marca-subir .7s cubic-bezier(.2,.7,.2,1) both; }
+.marca-logo.anim .c-est  { animation: marca-estrellas .8s steps(5, end) .45s both; }
+.marca-logo.anim .c-host { animation: marca-subir .7s cubic-bezier(.2,.7,.2,1) .7s both; }
+.marca-logo.anim .c-brillo { animation: marca-brillo 1.4s ease-in-out 1.4s both; }
+.marca:hover .c-brillo, .marca:focus-visible .c-brillo { animation: marca-brillo 1.2s ease-in-out both; }
+.marca:focus-visible { outline-offset: -4px; }
+@keyframes marca-subir { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes marca-estrellas { from { clip-path: inset(0 67.5% 0 0); } to { clip-path: inset(0 32.5% 0 0); } }
+@keyframes marca-brillo { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+@media (prefers-reduced-motion: reduce) { .marca-logo .capa { animation: none !important; } }
+html[data-movimiento="menos"] .marca-logo .capa { animation: none !important; }
