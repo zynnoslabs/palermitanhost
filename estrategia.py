@@ -44,6 +44,18 @@ def _rango_largo(a, b):
     return f"el {f(a)}" if a == b else f"del {f(a)} al {f(b)}"
 
 
+def _pasos(hacer):
+    """### CAMBIO AQUÍ ### 'Airbnb → Calendario → seleccioná…' como lista de pasos ("Airbnb" solo no es un paso)."""
+    if "→" not in hacer:
+        return []
+    partes = [x.strip().rstrip(".") for x in hacer.split("→") if x.strip()]
+    if partes and partes[0].lower() == "airbnb":
+        partes = partes[1:]
+        if partes:
+            partes[0] = "En Airbnb, entrá a " + partes[0]
+    return [x[:1].upper() + x[1:] for x in partes]
+
+
 def _copiar(v):
     """Lo que se pega en Airbnb: el número sin puntos ni símbolo."""
     return str(int(round(v))) if v is not None else ""
@@ -361,7 +373,7 @@ def acciones(a):
         out.append({"clave": f"{pid}:{clave}", "cuando": cuando, "titulo": titulo, "hacer": hacer,
                     "origen": origen, "link": link, "prop_id": pid, "prop": prop["nombre"], "prueba": prueba,
                     "impacto": imp, "orden": -(imp["monto"] if imp else 0), "ver": ver,
-                    "pasos": [x.strip() for x in hacer.split("→")] if "→" in hacer else []})
+                    "pasos": _pasos(hacer)})
 
     # 1) datos que faltan (sin ellos los cálculos quedan cortos)
     if not h["validas"]:
