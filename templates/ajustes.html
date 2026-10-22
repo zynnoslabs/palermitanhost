@@ -35,6 +35,53 @@
   <p class="muted" id="aj-estado" role="status" style="margin-top:10px;font-size:.85rem"></p>
 </div>
 
+{# ### CAMBIO AQUÍ ### instalar como app #}
+<div class="card" style="max-width:720px;margin-top:16px">
+  <h3 style="margin:0 0 6px;font-size:1rem">Instalar en el celular</h3>
+  <p class="muted" style="margin-bottom:10px">Queda un ícono en la pantalla de inicio y abre como una app, sin la barra del navegador.</p>
+  <button type="button" class="btn btn-primary" id="instalar-app" hidden>Instalar PalermitanHost</button>
+  <ul class="muted" style="margin:10px 0 0 18px;font-size:.88rem">
+    <li><strong>Android (Chrome):</strong> menú ⋮ → "Instalar app" o "Agregar a la pantalla principal".</li>
+    <li><strong>iPhone (Safari):</strong> botón Compartir → "Agregar a inicio".</li>
+  </ul>
+</div>
+
+{% if rol_actual() == 'admin' %}
+{# ### CAMBIO AQUÍ ### usuarios extra: limpieza o co-anfitrión #}
+<div class="card" id="usuarios" style="max-width:720px;margin-top:16px">
+  <h3 style="margin:0 0 6px;font-size:1rem">Otros usuarios</h3>
+  <p class="muted" style="margin-bottom:12px">Para quien limpia (solo ve las limpiezas, sin precios ni ganancias) o para un co-anfitrión (ve todo, pero no puede borrar datos ni manejar usuarios).</p>
+  {% if usuarios %}
+  <ul class="usr-lista">
+    {% for u in usuarios %}
+    <li class="{{ '' if u.activo else 'usr-inactivo' }}">
+      <div><strong>{{ u.nombre }}</strong> <span class="muted">· {{ u.usuario }} · {{ 'Limpieza' if u.rol == 'limpieza' else 'Co-anfitrión' }}{% if not u.activo %} · desactivado{% endif %}</span></div>
+      <div class="usr-acciones">
+        <form method="post" action="{{ url_for('usuario_estado', uid=u.id) }}">
+          <input type="hidden" name="activo" value="{{ '0' if u.activo else '1' }}">
+          <button type="submit" class="btn btn-sm">{{ 'Desactivar' if u.activo else 'Activar' }}</button>
+        </form>
+        <details class="usr-clave"><summary class="btn btn-sm">Cambiar contraseña</summary>
+          <form method="post" action="{{ url_for('usuario_clave', uid=u.id) }}" class="usr-form">
+            <label for="clave-{{ u.id }}">Nueva contraseña (mínimo 10)</label>
+            <input type="password" id="clave-{{ u.id }}" name="clave" minlength="10" required autocomplete="new-password">
+            <button type="submit" class="btn btn-sm btn-primary">Guardar</button>
+          </form>
+        </details>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <form method="post" action="{{ url_for('usuario_nuevo') }}" class="form-grid">
+    <div class="form-group"><label for="u-nombre">Nombre</label><input id="u-nombre" name="nombre" maxlength="60" required placeholder="Ej: Marta"></div>
+    <div class="form-group"><label for="u-usuario">Usuario para entrar</label><input id="u-usuario" name="usuario" maxlength="40" required pattern="[a-zA-Z0-9._-]{3,40}" placeholder="Ej: marta" autocomplete="off"></div>
+    <div class="form-group"><label for="u-clave">Contraseña (mínimo 10)</label><input id="u-clave" type="password" name="clave" minlength="10" required autocomplete="new-password"></div>
+    <div class="form-group"><label for="u-rol">Tipo</label><select id="u-rol" name="rol">{% for k, v in ROLES.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+    <div class="form-group" style="align-self:end"><button type="submit" class="btn btn-primary">Crear usuario</button></div>
+  </form>
+</div>
+
 {# ### CAMBIO AQUÍ ### seguridad de la sesión #}
 <div class="card" style="max-width:720px;margin-top:16px">
   <h3 style="margin:0 0 6px;font-size:1rem">Sesiones abiertas</h3>
@@ -44,6 +91,7 @@
   </form>
   <p class="muted" style="margin-top:8px;font-size:.85rem">Usalo si perdiste el celular o entraste desde una compu que no es tuya.</p>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

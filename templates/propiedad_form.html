@@ -164,7 +164,9 @@
     </div>
     <div class="form-group" style="grid-column: span 2">
       <label>Link del calendario de Airbnb (Exportar calendario){{ info('ical') }}</label>
-      <input type="url" name="ical_url" placeholder="https://www.airbnb.com.ar/calendar/ical/....ics?s=..." value="{{ d.ical_url or '' }}" autocomplete="off">
+      <input type="url" name="ical_url" placeholder="https://www.airbnb.com.ar/calendar/ical/....ics?s=..." value="{{ d.ical_url or '' }}" autocomplete="off" aria-describedby="ical-ayuda">
+      {# ### CAMBIO AQUÍ ### se destaca: sin esto las sugerencias dependen de subir archivos a mano #}
+      {% if not d.ical_url %}<p class="campo-clave" id="ical-ayuda"><strong>Muy recomendado.</strong> Con el calendario conectado, el sistema sabe cada hora qué noches siguen libres y no depende de que subas archivos. En Airbnb: Calendario → Disponibilidad → Conectar calendarios → Exportar calendario → copiá el link y pegalo acá.</p>{% endif %}
     </div>
   </div>
 

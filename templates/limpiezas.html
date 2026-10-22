@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Limpiezas – PalermitanHost{% endblock %}
+{# ### CAMBIO AQUÍ ### — página nueva: recambios de los próximos 14 días #}
+{% block content %}
+<div class="page-header"><h2>Limpiezas</h2><span class="muted">Próximos 14 días</span></div>
+<p class="muted" style="margin:-6px 0 14px">Cada salida de un huésped es una limpieza. Si ese mismo día entra otro, tiene que quedar lista antes del check-in.</p>
+
+{% if not lista %}
+<div class="card"><p class="muted">No hay salidas de huéspedes en los próximos 14 días.</p></div>
+{% else %}
+<div class="limp-lista">
+  {% for x in lista %}
+  <article class="card limp {{ 'limp-hecha' if x.hecha }} {{ 'limp-urgente' if x.entra_mismo_dia and not x.hecha }}">
+    <div class="limp-cab">
+      <div>
+        <div class="limp-fecha">{{ x.fecha_txt }}{% if x.hoy %} · <strong>hoy</strong>{% elif x.manana %} · mañana{% endif %}</div>
+        <h3 class="limp-prop">{{ x.prop }}</h3>
+        {% if x.direccion %}<div class="muted">{{ x.direccion }}</div>{% endif %}
+      </div>
+      {% if x.hecha %}<span class="pill-estado ok">✓ Lista{% if x.quien %} · {{ x.quien }}{% endif %}</span>
+      {% elif x.entra_mismo_dia %}<span class="pill-estado urgente">Entra otro huésped ese día</span>
+      {% else %}<span class="pill-estado">Pendiente</span>{% endif %}
+    </div>
+    <p class="limp-txt">
+      {% if x.entra_mismo_dia %}Tiene que quedar lista antes del check-in.
+      {% elif x.proxima %}Próxima llegada: {{ x.proxima }}.
+      {% else %}No hay otra llegada cargada por ahora.{% endif %}
+      {% if rol_actual() != 'limpieza' and x.costo %}<span class="muted"> · Costo del recambio: {{ x.costo|dinero(x.moneda) }}</span>{% endif %}
+    </p>
+    <div class="limp-acciones">
+      <form method="post" action="{{ url_for('limpieza_estado') }}">
+        <input type="hidden" name="clave" value="{{ x.clave }}">
+        {% if x.hecha %}<input type="hidden" name="estado" value="pendiente"><button type="submit" class="btn btn-sm">Marcar pendiente</button>
+        {% else %}<input type="hidden" name="estado" value="hecha"><button type="submit" class="btn btn-sm btn-primary">✓ Lista</button>{% endif %}
+      </form>
+      {% if rol_actual() != 'limpieza' %}
+      <button type="button" class="btn btn-sm" data-copiar="{{ x.mensaje }}">Copiar mensaje</button>
+      <a class="btn btn-sm" href="https://wa.me/?text={{ x.mensaje|urlencode }}" target="_blank" rel="noopener">Enviar por WhatsApp</a>
+      {% endif %}
+    </div>
+  </article>
+  {% endfor %}
+</div>
+{% endif %}
+<p class="muted" style="font-size:.8rem;margin-top:10px">Salen de las reservas cargadas y, si está conectado, del calendario de Airbnb.</p>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ### CAMBIO AQUÍ ### copia el mensaje para pegarlo en WhatsApp o donde quieras
+document.querySelectorAll('[data-copiar]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var t = b.getAttribute('data-copiar'), orig = b.textContent;
+    function listo() { b.textContent = '¡Copiado!'; setTimeout(function () { b.textContent = orig; }, 1500); }
+    if (navigator.clipboard) navigator.clipboard.writeText(t).then(listo, function () { window.prompt('Copiá el mensaje:', t); });
+    else window.prompt('Copiá el mensaje:', t);
+  });
+});
+</script>
+{% endblock %}

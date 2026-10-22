@@ -13,3 +13,12 @@
   // color de un design token (para los gráficos)
   function tk(nombre) { return getComputedStyle(document.documentElement).getPropertyValue(nombre).trim() || '#806428'; }
   </script>
+  {# ### CAMBIO AQUÍ ### instalable en el celular (PWA) #}
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+  <meta name="theme-color" content="#d6cda6" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#16140f" media="(prefers-color-scheme: dark)">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='iconos/favicon-32.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='iconos/apple-touch-icon.png') }}">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Palermitan">
+  <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); });</script>

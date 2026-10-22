@@ -416,13 +416,44 @@ def _version_sesiones():
         return 0
 
 
+def _huella_usuario(u):
+    import hashlib
+    return hmac.new(app.secret_key.encode(), f"u:{u['id']}:{u['clave_hash']}".encode(), hashlib.sha256).hexdigest()[:16]
+
+
+def _usuario_extra(usuario, clave):
+    """### CAMBIO AQUÍ ### usuario creado por Adriano (limpieza o co-anfitrión), activo y con la clave correcta."""
+    from werkzeug.security import check_password_hash
+    usuario = (usuario or "").strip().lower()
+    if not usuario or not clave:
+        return None
+    u = db.query_one("SELECT * FROM usuarios WHERE usuario=%s AND activo", (usuario,))
+    return u if u and check_password_hash(u["clave_hash"], clave) else None
+
+
 def _sesion_valida():
     if not session.get("logged_in"):
         return True
     inicio = session.get("inicio") or 0
-    return (session.get("huella") == _huella_clave()
-            and session.get("ver") == _version_sesiones()
-            and 0 < time.time() - inicio < SESION_MAXIMA_DIAS * 86400)
+    if session.get("ver") != _version_sesiones() or not 0 < time.time() - inicio < SESION_MAXIMA_DIAS * 86400:
+        return False
+    if session.get("rol", "admin") == "admin":
+        return session.get("huella") == _huella_clave()
+    u = db.query_one("SELECT * FROM usuarios WHERE id=%s AND activo", (session.get("uid"),))
+    return bool(u) and u["rol"] == session.get("rol") and session.get("huella") == _huella_usuario(u)
+
+
+# ### CAMBIO AQUÍ ### qué puede usar cada tipo de usuario
+PERMITIDO_LIMPIEZA = {"limpiezas", "limpieza_estado", "logout", "login", "ajustes", "static", "service_worker", "salud"}
+SOLO_DUENO = {"cerrar_todas_las_sesiones", "borrar_todo", "eliminar_propiedad", "descargar_respaldo",
+              "descargar_archivo_anual", "usuario_nuevo", "usuario_estado", "usuario_clave"}
+
+
+def rol_actual():
+    return session.get("rol", "admin") if session.get("logged_in") else None
+
+
+app.jinja_env.globals["rol_actual"] = rol_actual
 
 
 @app.before_request
@@ -431,6 +462,18 @@ def revisar_sesion():
         session.clear()
         if request.endpoint not in ("static", "login"):
             flash("Tu sesión se cerró. Volvé a ingresar.", "warn")
+        return
+    rol = rol_actual()
+    ep = request.endpoint
+    if rol == "limpieza" and ep and ep not in PERMITIDO_LIMPIEZA:
+        if request.method == "GET" and not request.path.startswith(("/asistente/", "/api")):
+            return redirect(url_for("limpiezas"))
+        return jsonify({"error": "Sin permiso"}), 403
+    if rol == "coanfitrion" and ep in SOLO_DUENO:
+        if request.method == "GET":
+            flash("Esa opción es solo para el dueño de la cuenta.", "warn")
+            return redirect(url_for("hoy"))
+        return jsonify({"error": "Sin permiso"}), 403
 
 
 def login_required(f):
@@ -484,19 +527,26 @@ def login():
             return render_template("login.html"), 429
         usuario_ok = hmac.compare_digest((request.form.get("usuario") or "").encode(), ADMIN_USER.encode())
         clave_ok = hmac.compare_digest((request.form.get("password") or "").encode(), ADMIN_PASS.encode())
-        if usuario_ok and clave_ok:
+        extra = None if (usuario_ok and clave_ok) else _usuario_extra(request.form.get("usuario"), request.form.get("password"))
+        if (usuario_ok and clave_ok) or extra:
             db.execute("DELETE FROM login_intentos WHERE ip=%s", (ip,))
             volver = session.get("volver_a") or ""
             session.clear()
             session["logged_in"] = True
             session["ver"] = _version_sesiones()   # ### CAMBIO AQUÍ ### ver "SESIONES MÁS SEGURAS"
-            session["huella"] = _huella_clave()
             session["inicio"] = int(time.time())
+            if extra:   # ### CAMBIO AQUÍ ### usuario de limpieza o co-anfitrión
+                session["rol"], session["uid"], session["nombre"] = extra["rol"], extra["id"], extra["nombre"]
+                session["huella"] = _huella_usuario(extra)
+            else:
+                session["rol"] = "admin"
+                session["huella"] = _huella_clave()
             session.permanent = True   # vence a las 12 horas sin uso
+            inicio = url_for("limpiezas") if session["rol"] == "limpieza" else url_for("hoy")
             # solo rutas internas (nunca otro sitio)
-            if destino_interno(volver) and not volver.startswith("/login"):   # ### CAMBIO AQUÍ ###
+            if destino_interno(volver) and not volver.startswith("/login") and session["rol"] != "limpieza":   # ### CAMBIO AQUÍ ###
                 return redirect(volver)
-            return redirect(url_for("hoy"))   # ### CAMBIO AQUÍ ### al entrar, primero "Qué hacer hoy"
+            return redirect(inicio)   # ### CAMBIO AQUÍ ### al entrar, primero "Qué hacer hoy" (o Limpiezas)
         _registrar_fallo(ip)
         flash("Usuario o contraseña incorrectos.", "error")
     return render_template("login.html")
@@ -648,6 +698,38 @@ def _analisis_estrategia(props, hoy):
     return out, lista_esp, origen_fer
 
 
+DIAS_DATO_VIEJO = 7
+
+
+def _puesta_a_punto(props, f_imp):
+    """### CAMBIO AQUÍ ### lo que falta cargar para que las sugerencias sean confiables (para todas las propiedades)
+    y si los datos están viejos (sin calendario de Airbnb y el archivo de Reservas tiene más de 7 días)."""
+    hoy_d = date.today()
+    ultima = met._parse((f_imp or {}).get("valor"))
+    sin = lambda cond: [p["nombre"] for p in props if cond(p)]
+    pasos = [
+        ("Reservas subidas", [] if ultima else ["todas"], "importar?resaltar=subir-reservas"),
+        ("Precio base", sin(lambda p: not p.get("precio_base")), None),
+        ("Costo de recambio", sin(lambda p: not any(p.get(k) for k in ("recambio_limpieza", "recambio_lavanderia", "recambio_insumos"))), None),
+        ("Estadía mínima", sin(lambda p: not p.get("estadia_minima")), None),
+        ("Calendario de Airbnb", sin(lambda p: not (p.get("ical_url") or "").strip()), None),
+    ]
+    campos = {"Precio base": "precio_base", "Costo de recambio": "recambio_limpieza", "Estadía mínima": "estadia_minima",
+              "Calendario de Airbnb": "ical_url"}
+    out = []
+    for nombre, faltan, link in pasos:
+        if not link and faltan:
+            p1 = next(p for p in props if p["nombre"] == faltan[0])
+            link = f"propiedades/{p1['id']}/editar?resaltar={campos[nombre]}"
+        out.append({"nombre": nombre, "ok": not faltan, "faltan": faltan, "link": link})
+    listos = sum(1 for x in out if x["ok"])
+    sin_cal = any(not (p.get("ical_url") or "").strip() for p in props)
+    dias = (hoy_d - ultima).days if ultima else None
+    viejo = {"dias": dias} if props and sin_cal and (dias is None or dias > DIAS_DATO_VIEJO) and ultima else None
+    return ({"pasos": out, "listos": listos, "total": len(out), "pct": round(listos / len(out) * 100)}
+            if props and listos < len(out) else None), viejo
+
+
 @app.route("/hoy")
 @login_required
 def hoy():
@@ -686,11 +768,13 @@ def hoy():
                     sin_tc[x["impacto"]["mon"]] = sin_tc.get(x["impacto"]["mon"], 0) + x["impacto"]["monto"]
                 else:
                     en_juego += v
+    puesta, datos_viejos = _puesta_a_punto(props, f_imp)   # ### CAMBIO AQUÍ ###
     juego_txt = " + ".join([monedas.formatear(en_juego, vista)] * bool(en_juego)
                            + [monedas.formatear(v, m) for m, v in sin_tc.items()])
     return render_template("hoy.html", bloques=bloques, dia=dia, coment=estrategia.comentarios(claves),
                            ultima_reservas=(f_imp or {}).get("valor"), hay_props=bool(props), esp=lista_esp,
-                           origen_fer=origen_fer, total=sum(len(b["acciones"]) for b in bloques), juego_txt=juego_txt)
+                           origen_fer=origen_fer, total=sum(len(b["acciones"]) for b in bloques), juego_txt=juego_txt,
+                           puesta=puesta, datos_viejos=datos_viejos)
 
 
 @app.route("/estrategia")
@@ -1008,7 +1092,9 @@ def calendario():
 @login_required
 def ajustes():
     """### CAMBIO AQUÍ ### modo oscuro, tamaño de letra, alto contraste y menos animaciones (se guardan en el dispositivo)."""
-    return render_template("ajustes.html")
+    usuarios = db.query("SELECT id, nombre, usuario, rol, activo FROM usuarios ORDER BY activo DESC, nombre") \
+        if rol_actual() == "admin" else []
+    return render_template("ajustes.html", usuarios=usuarios)
 
 
 LINEA_DIAS = 14
@@ -1729,6 +1815,89 @@ def tarea_competencia():
 
 
 TOKENS_DE_EJEMPLO = {"inventar-una-clave-larga-y-secreta"}
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# ### CAMBIO AQUÍ ### LIMPIEZAS y USUARIOS EXTRA
+# ════════════════════════════════════════════════════════════════════════════
+import limpiezas as limp   # noqa: E402
+
+
+@app.route("/limpiezas")
+@login_required
+def limpiezas():
+    lista = limp.proximas()
+    return render_template("limpiezas.html", lista=lista, hoy=date.today())
+
+
+@app.route("/limpiezas/estado", methods=["POST"])
+@login_required
+def limpieza_estado():
+    clave = (request.form.get("clave") or "").strip()[:60]
+    if re.fullmatch(r"\d+:\d{4}-\d{2}-\d{2}", clave):
+        if request.form.get("estado") == "hecha":
+            db.execute("""INSERT INTO limpiezas_estado (clave, estado, quien, fecha) VALUES (%s, 'hecha', %s, %s)
+                          ON CONFLICT (clave) DO UPDATE SET estado='hecha', quien=EXCLUDED.quien, fecha=EXCLUDED.fecha""",
+                       (clave, (session.get("nombre") or "Adriano")[:60], date.today().isoformat()))
+        else:
+            db.execute("DELETE FROM limpiezas_estado WHERE clave=%s", (clave,))
+    return redirect(url_for("limpiezas"))
+
+
+ROLES = {"limpieza": "Limpieza (solo ve las limpiezas)", "coanfitrion": "Co-anfitrión (ve todo menos borrar y ajustes de cuenta)"}
+app.jinja_env.globals["ROLES"] = ROLES
+
+
+@app.route("/usuarios/nuevo", methods=["POST"])
+@login_required
+def usuario_nuevo():
+    from werkzeug.security import generate_password_hash
+    nombre = (request.form.get("nombre") or "").strip()[:60]
+    usuario = (request.form.get("usuario") or "").strip().lower()[:40]
+    clave = request.form.get("clave") or ""
+    rol = request.form.get("rol")
+    if not nombre or not re.fullmatch(r"[a-z0-9._-]{3,40}", usuario) or rol not in ROLES:
+        flash("Completá nombre, un usuario de 3 a 40 letras o números (sin espacios) y el tipo.", "error")
+    elif len(clave) < 10:
+        flash("La contraseña tiene que tener al menos 10 caracteres.", "error")
+    elif usuario == ADMIN_USER.lower() or db.query_one("SELECT 1 FROM usuarios WHERE usuario=%s", (usuario,)):
+        flash("Ese usuario ya existe. Elegí otro.", "error")
+    else:
+        db.execute("INSERT INTO usuarios (nombre, usuario, clave_hash, rol) VALUES (%s, %s, %s, %s)",
+                   (nombre, usuario, generate_password_hash(clave), rol))
+        flash(f"Usuario creado. {nombre} entra con «{usuario}» y la contraseña que pusiste.", "ok")
+    return redirect(url_for("ajustes") + "#usuarios")
+
+
+@app.route("/usuarios/<int:uid>/estado", methods=["POST"])
+@login_required
+def usuario_estado(uid):
+    activo = request.form.get("activo") == "1"
+    db.execute("UPDATE usuarios SET activo=%s WHERE id=%s", (activo, uid))
+    flash("Usuario activado." if activo else "Usuario desactivado: ya no puede entrar y su sesión se cerró.", "ok")
+    return redirect(url_for("ajustes") + "#usuarios")
+
+
+@app.route("/usuarios/<int:uid>/clave", methods=["POST"])
+@login_required
+def usuario_clave(uid):
+    from werkzeug.security import generate_password_hash
+    clave = request.form.get("clave") or ""
+    if len(clave) < 10:
+        flash("La contraseña tiene que tener al menos 10 caracteres.", "error")
+    else:
+        db.execute("UPDATE usuarios SET clave_hash=%s WHERE id=%s", (generate_password_hash(clave), uid))
+        flash("Contraseña cambiada. Su sesión se cerró en todos sus dispositivos.", "ok")
+    return redirect(url_for("ajustes") + "#usuarios")
+
+
+@app.route("/sw.js")
+def service_worker():
+    """### CAMBIO AQUÍ ### el service worker tiene que servirse desde la raíz para cubrir todo el sitio."""
+    from flask import send_from_directory
+    resp = send_from_directory(app.static_folder, "sw.js", mimetype="application/javascript")
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
 
 
 @app.route("/salud")

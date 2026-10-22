@@ -23,7 +23,18 @@
     </a>
 
     {# ### CAMBIO AQUÍ ### menú simple (Ley de Hick), ordenado por uso: lo diario arriba (hoy, calendario, precios), después seguimiento (pruebas, números, IA), y lo ocasional en "Más" #}
-    {% set en_mas = request.endpoint and ('propiedad' in request.endpoint or 'importar' in request.endpoint or 'informe' in request.endpoint or 'competencia' in request.endpoint or request.endpoint == 'ajustes') %}
+    {% set en_mas = request.endpoint and ('propiedad' in request.endpoint or 'importar' in request.endpoint or 'informe' in request.endpoint or 'competencia' in request.endpoint or request.endpoint in ('ajustes', 'limpiezas')) %}
+    {% if rol_actual() == 'limpieza' %}
+    {# ### CAMBIO AQUÍ ### quien limpia solo ve sus limpiezas #}
+    <nav class="sidebar-nav" aria-label="Menú principal">
+      <a href="{{ url_for('limpiezas') }}" class="{% if request.endpoint=='limpiezas' %}active{% endif %}" {% if request.endpoint=='limpiezas' %}aria-current="page"{% endif %}>
+        <span class="nav-icon" aria-hidden="true">✧</span> Limpiezas
+      </a>
+      <a href="{{ url_for('ajustes') }}" class="{% if request.endpoint=='ajustes' %}active{% endif %}">
+        <span class="nav-icon" aria-hidden="true">⚙</span> Ajustes
+      </a>
+    </nav>
+    {% else %}
     <nav class="sidebar-nav" aria-label="Menú principal">
       <a href="{{ url_for('hoy') }}" class="{% if request.endpoint=='hoy' %}active{% endif %}" {% if request.endpoint=='hoy' %}aria-current="page"{% endif %}>
         <span class="nav-icon" aria-hidden="true">✓</span> Qué hacer hoy
@@ -46,6 +57,9 @@
       </a>
       <details class="nav-mas" {% if en_mas %}open{% endif %}>
         <summary><span class="nav-icon" aria-hidden="true">⋯</span> Más <span class="nav-flecha" aria-hidden="true">›</span></summary>
+        <a href="{{ url_for('limpiezas') }}" class="{% if request.endpoint == 'limpiezas' %}active{% endif %}">{# ### CAMBIO AQUÍ ### #}
+          <span class="nav-icon" aria-hidden="true">✧</span> Limpiezas
+        </a>
         <a href="{{ url_for('propiedades') }}" class="{% if 'propiedad' in request.endpoint %}active{% endif %}">
           <span class="nav-icon" aria-hidden="true">⌂</span> Propiedades
         </a>
@@ -63,6 +77,7 @@
         </a>
       </details>
     </nav>
+    {% endif %}
 
     <div class="sidebar-footer">
       <a href="{{ url_for('logout') }}">
@@ -80,7 +95,7 @@
     <!-- ### CAMBIO AQUÍ ### selector de moneda y tipo de cambio -->
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <span class="topbar-meta" id="last-update">Sistema activo</span>
-      {% if session.get('logged_in') %}
+      {% if session.get('logged_in') and rol_actual() != 'limpieza' %}{# ### CAMBIO AQUÍ ### #}
       <span class="topbar-meta"><span class="solo-compu">Ver en:</span>{{ info('ver_en') }}
         <a href="{{ url_for('cambiar_moneda', m='ARS') }}" class="btn btn-sm {{ 'btn-primary' if vista == 'ARS' }}">ARS</a>
         <a href="{{ url_for('cambiar_moneda', m='USD') }}" class="btn btn-sm {{ 'btn-primary' if vista == 'USD' }}">USD</a>

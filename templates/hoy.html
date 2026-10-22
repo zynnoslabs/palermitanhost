@@ -20,6 +20,32 @@
 </div>
 {% else %}
 
+{# ### CAMBIO AQUÍ ### aviso fuerte si los datos están viejos #}
+{% if datos_viejos %}
+<div class="alerta alerta-alta hoy-viejo" role="alert">
+  <strong>Las reservas tienen {{ datos_viejos.dias }} días.</strong>
+  <span>Sin el calendario de Airbnb conectado, las sugerencias de hoy pueden estar mal (noches que ya se alquilaron). <a class="link" href="{{ url_for('importar') }}?resaltar=subir-reservas">Subí el archivo de Reservas</a> o conectá el calendario.</span>
+</div>
+{% endif %}
+{# ### CAMBIO AQUÍ ### puesta a punto: qué falta cargar para que todo funcione (desaparece cuando está completo) #}
+{% if puesta %}
+<details class="card puesta" {% if puesta.listos <= 2 %}open{% endif %}>
+  <summary>
+    <span class="puesta-tit">Puesta a punto: {{ puesta.listos }} de {{ puesta.total }} listos</span>
+    <span class="puesta-barra" aria-hidden="true"><span style="width: {{ puesta.pct }}%"></span></span>
+  </summary>
+  <ul class="puesta-lista">
+    {% for x in puesta.pasos %}
+    <li class="{{ 'ok' if x.ok else 'falta' }}">
+      {% if x.ok %}<span class="puesta-ico" aria-hidden="true">✓</span> {{ x.nombre }}<span class="solo-lector"> (listo)</span>
+      {% else %}<span class="puesta-ico" aria-hidden="true">○</span> <a class="link" href="{{ request.script_root }}/{{ x.link }}">{{ x.nombre }}</a>
+        <span class="muted">{% if x.faltan != ['todas'] %}· falta en {{ x.faltan|join(', ') }}{% endif %}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</details>
+{% endif %}
+
 <p class="muted hoy-datos">
   {% if total %}{{ total }} cosa{{ 's' if total != 1 }} para hacer{% else %}✅ Nada para cambiar en Airbnb hoy{% endif %}
   {% if juego_txt %}· <strong class="hoy-juego" title="Lo que puede entrar si se alquilan las noches de las tareas de hoy">hasta {{ juego_txt }} en juego hoy</strong>{% endif %}{# ### CAMBIO AQUÍ ### #}

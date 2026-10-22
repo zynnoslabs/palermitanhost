@@ -267,6 +267,27 @@ def init_db():
                 fecha     TEXT NOT NULL
             )
         """)
+        # ### CAMBIO AQUÍ ### usuarios extra que crea Adriano (limpieza o co-anfitrión). El dueño sigue entrando con ADMIN_USER/ADMIN_PASS.
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id         SERIAL PRIMARY KEY,
+                nombre     TEXT NOT NULL,
+                usuario    TEXT UNIQUE NOT NULL,
+                clave_hash TEXT NOT NULL,
+                rol        TEXT NOT NULL CHECK (rol IN ('limpieza', 'coanfitrion')),
+                activo     BOOLEAN DEFAULT TRUE,
+                creado_en  TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        # ### CAMBIO AQUÍ ### limpiezas marcadas como hechas (clave = propiedad:fecha)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS limpiezas_estado (
+                clave     TEXT PRIMARY KEY,
+                estado    TEXT NOT NULL,
+                quien     TEXT DEFAULT '',
+                fecha     TEXT NOT NULL
+            )
+        """)
         # pruebas de descuento/promoción que Adriano hizo en Airbnb (para medir qué funcionó)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS pruebas_descuento (

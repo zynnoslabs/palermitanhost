@@ -198,3 +198,15 @@ window.addEventListener('pageshow', function () {
   try { visto = sessionStorage.getItem('ph-logo') === '1'; sessionStorage.setItem('ph-logo', '1'); } catch (e) { visto = true; }
   if (!visto) l.classList.add('anim');
 })();
+
+// ### CAMBIO AQUÍ ### — instalable en el celular (PWA)
+// (el registro del service worker está en templates/_ajustes_head.html, así también corre en el login)
+var pedidoInstalar = null;
+window.addEventListener('beforeinstallprompt', function (e) {
+  e.preventDefault(); pedidoInstalar = e;
+  var b = document.getElementById('instalar-app'); if (b) b.hidden = false;
+});
+document.addEventListener('click', function (e) {
+  if (!e.target.closest || !e.target.closest('#instalar-app') || !pedidoInstalar) return;
+  pedidoInstalar.prompt(); pedidoInstalar = null; e.target.closest('#instalar-app').hidden = true;
+});
