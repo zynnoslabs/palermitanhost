@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Dashboard – PalermitanHost{% endblock %}
+{% block title %}Números – PalermitanHost{% endblock %}
 
 {% block content %}
 {# ### CAMBIO AQUÍ ### aviso fijo hasta descargar el archivo del año que terminó #}
@@ -89,7 +89,7 @@
   <span class="aviso-txt">🏠 {{ avisos.alojados|length }} huésped(es) alojado(s), sin llegadas ni salidas.</span></div></div>
 {% endif %}
 <div class="page-header">
-  <h2>Dashboard{{ info('dashboard') }}</h2>
+  <h2>Números{{ info('dashboard') }}</h2>{# ### CAMBIO AQUÍ ### antes "Dashboard"; ahora junta Informes y el Reporte del mes #}
   <form method="get" class="filter-form">
     <select name="propiedad_id">
       <option value="">Todas las propiedades</option>
@@ -129,8 +129,6 @@
     <div class="stat-card"><div class="stat-num">{{ stats.total_reservas }}</div><div class="stat-lbl">Reservas{{ info('reservas') }}</div></div>
     <div class="stat-card"><div class="stat-num">{{ stats.revpar|dinero(vista) }}</div><div class="stat-lbl">RevPAR{{ info('revpar') }}</div></div>
     <div class="stat-card"><div class="stat-num">{{ stats.estadias_prom|num }} noches</div><div class="stat-lbl">Estadía promedio{{ info('estadia') }}</div></div>
-    <a class="stat-card" href="{{ url_for('asistente', tab='resenas') }}" style="text-decoration:none;color:inherit">
-      <div class="stat-num">{{ resenas_pend }}</div><div class="stat-lbl">Reseñas pendientes{{ info('resenas_pend') }}</div></a>
     {% if stats.anticipacion_prom is not none %}
     <div class="stat-card"><div class="stat-num">{{ stats.anticipacion_prom|num(0) }} días</div><div class="stat-lbl">Anticipación promedio{{ info('anticipacion') }}</div></div>
     {% endif %}
@@ -186,6 +184,11 @@
   <button type="submit" class="btn btn-sm">🤖 Generar informe de este período con IA</button>{{ info('generar_informe') }}
 </form>
 
+{# ### CAMBIO AQUÍ ### Informes y reporte del mes, dentro de Números #}
+<div class="numeros-links">
+  <a class="btn btn-sm" href="{{ url_for('reporte') }}">Reporte del mes</a>
+  <a class="btn btn-sm" href="{{ url_for('informes') }}">Informes y descargas</a>
+</div>
 {% if informes %}
 <div class="section-header"><h3>Últimos informes</h3></div>
 <ul class="informe-lista">

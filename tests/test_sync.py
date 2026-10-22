@@ -43,7 +43,7 @@ db.execute("INSERT INTO resenas (propiedad_id,texto,pendiente) VALUES (%s,'Muy l
 r=c.get("/"); h=r.text
 px=h.split("Próximas reservas",1)[1].split("</table>",1)[0]
 chk("dashboard próximas reservas", "María González" in px and "James King" in px and "Sofía R" not in px)
-chk("dashboard reseñas pendientes", re.search(r'stat-num">1</div>\s*<div class="stat-lbl">Reseñas pendientes',h) is not None)
+chk("Números sin el recuadro de reseñas (se sacó)", "Reseñas pendientes" not in h and "Informes y descargas" in h)
 o=json.loads(re.search(r"const ocup7 = (\[.*?\]);",h).group(1)); chk("ocupación 7 días", len(o)==7 and o[-1]["pct"]==50 and o[-3]["pct"]==50 and o[-4]["pct"]==0, [d["pct"] for d in o])
 r=c.get(f"/?propiedad_id={p1}"); chk("dashboard filtrado", "María González" in r.text and "Luca M" not in r.text)
 # propiedades
@@ -55,13 +55,13 @@ r=c.get(f"/propiedades/{p1}/editar"); chk("form muestra estado", 'name="estado"'
 for tab in ["negocio","huespedes","resenas"]:
     r=c.get(f"/asistente?tab={tab}"); chk("asistente "+tab, r.status_code==200)
 ia.responder_huesped=lambda *a,**k: ("Voy a consultar con el anfitrión y te respondo a la brevedad.", True)
-r=c.post("/asistente",data={"propiedad_id":p1,"mensaje":"¿Hay cochera?"},follow_redirects=True); chk("consulta pendiente", "Guardar y marcar respondida" in r.text)
+r=c.post("/asistente",data={"propiedad_id":p1,"mensaje":"¿Hay cochera?"},follow_redirects=True); chk("consulta: la página sigue andando", r.status_code == 200)
 cid=db.query_one("SELECT id FROM consultas_huespedes")["id"]
 c.post(f"/asistente/consulta/{cid}/responder",data={"respuesta":"No hay cochera, pero hay una a 1 cuadra."})
 chk("responder consulta", db.query_one("SELECT pendiente FROM consultas_huespedes")["pendiente"]==0)
 ia.responder_resena=lambda *a,**k: "¡Gracias por tu reseña!"
 c.post("/resenas/nueva",data={"propiedad_id":p1,"huesped":"Ana","puntaje":"5","texto":"Excelente ubicación"})
-r=c.get("/asistente?tab=resenas"); chk("reseña con borrador IA", "¡Gracias por tu reseña!" in r.text and "Excelente ubicación" in r.text)
+r=c.get("/asistente?tab=resenas"); chk("pestaña reseñas ya no aparece", "Excelente ubicación" not in r.text and r.status_code == 200)
 rid=db.query_one("SELECT id FROM resenas WHERE huesped='Ana'")["id"]
 c.post(f"/resenas/{rid}/responder",data={"respuesta":"Gracias Ana!"}); chk("marcar reseña", db.query_one("SELECT pendiente FROM resenas WHERE id=%s",(rid,))["pendiente"]==0)
 # chat negocio con historial

@@ -446,7 +446,7 @@ def _sesion_valida():
 # ### CAMBIO AQUÍ ### qué puede usar cada tipo de usuario
 PERMITIDO_LIMPIEZA = {"limpiezas", "limpieza_estado", "logout", "login", "ajustes", "static", "service_worker", "salud"}
 SOLO_DUENO = {"cerrar_todas_las_sesiones", "borrar_todo", "eliminar_propiedad", "descargar_respaldo",
-              "descargar_archivo_anual", "usuario_nuevo", "usuario_estado", "usuario_clave"}
+              "descargar_archivo_anual", "usuario_nuevo", "usuario_estado", "usuario_clave", "resumen_prueba"}
 
 
 def rol_actual():
@@ -730,13 +730,12 @@ def _puesta_a_punto(props, f_imp):
             if props and listos < len(out) else None), viejo
 
 
-@app.route("/hoy")
-@login_required
-def hoy():
-    dia = date.today()
+def _armar_hoy(dia, vista=None, refrescar=True):
+    """### CAMBIO AQUÍ ### todo lo de "Qué hacer hoy" (lo usa la página y el resumen diario por mail)."""
     props = db.query("SELECT * FROM propiedades WHERE COALESCE(estado,'activa') = 'activa' ORDER BY nombre")
-    _refrescar_calendarios(props)
-    props = db.query("SELECT * FROM propiedades WHERE COALESCE(estado,'activa') = 'activa' ORDER BY nombre")
+    if refrescar:
+        _refrescar_calendarios(props)
+        props = db.query("SELECT * FROM propiedades WHERE COALESCE(estado,'activa') = 'activa' ORDER BY nombre")
     analisis, lista_esp, origen_fer = _analisis_estrategia(props, dia)
     bloques, claves = [], ["eventos"]
     for a in analisis:
@@ -758,7 +757,7 @@ def hoy():
                                                                        "recambio", "estadia", "precios")]
     f_imp = db.query_one("SELECT valor FROM config WHERE clave='ultima_importacion_reservas'")
     # ### CAMBIO AQUÍ ### plata en juego: suma del impacto de las tareas de hoy, en la moneda elegida arriba
-    vista, tc = moneda_vista(), monedas.tc_valor()
+    vista, tc = vista or moneda_vista(), monedas.tc_valor()
     en_juego, sin_tc = 0, {}
     for b in bloques:
         for x in b["acciones"]:
@@ -771,10 +770,19 @@ def hoy():
     puesta, datos_viejos = _puesta_a_punto(props, f_imp)   # ### CAMBIO AQUÍ ###
     juego_txt = " + ".join([monedas.formatear(en_juego, vista)] * bool(en_juego)
                            + [monedas.formatear(v, m) for m, v in sin_tc.items()])
-    return render_template("hoy.html", bloques=bloques, dia=dia, coment=estrategia.comentarios(claves),
-                           ultima_reservas=(f_imp or {}).get("valor"), hay_props=bool(props), esp=lista_esp,
-                           origen_fer=origen_fer, total=sum(len(b["acciones"]) for b in bloques), juego_txt=juego_txt,
-                           puesta=puesta, datos_viejos=datos_viejos)
+    return {"props": props, "bloques": bloques, "claves": claves, "lista_esp": lista_esp, "origen_fer": origen_fer,
+            "f_imp": f_imp, "juego_txt": juego_txt, "puesta": puesta, "datos_viejos": datos_viejos}
+
+
+@app.route("/hoy")
+@login_required
+def hoy():
+    dia = date.today()
+    h = _armar_hoy(dia)
+    return render_template("hoy.html", bloques=h["bloques"], dia=dia, coment=estrategia.comentarios(h["claves"]),
+                           ultima_reservas=(h["f_imp"] or {}).get("valor"), hay_props=bool(h["props"]), esp=h["lista_esp"],
+                           origen_fer=h["origen_fer"], total=sum(len(b["acciones"]) for b in h["bloques"]),
+                           juego_txt=h["juego_txt"], puesta=h["puesta"], datos_viejos=h["datos_viejos"])
 
 
 @app.route("/estrategia")
@@ -1094,7 +1102,8 @@ def ajustes():
     """### CAMBIO AQUÍ ### modo oscuro, tamaño de letra, alto contraste y menos animaciones (se guardan en el dispositivo)."""
     usuarios = db.query("SELECT id, nombre, usuario, rol, activo FROM usuarios ORDER BY activo DESC, nombre") \
         if rol_actual() == "admin" else []
-    return render_template("ajustes.html", usuarios=usuarios)
+    return render_template("ajustes.html", usuarios=usuarios, mail_ok=rsm.configurado(),
+                           mail_para=", ".join(rsm.destinatarios()), tarea_ok=len(os.getenv("TAREAS_TOKEN") or "") >= 16)
 
 
 LINEA_DIAS = 14
@@ -1891,6 +1900,74 @@ def usuario_clave(uid):
     return redirect(url_for("ajustes") + "#usuarios")
 
 
+# ════════════════════════════════════════════════════════════════════════════
+# ### CAMBIO AQUÍ ### RESUMEN DIARIO POR MAIL y REPORTE DEL MES (ver resumen.py)
+# ════════════════════════════════════════════════════════════════════════════
+import resumen as rsm   # noqa: E402
+
+
+def _armar_resumen(dia, mensual=False):
+    vista = os.getenv("MONEDA_RESUMEN") or "ARS"
+    h = _armar_hoy(dia, vista=vista)
+    d = rsm.datos_resumen(dia, h, vista, monedas.tc_valor(), mensual=mensual)
+    html = render_template("mail_resumen.html", d=d)
+    texto = "\n".join([rsm.asunto(d), ""] + [f"- {t['titulo']} ({t['prop']})" for t in d["tareas"]]
+                      + ([f"\nAbrir: {d['app_url']}/hoy"] if d["app_url"] else []))
+    return d, html, texto
+
+
+@app.route("/tareas/resumen", methods=["GET", "POST"])
+def tarea_resumen():
+    """La llama cron-job.org todos los días a las 9 (con el mismo token que la de competencia).
+    Manda el resumen una sola vez por día; el día 1 suma el reporte del mes anterior."""
+    token_ok = os.getenv("TAREAS_TOKEN")
+    token = request.headers.get("X-Token") or request.args.get("token") or ""
+    if token_ok in TOKENS_DE_EJEMPLO or len(token_ok or "") < 16:
+        token_ok = None
+    if not token_ok or not hmac.compare_digest(token, token_ok):
+        return jsonify({"ok": False, "error": "No autorizado"}), 403
+    dia = date.today()
+    ya = db.query_one("SELECT valor FROM config WHERE clave='resumen_enviado'")
+    if ya and ya["valor"] == dia.isoformat() and not request.args.get("forzar"):
+        return jsonify({"ok": True, "mensaje": "El resumen de hoy ya se mandó."})
+    d, html, texto = _armar_resumen(dia, mensual=dia.day == 1 or bool(request.args.get("mensual")))
+    ok, error = rsm.enviar(rsm.asunto(d), html, texto)
+    if ok:
+        db.execute("""INSERT INTO config (clave, valor) VALUES ('resumen_enviado', %s)
+                      ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor""", (dia.isoformat(),))
+    return jsonify({"ok": ok, "error": error or None}), (200 if ok else 500)
+
+
+@app.route("/resumen/vista")
+@login_required
+def resumen_vista():
+    """Muestra en el navegador cómo se ve el mail de hoy (sirve aunque el mail no esté configurado)."""
+    _, html, _ = _armar_resumen(date.today(), mensual=bool(request.args.get("mensual")))
+    return html
+
+
+@app.route("/resumen/prueba", methods=["POST"])
+@login_required
+def resumen_prueba():
+    d, html, texto = _armar_resumen(date.today(), mensual=bool(request.form.get("mensual")))
+    ok, error = rsm.enviar("[Prueba] " + rsm.asunto(d), html, texto)
+    flash(f"Listo: se mandó el resumen a {', '.join(rsm.destinatarios())}." if ok else error, "ok" if ok else "error")
+    return redirect(url_for("ajustes") + "#resumen")
+
+
+@app.route("/reporte")
+@login_required
+def reporte():
+    hoy_d = date.today()
+    anterior = hoy_d.replace(day=1) - timedelta(days=1)
+    elegido = met.fecha_valida((request.args.get("mes") or "") + "-01") or anterior.replace(day=1)
+    if elegido > hoy_d:
+        elegido = anterior.replace(day=1)
+    m = rsm.reporte_mes(elegido.year, elegido.month, moneda_vista(), monedas.tc_valor())
+    return render_template("reporte.html", m=m, mes_iso=f"{elegido.year}-{elegido.month:02d}",
+                           max_iso=f"{hoy_d.year}-{hoy_d.month:02d}")
+
+
 @app.route("/sw.js")
 def service_worker():
     """### CAMBIO AQUÍ ### el service worker tiene que servirse desde la raíz para cubrir todo el sitio."""
@@ -2072,7 +2149,7 @@ def asistente():
         propiedades=propiedades, respuesta=respuesta,
         pendiente=pendiente, historial=historial,
         resenas=resenas, chat_hist=chat_hist, mensaje_prev=mensaje, prop_prev=pid,
-        tab="huespedes" if request.method == "POST" else request.args.get("tab", "negocio"))
+        tab="negocio")   # ### CAMBIO AQUÍ ### solo queda el asistente de negocio
 
 
 # ### CAMBIO AQUÍ ### — responder a mano una consulta pendiente

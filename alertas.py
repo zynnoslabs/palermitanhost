@@ -127,16 +127,18 @@ def revisar(propiedad_id=None, hoy=None):
                 f"propiedades/{p['id']}/editar?resaltar=" + ",".join(campos[x] for x in faltan))
 
     # 7) Reseñas y consultas sin responder hace más de una semana
-    q = db.query_one("""SELECT COUNT(*) n FROM resenas WHERE pendiente = 1 AND creada_en < NOW() - INTERVAL '7 days'
+    # ### CAMBIO AQUÍ ### apagado: esas pestañas se sacaron del Asistente. Para volver a activarlo, poner True.
+    if False:
+      q = db.query_one("""SELECT COUNT(*) n FROM resenas WHERE pendiente = 1 AND creada_en < NOW() - INTERVAL '7 days'
                         AND (%s::int IS NULL OR propiedad_id = %s::int)""", (propiedad_id, propiedad_id))["n"]
-    if q:
-        add("media", f"{q} reseña(s) sin responder hace más de una semana",
-            "Responder las reseñas ayuda a mantener el puntaje y la confianza de los próximos huéspedes.", "asistente?tab=resenas&resaltar=resenas-pendientes")
-    q = db.query_one("""SELECT COUNT(*) n FROM consultas_huespedes WHERE pendiente = 1 AND creada_en < NOW() - INTERVAL '2 days'
+      if q:
+          add("media", f"{q} reseña(s) sin responder hace más de una semana",
+              "Responder las reseñas ayuda a mantener el puntaje y la confianza de los próximos huéspedes.", "asistente?tab=resenas&resaltar=resenas-pendientes")
+      q = db.query_one("""SELECT COUNT(*) n FROM consultas_huespedes WHERE pendiente = 1 AND creada_en < NOW() - INTERVAL '2 days'
                         AND (%s::int IS NULL OR propiedad_id = %s::int)""", (propiedad_id, propiedad_id))["n"]
-    if q:
-        add("media", f"{q} consulta(s) de huéspedes pendientes", "Hay consultas marcadas como pendientes hace más de 2 días.",
-            "asistente?tab=huespedes&resaltar=consultas-pendientes")
+      if q:
+          add("media", f"{q} consulta(s) de huéspedes pendientes", "Hay consultas marcadas como pendientes hace más de 2 días.",
+              "asistente?tab=huespedes&resaltar=consultas-pendientes")
 
     # 8) Tipo de cambio viejo cuando hay cosas en dólares
     hay_usd = any((p.get("moneda") or "ARS") == "USD" for p in props) or any((r.get("moneda") or "ARS") == "USD" for r in reservas)

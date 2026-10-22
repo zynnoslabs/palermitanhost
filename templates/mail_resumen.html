@@ -1,0 +1,54 @@
+{# ### CAMBIO AQUÍ ### mail del resumen diario (estilos en línea: los programas de mail no leen hojas de estilo) #}
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Resumen PalermitanHost</title></head>
+<body style="margin:0;background:#f2ede0;font-family:Arial,Helvetica,sans-serif;color:#1a1a1a">
+<div style="max-width:560px;margin:0 auto;padding:20px 14px">
+  <div style="background:#d6cda6;border-radius:12px 12px 0 0;padding:16px 20px;text-align:center">
+    <div style="font-family:Georgia,serif;font-size:22px;font-weight:bold;letter-spacing:1px">PALERMITAN HOST</div>
+    <div style="font-size:13px;color:#3d372d;margin-top:2px">{{ d.fecha|capitalize }}</div>
+  </div>
+  <div style="background:#ffffff;border-radius:0 0 12px 12px;padding:18px 20px;border:1px solid #ddd8c4;border-top:0">
+
+    {% if d.datos_viejos %}
+    <p style="background:#fdf0ee;color:#a93226;border-radius:8px;padding:10px 12px;font-size:14px;margin:0 0 14px">
+      <strong>Ojo:</strong> las reservas tienen {{ d.datos_viejos.dias }} días y no hay calendario de Airbnb conectado. Las sugerencias pueden estar viejas.</p>
+    {% endif %}
+
+    <h2 style="font-size:15px;margin:0 0 8px">Hoy en los departamentos</h2>
+    {% if not d.llegan and not d.salen %}<p style="margin:0 0 14px;font-size:14px;color:#5f574a">Sin llegadas ni salidas.</p>{% endif %}
+    {% for x in d.llegan %}<p style="margin:0 0 6px;font-size:14px">→ <strong>Llega</strong> {{ x.huesped }} a {{ x.prop }} ({{ x.noches }} noches)</p>{% endfor %}
+    {% for x in d.salen %}<p style="margin:0 0 6px;font-size:14px">← <strong>Sale</strong> {{ x.huesped }} de {{ x.prop }}</p>{% endfor %}
+    {% for x in d.limpiezas %}<p style="margin:0 0 6px;font-size:14px">✧ <strong>Limpieza</strong> en {{ x.prop }}{% if x.entra_mismo_dia %} · <span style="color:#a93226">entra otro huésped hoy</span>{% endif %}{% if x.hecha %} · lista{% endif %}</p>{% endfor %}
+
+    <h2 style="font-size:15px;margin:18px 0 8px">Para hacer en Airbnb hoy</h2>
+    {% if d.tareas %}
+      {% if d.juego_txt %}<p style="margin:0 0 10px;font-size:14px;color:#1e5c35"><strong>Hasta {{ d.juego_txt }} en juego.</strong></p>{% endif %}
+      {% for t in d.tareas %}
+      <div style="border:1px solid #ddd8c4;border-left:4px solid #806428;border-radius:8px;padding:10px 12px;margin-bottom:8px">
+        <div style="font-size:14px;font-weight:bold">{{ t.titulo }}</div>
+        <div style="font-size:12px;color:#5f574a;margin-top:2px">{{ t.prop }}{% if t.impacto %} · <span style="color:#1e5c35">≈ +{{ t.impacto }}</span>{% endif %}</div>
+        <div style="font-size:13px;margin-top:6px">{{ t.hacer }}</div>
+      </div>
+      {% endfor %}
+    {% else %}<p style="margin:0 0 6px;font-size:14px;color:#5f574a">Nada para cambiar hoy.</p>{% endif %}
+
+    {% if d.faltan %}<p style="font-size:13px;color:#7a5a12;margin:12px 0 0">Falta cargar: {{ d.faltan|join(', ') }}.</p>{% endif %}
+
+    {% if d.mensual %}{% set m = d.mensual %}
+    <h2 style="font-size:15px;margin:20px 0 8px">Cómo fue {{ m.titulo }}</h2>
+    <table role="presentation" style="width:100%;border-collapse:collapse;font-size:14px">
+      <tr><td style="padding:6px 0;color:#5f574a">Te quedó (neto)</td><td style="padding:6px 0;text-align:right;font-weight:bold">{{ m.ingreso|dinero(m.vista) }}{% if m.ingreso_var is not none %} <span style="font-weight:normal;color:{{ '#1e5c35' if m.ingreso_var >= 0 else '#a93226' }}">({{ '+' if m.ingreso_var >= 0 }}{{ m.ingreso_var }}% vs {{ m.anterior }})</span>{% endif %}</td></tr>
+      <tr><td style="padding:6px 0;color:#5f574a">Noches vendidas</td><td style="padding:6px 0;text-align:right;font-weight:bold">{{ m.noches }}</td></tr>
+      <tr><td style="padding:6px 0;color:#5f574a">Ocupación</td><td style="padding:6px 0;text-align:right;font-weight:bold">{{ m.ocupacion|num(1) }}% <span style="font-weight:normal;color:#5f574a">(antes {{ m.ocupacion_antes|num(1) }}%)</span></td></tr>
+      <tr><td style="padding:6px 0;color:#5f574a">Sugerencias que seguiste</td><td style="padding:6px 0;text-align:right;font-weight:bold">{{ m.hechas }}</td></tr>
+      <tr><td style="padding:6px 0;color:#5f574a">Pruebas con resultado</td><td style="padding:6px 0;text-align:right;font-weight:bold">{{ m.pruebas_bien }} funcionaron · {{ m.pruebas_mal }} no</td></tr>
+    </table>
+    {% endif %}
+
+    {% if d.app_url %}
+    <p style="text-align:center;margin:20px 0 4px"><a href="{{ d.app_url }}/hoy" style="display:inline-block;background:#806428;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:bold;font-size:14px">Abrir PalermitanHost</a></p>
+    {% endif %}
+  </div>
+  <p style="font-size:11px;color:#5f574a;text-align:center;margin:12px 0 0">Resumen automático de PalermitanHost. Las cifras son estimaciones del sistema.</p>
+</div>
+</body></html>

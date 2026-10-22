@@ -40,6 +40,7 @@
         {% if f.mercado %}
         <tr id="mercado-{{ pid }}"><td>Zona (mediana de {{ f.mercado.cantidad_propiedades }} anuncios){{ info('mediana') }}</td><td>{{ (f.mercado.mediana)|dinero(mp) }}</td></tr>
         <tr><td>Zona: más barato / más caro</td><td>{{ (f.mercado.min)|dinero(mp) }} / {{ (f.mercado.max)|dinero(mp) }}</td></tr>
+        <tr><td colspan="2"><a class="link" href="{{ url_for('competencia', pid=pid) }}">Ver la competencia de la zona →</a>{# ### CAMBIO AQUÍ ### Competencia ahora se abre desde acá #}</td></tr>
         {% else %}
         <tr id="mercado-{{ pid }}"><td>Zona</td><td><a class="link" href="{{ url_for('competencia', pid=pid) }}">Buscar</a></td></tr>
         {% endif %}

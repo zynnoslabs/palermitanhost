@@ -1173,3 +1173,7 @@ html[data-movimiento="menos"] .marca-logo .capa { animation: none !important; }
 .usr-clave > summary { list-style: none; cursor: pointer; }
 .usr-clave > summary::-webkit-details-marker { display: none; }
 .usr-form { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; min-width: 220px; }
+
+.txt-ok { color:var(--color-success); font-weight:600; }   /* ### CAMBIO AQUÍ ### */
+
+.numeros-links { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0; }   /* ### CAMBIO AQUÍ ### */

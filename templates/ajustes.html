@@ -82,6 +82,20 @@
   </form>
 </div>
 
+{# ### CAMBIO AQUÍ ### resumen diario por mail #}
+<div class="card" id="resumen" style="max-width:720px;margin-top:16px">
+  <h3 style="margin:0 0 6px;font-size:1rem">Resumen diario por mail</h3>
+  <p class="muted" style="margin-bottom:10px">Todos los días a las 9: llegadas, salidas, limpiezas y las tareas de hoy con la plata en juego. El día 1 suma cómo fue el mes anterior.</p>
+  {% if mail_ok %}<p class="txt-ok" style="margin-bottom:10px">✓ Configurado: llega a {{ mail_para }}.</p>
+  {% else %}<p class="campo-clave" style="margin-bottom:10px">Falta configurar el mail en Render (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS y MAIL_PARA). Mientras tanto podés ver cómo queda.</p>{% endif %}
+  {% if not tarea_ok %}<p class="muted" style="font-size:.85rem;margin-bottom:10px">Para que salga solo hace falta la tarea programada en cron-job.org (TAREAS_TOKEN).</p>{% endif %}
+  <div style="display:flex;flex-wrap:wrap;gap:8px">
+    <a class="btn btn-sm" href="{{ url_for('resumen_vista') }}" target="_blank" rel="noopener">Ver cómo queda el de hoy</a>
+    <a class="btn btn-sm" href="{{ url_for('resumen_vista', mensual=1) }}" target="_blank" rel="noopener">Ver con el reporte del mes</a>
+    {% if mail_ok %}<form method="post" action="{{ url_for('resumen_prueba') }}"><button type="submit" class="btn btn-sm btn-primary">Mandar uno de prueba ahora</button></form>{% endif %}
+  </div>
+</div>
+
 {# ### CAMBIO AQUÍ ### seguridad de la sesión #}
 <div class="card" style="max-width:720px;margin-top:16px">
   <h3 style="margin:0 0 6px;font-size:1rem">Sesiones abiertas</h3>

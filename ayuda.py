@@ -23,7 +23,7 @@ AYUDA = {
     "tipo_cambio": "Pesos por dólar que usa el sistema para convertir. Podés traerlo de dolarapi.com (MEP, blue, oficial…) o cargarlo a mano.",
     # ── Dashboard ──────────────────────────────────────────────
     "dashboard": "Resumen del negocio en el período elegido. Usá el filtro para ver una propiedad o todas, y las fechas.",
-    "filtro": "Filtra los números del dashboard por propiedad y por fechas. Cuentan las noches que caen dentro de esas fechas (una estadía que cruza de mes se reparte entre los dos).",
+    "filtro": "Filtra los números de esta sección por propiedad y por fechas. Cuentan las noches que caen dentro de esas fechas (una estadía que cruza de mes se reparte entre los dos).",
     "reservas": "Cantidad de reservas con al menos una noche dentro del período elegido (sin contar las canceladas).",
     "ocupacion": "Porcentaje de noches vendidas sobre las noches disponibles (días del período × propiedades activas). Las canceladas no cuentan.",
     "adr": "ADR: precio promedio cobrado por cada noche vendida, sin la tarifa de limpieza. Ingreso de alojamiento ÷ noches ocupadas.",

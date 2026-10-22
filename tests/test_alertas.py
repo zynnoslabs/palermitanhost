@@ -42,7 +42,7 @@ chk("estadías sin cobro cargado", "Estadías terminadas sin el cobro cargado" i
 chk("archivo de Ganancias viejo (40 días)", any("Ganancias tiene 40 días" in t for t in tit))
 chk("nunca se subió Reservas", "Nunca se subió el archivo de Reservas" in tit)
 chk("faltan datos de Loft (barrio, precio, costos)", any(t == "Faltan datos de Loft" for t in tit))
-chk("reseña sin responder", any("reseña(s) sin responder" in t for t in tit))
+chk("reseñas: sin aviso (la pestaña se sacó del Asistente)", not any("reseña(s) sin responder" in t for t in tit))
 chk("falta tipo de cambio (hay USD)", "Falta el tipo de cambio" in tit)
 chk("noches libres en Soho", any("Soho:" in t and "noches libres" in t for t in tit))
 chk("precio 41% por debajo del mercado", any("por debajo del mercado" in t for t in tit))

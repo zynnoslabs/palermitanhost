@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Reporte del mes – PalermitanHost{% endblock %}
+{# ### CAMBIO AQUÍ ### — página nueva: cómo fue el mes y si las sugerencias funcionaron #}
+{% block content %}
+<div class="page-header">
+  <h2>Reporte de {{ m.titulo }}</h2>
+  <form method="get" class="filter-form">
+    <label for="mes" class="solo-lector">Mes</label>
+    <input type="month" id="mes" name="mes" value="{{ mes_iso }}" max="{{ max_iso }}" onchange="this.form.submit()">
+  </form>
+</div>
+<div class="stats-grid">
+  <div class="stat-card"><div class="stat-value">{{ m.ingreso|dinero(m.vista) }}</div><div class="stat-label">Te quedó (neto){% if m.ingreso_var is not none %} · <span class="{{ 'txt-ok' if m.ingreso_var >= 0 else 'txt-alerta' }}">{{ '+' if m.ingreso_var >= 0 }}{{ m.ingreso_var }}% vs {{ m.anterior }}</span>{% endif %}</div></div>
+  <div class="stat-card"><div class="stat-value">{{ m.noches }}</div><div class="stat-label">Noches vendidas{% if m.noches_var is not none %} · {{ '+' if m.noches_var >= 0 }}{{ m.noches_var }}%{% endif %}</div></div>
+  <div class="stat-card"><div class="stat-value">{{ m.ocupacion|num(1) }}%</div><div class="stat-label">Ocupación (antes {{ m.ocupacion_antes|num(1) }}%)</div></div>
+  <div class="stat-card"><div class="stat-value">{{ m.hechas }}</div><div class="stat-label">Sugerencias que seguiste</div></div>
+</div>
+<div class="card">
+  <div class="card-title">Pruebas del mes</div>
+  {% if m.pruebas %}<p>{{ m.pruebas }} prueba{{ 's' if m.pruebas != 1 }} con resultado: <strong class="txt-ok">{{ m.pruebas_bien }} funcionaron</strong>, <strong class="txt-alerta">{{ m.pruebas_mal }} no</strong>, el resto a medias o esperando. <a class="link" href="{{ url_for('pruebas_pagina') }}">Ver detalle</a></p>
+  {% else %}<p class="muted">No hubo pruebas anotadas este mes. Lo que marcás "✓ Hecho" en Qué hacer hoy se anota solo.</p>{% endif %}
+  <p class="muted" style="font-size:.85rem;margin-top:8px">Los montos están en {{ m.vista }}{% if m.sin_tc %}; {{ m.sin_tc }} reserva(s) en otra moneda no suman plata porque falta el tipo de cambio{% endif %}. Comparar con el mes anterior muestra la tendencia, no prueba por sí solo que fue gracias a las sugerencias.</p>
+</div>
+{% endblock %}

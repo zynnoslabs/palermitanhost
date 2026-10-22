@@ -18,7 +18,7 @@ def chk(n, ok, x=""):
 c = A.app.test_client()
 # 1) sin login no se ve nada
 rutas = [r.rule for r in A.app.url_map.iter_rules() if "<" not in r.rule and r.endpoint != "static"]
-publicas = {"/login", "/logout", "/salud", "/tareas/competencia", "/tipo-cambio", "/moneda", "/sw.js"}   # sw.js: código público de la app instalable, sin datos
+publicas = {"/login", "/logout", "/salud", "/tareas/competencia", "/tipo-cambio", "/moneda", "/sw.js", "/tareas/resumen"}   # sw.js: código público de la app instalable, sin datos
 abiertas = []
 for r in rutas:
     if r in publicas: continue

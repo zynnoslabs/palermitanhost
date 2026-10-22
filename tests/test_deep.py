@@ -215,11 +215,11 @@ ia.responder_huesped = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("Groq 
 n0 = db.query_one("SELECT COUNT(*) n FROM consultas_huespedes")["n"]
 r = c.post("/asistente", data={"propiedad_id": P1, "mensaje": "¿Hay wifi?"})
 chk("IA caída: no guarda el error como respuesta", db.query_one("SELECT COUNT(*) n FROM consultas_huespedes")["n"] == n0)
-chk("IA caída: conserva el mensaje", "¿Hay wifi?" in r.text and "Groq caído" in r.text)
+chk("IA caída: la página sigue andando (pestaña de consultas sacada)", r.status_code == 200)
 ia.responder_huesped = lambda *a, **k: ("El wifi es Casa123.", False)
 r = c.post("/asistente", data={"propiedad_id": P1, "mensaje": "¿Hay wifi?"})
 chk("consulta: recarga sin reenviar (PRG)", r.status_code == 302 and "c=" in r.headers["Location"])
-chk("consulta: muestra la respuesta", "El wifi es Casa123." in c.get(r.headers["Location"]).text)
+chk("consulta: se guarda la respuesta (la pestaña se sacó, el dato queda)", db.query_one("SELECT COUNT(*) n FROM consultas_huespedes WHERE respuesta LIKE %s", ("%Casa123%",))["n"] == 1)
 import asistente_route as AR
 AR._guardar_historial([])
 orig = ia.completar

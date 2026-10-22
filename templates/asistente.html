@@ -37,11 +37,7 @@
 
 <div class="page-header"><h2>Asistente IA</h2></div>
 
-<div class="tabs">
-  <a href="{{ url_for('asistente', tab='negocio') }}" class="{{ 'on' if tab == 'negocio' }}">Asistente de negocio</a>
-  <a href="{{ url_for('asistente', tab='huespedes') }}" class="{{ 'on' if tab == 'huespedes' }}">Consultas de huéspedes</a>
-  <a href="{{ url_for('asistente', tab='resenas') }}" class="{{ 'on' if tab == 'resenas' }}">Reseñas</a>
-</div>
+{# ### CAMBIO AQUÍ ### se sacaron las pestañas "Consultas de huéspedes" y "Reseñas" (los datos quedan guardados) #}
 
 {% if tab == 'negocio' %}
 <!-- ══════════ CHAT DE NEGOCIO ══════════ -->
