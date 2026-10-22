@@ -11,9 +11,15 @@ La base de datos gratis de Render **se borra a los 30 días**. Neon tiene un pla
 
 1. Entrá a <https://neon.tech> y creá una cuenta (podés usar la de Google de Adriano).
 2. **Create project** → nombre `palermitanhost` → región **AWS São Paulo** (la más cerca de Buenos Aires).
-3. En el panel, **Connect** → copiá la *connection string* que empieza con `postgresql://` y termina con `?sslmode=require`.
+3. En el panel, **Connect** → **apagá "Connection pooling"** (el sistema ya maneja sus conexiones y necesita la conexión directa
+   para la zona horaria) → copiá la *connection string* que empieza con `postgresql://` y termina con `?sslmode=require`.
+   Tiene que decir `.neon.tech` y **no** tiene que decir `-pooler`.
 4. En Render → servicio web → **Environment** → variable `DATABASE_URL` → pegá la de Neon → **Save**.
 5. Render reinicia solo. El sistema crea todas las tablas la primera vez que arranca.
+
+**Para no pasarse del plan gratis** (100 horas de cómputo por mes): Neon se "duerme" solo a los 5 minutos sin uso y se
+despierta en 1 o 2 segundos cuando alguien entra. No hay que hacer nada, pero **no** lo despiertes a propósito todo el
+tiempo (por eso el monitor del paso 3 usa `/salud` sin `?db=1`). En Neon → *Settings → Compute* dejá el tamaño en **0.25**.
 
 **Si ya había datos en la base vieja de Render**, antes del paso 4:
 
@@ -48,10 +54,11 @@ Si `pg_restore --list` muestra la lista de tablas, la copia está bien.
 ## 3. Aviso si el sistema se cae (UptimeRobot, gratis)
 
 1. Entrá a <https://uptimerobot.com> y creá una cuenta.
-2. **Add New Monitor** → tipo **HTTP(s)** → URL: `https://TU-APP.onrender.com/salud?db=1` → cada **5 minutos**.
+2. **Add New Monitor** → tipo **HTTP(s)** → URL: `https://TU-APP.onrender.com/salud` → cada **5 minutos**.
+   (Sin `?db=1`: así no despierta la base de Neon cada 5 minutos y no gasta sus horas gratis.)
 3. En *Alert contacts* poné tu mail (y el de Adriano si querés).
 
-Si la página o la base de datos dejan de responder, te llega un mail. Además, el chequeo cada 5 minutos evita que Render "duerma" el sistema.
+Si el sistema deja de responder, te llega un mail. Además, el chequeo cada 5 minutos evita que Render "duerma" el sistema.
 
 ## 4. Resumen diario por mail a las 9
 
